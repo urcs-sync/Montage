@@ -3,7 +3,7 @@
 Montage is a system for building fast buffered persistent data
 structures, developed at the University of Rochester by H. Wen, W.
 Cai, M. Du, L. Jenkins, B. Valpey, and M. L. Scott. The work has been
-published in ArXiv ([link](https://arxiv.org/abs/2009.701)). You can
+submitted to arXiv ([link](https://arxiv.org/abs/2009.701)). You can
 also find its short version on DISC' 20 as a brief announcement
 ([link](https://doi.org/10.4230/LIPIcs.DISC.2020.52)).
 
