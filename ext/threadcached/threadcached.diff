@@ -1,0 +1,567 @@
+diff -r ../MemcachedProtectedLibrary/include/memcached.h ./ext/threadcached/include/memcached.h
+30,31c30,31
+< #include <ralloc.hpp>
+< #include <BaseMeta.hpp>
+---
+> #include <AllocatorMacro.hpp>
+> // #include <BaseMeta.hpp>
+399a400,405
+> #ifdef MONTAGE
+> #include "persist_struct_api.hpp"
+> 
+> using namespace pds;
+> struct item : public PBlk{
+> #else
+400a407
+> #endif
+diff -r ../MemcachedProtectedLibrary/Makefile ./ext/threadcached/Makefile
+0a1
+> MONTAGE_PATH=../
+2c3,4
+< ALLOC=r
+---
+> # ALLOC=r
+> # transient objects using jemalloc on DRAM
+5,6c7,15
+< 	   obj/itoa_ljust.o 
+< 
+---
+> 	   obj/itoa_ljust.o
+> # transient objects using ralloc on NVM
+> PROT_OBJ_NVM = obj/memcached_nvm.o obj/murmur3_hash_nvm.o obj/items_nvm.o obj/assoc_nvm.o obj/thread_nvm.o \
+> 	   obj/bipbuffer_nvm.o obj/crawler_nvm.o obj/pku_memcached_nvm.o obj/util_nvm.o\
+> 	   obj/itoa_ljust_nvm.o 
+> # persistent objects using montage and ralloc on NVM
+> PROT_OBJ_MONTAGE = obj/memcached_m.o obj/murmur3_hash_m.o obj/items_m.o obj/assoc_m.o obj/thread_m.o \
+> 	   obj/bipbuffer_m.o obj/crawler_m.o obj/pku_memcached_m.o obj/util_m.o\
+> 	   obj/itoa_ljust_m.o 
+13,20c22,34
+< OPTS = -Iinclude/  -levent -DHAVE_CONFIG_H -Wall -Werror -std=c++17 \
+<        -fPIC $(OPT_LEVEL) $(ERROR) -I./ralloc/src \
+<        -DUSE_HODOR -I./hodor/libhodor -I./hodor/include
+< 
+< LIBS = obj/libthreadcached.so ralloc/test/libralloc.a
+< LINKOPTS = -Lhodor/libhodor -lpthread -levent -ldl -ljemalloc #-lhodor
+< EXE = bin/server.exe bin/end.exe bin/get.exe bin/insert.exe
+< 
+---
+> OPTS = -Iinclude/  -levent -DHAVE_CONFIG_H -Wall -std=c++17 \
+>        -fPIC $(OPT_LEVEL) $(ERROR) -I$(MONTAGE_PATH)/ext/ralloc/src \
+>        #-DUSE_HODOR -I./hodor/libhodor -I./hodor/include
+> OPTS += -I$(MONTAGE_PATH)/src -I$(MONTAGE_PATH)/src/utils -I$(MONTAGE_PATH)/src/rideables -I$(MONTAGE_PATH)/src/test -I$(MONTAGE_PATH)/src/persist -I$(MONTAGE_PATH)/src/persist/api
+> OPTS += -I$(MONTAGE_PATH)/ext/tbb/include
+> 
+> LIBS = obj/libthreadcached.a $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a
+> LINKOPTS = -lpthread -levent -ldl -L$(MONTAGE_PATH)/ext/ralloc -ljemalloc #-lhodor
+> EXE = bin/server bin/end bin/get bin/insert
+> WARNING_FLAGS:=-ftrapv -Wreturn-type -W -Wall \
+> -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-parameter
+> OPTS+=$(WARNING_FLAGS) 
+> LINKOPTS+=$(WARNING_FLAGS)
+22,46c36,59
+< ifeq ($(ALLOC),r)
+< 	OPTS += -DRALLOC -L./ralloc/test -lralloc
+< 	LINKOPTS += -L./ralloc/test -lralloc
+< endif
+< 
+< ifeq ($(ALLOC),mak)
+< 	OPTS += -I./ralloc/ext/makalu_alloc/include -DMAKALU -L./ralloc/ext/makalu_alloc/lib -lmakalu
+< 	LINKOPTS += -L./ralloc/ext/makalu_alloc/lib -lmakalu
+< endif
+< 
+< ifeq ($(ALLOC),je)
+< 	OPTS += -DJEMALLOC
+< endif
+< 
+< ifeq ($(ALLOC),lr)
+< 	# Ralloc without flush and fence is effectively LRMalloc, with optimization
+< 	OPTS += -DRALLOC -DPWB_IS_NOOP -L./ralloc/test -lralloc
+< 	LINKOPTS += -L./ralloc/test -lralloc
+< endif
+< 
+< ifeq ($(ALLOC),pmdk)
+< 	OPTS += -DPMDK -lpmemobj
+< 	LINKOPTS += -lpmemobj
+< endif
+< 
+---
+> # ifeq ($(ALLOC),r)
+> OPTS += -L$(MONTAGE_PATH)/ext/ralloc/test -lralloc
+> LINKOPTS += -L$(MONTAGE_PATH)/ext/ralloc/test -lralloc
+> # endif
+> 
+> # ifeq ($(ALLOC),mak)
+> # 	OPTS += -I./ralloc/ext/makalu_alloc/include -DMAKALU -L./ralloc/ext/makalu_alloc/lib -lmakalu
+> # 	LINKOPTS += -L./ralloc/ext/makalu_alloc/lib -lmakalu
+> # endif
+> 
+> # ifeq ($(ALLOC),je)
+> # 	OPTS += -DJEMALLOC
+> # endif
+> 
+> # ifeq ($(ALLOC),lr)
+> # 	# Ralloc without flush and fence is effectively LRMalloc, with optimization
+> # 	OPTS += -DRALLOC -DPWB_IS_NOOP -L./ralloc/test -lralloc
+> # 	LINKOPTS += -L./ralloc/test -lralloc
+> # endif
+> 
+> # ifeq ($(ALLOC),pmdk)
+> # 	OPTS += -DPMDK -lpmemobj
+> # 	LINKOPTS += -lpmemobj
+> # endif
+49,51c62,64
+< all: $(EXE) $(TEST_RUN)
+< lib: obj/libthreadcached.so
+< bin: server.exe
+---
+> lib: obj/libthreadcached.a obj/libthreadcached_nvm.a obj/libthreadcached_montage.a
+> all: $(EXE)
+> bin: bin/server
+54c67
+< %.exe: test/%.cc $(LIBS)
+---
+> bin/%: test/%.cc $(LIBS)
+57,58c70,77
+< obj/libthreadcached.so: $(PROT_OBJ)
+< 	$(CXX) -shared $(PROT_OBJ) $(OPTS) -o $@ 
+---
+> obj/libthreadcached.a: $(PROT_OBJ)
+> 	ar -rcs $@ $^
+> 
+> obj/libthreadcached_nvm.a: $(PROT_OBJ_NVM) $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a
+> 	ar -rcs $@ $^
+> 
+> obj/libthreadcached_montage.a: $(PROT_OBJ_MONTAGE) $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a $(MONTAGE_PATH)/lib/libPDSHarness.a
+> 	ar -rcs $@ $^
+61c80,86
+< 	$(CXX) -c $^ $(OPTS) -o $@
+---
+> 	$(CXX) -c $^ $(OPTS) -DJEMALLOC -o $@
+> 
+> obj/%_nvm.o: src/%.cc
+> 	$(CXX) -c $^ $(OPTS) -DRALLOC -o $@
+> 
+> obj/%_m.o: src/%.cc
+> 	$(CXX) -c $^ $(OPTS) -DRALLOC -DMONTAGE -o $@
+65c90
+< 	rm -f obj/* exec *.d /dev/shm/memcached* $(EXE) $(TEST_RUN) $(PERF_RUN) $(RPMA_RUN)
+---
+> 	rm -f obj/* exec *.d /dev/shm/memcached* $(EXE) $(PERF_RUN) $(RPMA_RUN)
+diff -r ../MemcachedProtectedLibrary/src/assoc.cc ./ext/threadcached/src/assoc.cc
+68c68
+<       RP_malloc(hashsize(hashpower) * sizeof(pptr<item>));
+---
+>       pm_malloc(hashsize(hashpower) * sizeof(pptr<item>));
+71,72c71,72
+<     RP_set_root((void*)(primary_hashtable), RPMRoot::PrimaryHT);
+<     RP_set_root(nullptr, RPMRoot::OldHT);
+---
+>     pm_set_root((void*)(primary_hashtable), RPMRoot::PrimaryHT);
+>     pm_set_root(nullptr, RPMRoot::OldHT);
+78,79c78,79
+<     primary_hashtable = (pptr<item>*)RP_get_root<char >(RPMRoot::PrimaryHT);
+<     old_hashtable =     (pptr<item>*)RP_get_root<char >(RPMRoot::OldHT);
+---
+>     primary_hashtable = (pptr<item>*)pm_get_root<char >(RPMRoot::PrimaryHT);
+>     old_hashtable =     (pptr<item>*)pm_get_root<char >(RPMRoot::OldHT);
+142c142
+<       (pptr<item>*)RP_malloc(hashsize(hashpower + 1) * sizeof(pptr<item>)));
+---
+>       (pptr<item>*)pm_malloc(hashsize(hashpower + 1) * sizeof(pptr<item>)));
+145,146c145,146
+<     RP_set_root((void*)(&*old_hashtable), RPMRoot::OldHT);
+<     RP_set_root((void*)(&*primary_hashtable), RPMRoot::PrimaryHT);
+---
+>     pm_set_root((void*)(&*old_hashtable), RPMRoot::OldHT);
+>     pm_set_root((void*)(&*primary_hashtable), RPMRoot::PrimaryHT);
+239c239
+<           RP_free(old_hashtable);
+---
+>           pm_free(old_hashtable);
+diff -r ../MemcachedProtectedLibrary/src/bipbuffer.cc ./ext/threadcached/src/bipbuffer.cc
+19c19
+< #include <ralloc.hpp>
+---
+> #include <AllocatorMacro.hpp>
+54c54
+<     bipbuf_t *me = (bipbuf_t*)RP_malloc(bipbuf_sizeof(size));
+---
+>     bipbuf_t *me = (bipbuf_t*)pm_malloc(bipbuf_sizeof(size));
+63c63
+<    RP_free(me);
+---
+>    pm_free(me);
+diff -r ../MemcachedProtectedLibrary/src/crawler.cc ./ext/threadcached/src/crawler.cc
+104c104
+<     d = (crawler_expired_data*)RP_malloc(sizeof(crawler_expired_data));
+---
+>     d = (crawler_expired_data*)pm_malloc(sizeof(crawler_expired_data));
+diff -r ../MemcachedProtectedLibrary/src/items.cc ./ext/threadcached/src/items.cc
+46,50c46,50
+<     heads = (pptr<item>*)RP_get_root<item*>(RPMRoot::Heads);
+<     tails = (pptr<item>*)RP_get_root<item*>(RPMRoot::Tails);
+<     sizes = RP_get_root<unsigned int>(RPMRoot::Sizes);
+<     sizes_bytes = RP_get_root<uint64_t>(RPMRoot::SizesBytes);
+<     lru_maintainer_lock = RP_get_root<pthread_mutex_t>(RPMRoot::LRUMaintainerLock);
+---
+>     heads = (pptr<item>*)pm_get_root<item*>(RPMRoot::Heads);
+>     tails = (pptr<item>*)pm_get_root<item*>(RPMRoot::Tails);
+>     sizes = pm_get_root<unsigned int>(RPMRoot::Sizes);
+>     sizes_bytes = pm_get_root<uint64_t>(RPMRoot::SizesBytes);
+>     lru_maintainer_lock = pm_get_root<pthread_mutex_t>(RPMRoot::LRUMaintainerLock);
+52,55c52,55
+<     heads = (pptr<item>*)RP_calloc(sizeof(pptr<item>), SLAB_CLASSES);
+<     tails = (pptr<item>*)RP_calloc(sizeof(pptr<item>), SLAB_CLASSES);
+<     sizes = (unsigned int*)RP_calloc(sizeof(unsigned int), SLAB_CLASSES);
+<     sizes_bytes = (uint64_t*)RP_calloc(sizeof(uint64_t), SLAB_CLASSES);
+---
+>     heads = (pptr<item>*)pm_calloc(sizeof(pptr<item>), SLAB_CLASSES);
+>     tails = (pptr<item>*)pm_calloc(sizeof(pptr<item>), SLAB_CLASSES);
+>     sizes = (unsigned int*)pm_calloc(sizeof(unsigned int), SLAB_CLASSES);
+>     sizes_bytes = (uint64_t*)pm_calloc(sizeof(uint64_t), SLAB_CLASSES);
+59c59
+<     lru_maintainer_lock = (pthread_mutex_t*)RP_malloc(sizeof(pthread_mutex_t));
+---
+>     lru_maintainer_lock = (pthread_mutex_t*)pm_malloc(sizeof(pthread_mutex_t));
+81,84c81,84
+<     RP_set_root(heads, RPMRoot::Heads);
+<     RP_set_root(tails, RPMRoot::Tails);
+<     RP_set_root(sizes, RPMRoot::Sizes);
+<     RP_set_root(sizes_bytes, RPMRoot::SizesBytes);
+---
+>     pm_set_root(heads, RPMRoot::Heads);
+>     pm_set_root(tails, RPMRoot::Tails);
+>     pm_set_root(sizes, RPMRoot::Sizes);
+>     pm_set_root(sizes_bytes, RPMRoot::SizesBytes);
+191c191
+<     it = (item*)RP_malloc(ntotal);
+---
+>     it = (item*)pm_malloc(ntotal);
+276c276,280
+<   RP_free(it);
+---
+> #ifdef MONTAGE
+>   PRECLAIM(it);
+> #else
+>   pm_free(it);
+> #endif
+435a440,442
+> #ifdef MONTAGE
+>   PRETIRE(it);
+> #endif
+462c469
+<   buffer = (char*)RP_malloc((size_t)memlimit);
+---
+>   buffer = (char*)pm_malloc((size_t)memlimit);
+750c757
+<   lru_bump_buf *b = (lru_bump_buf*)RP_calloc(1, sizeof(lru_bump_buf));
+---
+>   lru_bump_buf *b = (lru_bump_buf*)pm_calloc(1, sizeof(lru_bump_buf));
+910c917
+<     RP_calloc(1, sizeof(struct crawler_expired_data));
+---
+>     pm_calloc(1, sizeof(struct crawler_expired_data));
+diff -r ../MemcachedProtectedLibrary/src/memcached.cc ./ext/threadcached/src/memcached.cc
+428,430c428,430
+<     __thread_stats = RP_get_root<thread_stats>(RPMRoot::TStats);
+<     __global_stats = RP_get_root<struct stats_state>(RPMRoot::GStats);
+<     stats = RP_get_root<struct stats>(RPMRoot::Stats);
+---
+>     __thread_stats = pm_get_root<thread_stats>(RPMRoot::TStats);
+>     __global_stats = pm_get_root<struct stats_state>(RPMRoot::GStats);
+>     stats = pm_get_root<struct stats>(RPMRoot::Stats);
+432,437c432,437
+<     __thread_stats = (thread_stats*)RP_malloc(sizeof(thread_stats)*NUM_STATS);
+<     __global_stats = (stats_state*)RP_malloc(sizeof(stats_state));
+<     stats = (struct stats*)RP_malloc(sizeof(struct stats));
+<     RP_set_root(__thread_stats, RPMRoot::TStats);
+<     RP_set_root(__global_stats, RPMRoot::GStats);
+<     RP_set_root(stats, RPMRoot::Stats);
+---
+>     __thread_stats = (thread_stats*)pm_malloc(sizeof(thread_stats)*NUM_STATS);
+>     __global_stats = (stats_state*)pm_malloc(sizeof(stats_state));
+>     stats = (struct stats*)pm_malloc(sizeof(struct stats));
+>     pm_set_root(__thread_stats, RPMRoot::TStats);
+>     pm_set_root(__global_stats, RPMRoot::GStats);
+>     pm_set_root(stats, RPMRoot::Stats);
+449,452c449,452
+<     end_signal = (std::atomic_int*)RP_malloc(sizeof(std::atomic_int));
+<     current_time = (rel_time_t*)RP_malloc(sizeof(rel_time_t));
+<     pause_sig = (std::atomic_int*)RP_malloc(sizeof(std::atomic_int));
+<     num_lookers = (std::atomic_int*)RP_malloc(sizeof(std::atomic_int));
+---
+>     end_signal = (std::atomic_int*)pm_malloc(sizeof(std::atomic_int));
+>     current_time = (rel_time_t*)pm_malloc(sizeof(rel_time_t));
+>     pause_sig = (std::atomic_int*)pm_malloc(sizeof(std::atomic_int));
+>     num_lookers = (std::atomic_int*)pm_malloc(sizeof(std::atomic_int));
+462,465c462,465
+<     RP_set_root(num_lookers, RPMRoot::NLookers);
+<     RP_set_root(pause_sig, RPMRoot::PSig);
+<     RP_set_root(end_signal, RPMRoot::EndSignal);
+<     RP_set_root((void*)current_time, RPMRoot::CTime);
+---
+>     pm_set_root(num_lookers, RPMRoot::NLookers);
+>     pm_set_root(pause_sig, RPMRoot::PSig);
+>     pm_set_root(end_signal, RPMRoot::EndSignal);
+>     pm_set_root((void*)current_time, RPMRoot::CTime);
+467,470c467,470
+<     end_signal = RP_get_root<std::atomic_int >(RPMRoot::EndSignal);
+<     current_time = RP_get_root<rel_time_t>(RPMRoot::CTime);
+<     num_lookers = RP_get_root<std::atomic_int>(RPMRoot::NLookers);
+<     pause_sig = RP_get_root<std::atomic_int>(RPMRoot::PSig);
+---
+>     end_signal = pm_get_root<std::atomic_int >(RPMRoot::EndSignal);
+>     current_time = pm_get_root<rel_time_t>(RPMRoot::CTime);
+>     num_lookers = pm_get_root<std::atomic_int>(RPMRoot::NLookers);
+>     pause_sig = pm_get_root<std::atomic_int>(RPMRoot::PSig);
+540c540
+<   //   RP_recover();
+---
+>   //   pm_recover();
+569c569
+<   RP_close();
+---
+>   pm_close();
+686c686
+<   char * key_prot = (char*)RP_malloc(nkey);
+---
+>   char * key_prot = (char*)pm_malloc(nkey);
+691a692
+>   // Wentao: get doesn't need BEGIN_OP---it's OK to read things as soon as they are visible
+695c696
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+707c708
+<   char * dat_prot = (char*)RP_malloc(it->nbytes);
+---
+>   char * dat_prot = (char*)pm_malloc(it->nbytes);
+726c727
+<   RP_free(dat_prot);
+---
+>   pm_free(dat_prot);
+744c745
+<   char * key_prot = (char*)RP_malloc(nkey + datan);
+---
+>   char * key_prot = (char*)pm_malloc(nkey + datan);
+763c764
+<         RP_free(key_prot);
+---
+>         pm_free(key_prot);
+766c767
+<         RP_free(key_prot);
+---
+>         pm_free(key_prot);
+769c770
+<         RP_free(key_prot);
+---
+>         pm_free(key_prot);
+772c773
+<         RP_free(key_prot);
+---
+>         pm_free(key_prot);
+780c781
+<     RP_free(key_prot);
+---
+>     pm_free(key_prot);
+784c785
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+792c793
+<   char * key_prot = (char*)RP_malloc(nkey + datan);
+---
+>   char * key_prot = (char*)pm_malloc(nkey + datan);
+803c804
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+807c808
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+818c819
+<     RP_free(key_prot);
+---
+>     pm_free(key_prot);
+825a827
+>   // Wentao: persist, pretire, and preclaim are handled inside store_item()
+836c838
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+839c841
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+842c844
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+845c847
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+848c850
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+869c871
+<   char * key_prot = (char*)RP_malloc(nkey);
+---
+>   char * key_prot = (char*)pm_malloc(nkey);
+887c889
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+894c896
+<   char * key_prot = (char*)RP_malloc(nkey + datan);
+---
+>   char * key_prot = (char*)pm_malloc(nkey + datan);
+904c906
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+908c910
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+917c919
+<     RP_free(key_prot);
+---
+>     pm_free(key_prot);
+922c924
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+929c931
+<   char * key_prot = (char*)RP_malloc(nkey + datan);
+---
+>   char * key_prot = (char*)pm_malloc(nkey + datan);
+939c941
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+943c945
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+952c954
+<     RP_free(key_prot);
+---
+>     pm_free(key_prot);
+957c959
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+964c966
+<   char * key_prot = (char*)RP_malloc(nkey + datan);
+---
+>   char * key_prot = (char*)pm_malloc(nkey + datan);
+974c976
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+978c980
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+994c996
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+998c1000
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+1002c1004
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+1006c1008
+<       RP_free(key_prot);
+---
+>       pm_free(key_prot);
+1011c1013
+<   RP_free(key_prot);
+---
+>   pm_free(key_prot);
+diff -r ../MemcachedProtectedLibrary/src/pku_memcached.cc ./ext/threadcached/src/pku_memcached.cc
+6a7
+> #include <stdio.h>
+409c410,418
+<   is_restart = RP_init("memcached.rpma", MEMORY_MAX);
+---
+> #ifdef RALLOC
+>   char* heap_prefix = (char*) malloc(L_cuserid+6);
+>   cuserid(heap_prefix);
+>   strcat(heap_prefix, "_memcached");
+>   is_restart = RP_init(heap_prefix, MEMORY_MAX);
+>   free(heap_prefix);
+> #else
+>   is_restart = pm_init();
+> #endif
+411,412c420,427
+<   if (is_restart) RP_recover();
+<   fetch_ptrs = (item**)RP_malloc(sizeof(item*)*128);
+---
+>   if (is_restart) {
+> #ifdef MONTAGE
+>     assert(0&&"Montage memcached recovery routine not implemented!");
+> #else
+>     pm_recover();
+> #endif
+>   }
+>   fetch_ptrs = (item**)pm_malloc(sizeof(item*)*128);
+421,422c436,437
+<   RP_free(fetch_ptrs);
+<   RP_close();
+---
+>   pm_free(fetch_ptrs);
+>   pm_close();
+diff -r ../MemcachedProtectedLibrary/src/thread.cc ./ext/threadcached/src/thread.cc
+68,70c68,70
+<     item_locks = RP_get_root<pthread_mutex_t>(RPMRoot::ItemLocks);
+<     stats_lock = RP_get_root<pthread_mutex_t>(RPMRoot::StatLock);
+<     lru_locks = RP_get_root<pthread_mutex_t>(RPMRoot::LRULocks);
+---
+>     item_locks = pm_get_root<pthread_mutex_t>(RPMRoot::ItemLocks);
+>     stats_lock = pm_get_root<pthread_mutex_t>(RPMRoot::StatLock);
+>     lru_locks = pm_get_root<pthread_mutex_t>(RPMRoot::LRULocks);
+72,74c72,74
+<     lru_locks = (pthread_mutex_t*)RP_malloc(sizeof(pthread_mutex_t)*POWER_LARGEST);
+<     item_locks = (pthread_mutex_t*)RP_calloc(item_lock_count, sizeof(pthread_mutex_t));
+<     stats_lock = (pthread_mutex_t*)RP_malloc(sizeof(pthread_mutex_t));
+---
+>     lru_locks = (pthread_mutex_t*)pm_malloc(sizeof(pthread_mutex_t)*POWER_LARGEST);
+>     item_locks = (pthread_mutex_t*)pm_calloc(item_lock_count, sizeof(pthread_mutex_t));
+>     stats_lock = (pthread_mutex_t*)pm_malloc(sizeof(pthread_mutex_t));
+80,82c80,82
+<     RP_set_root(item_locks, RPMRoot::ItemLocks);
+<     RP_set_root(stats_lock, RPMRoot::StatLock);
+<     RP_set_root(lru_locks, RPMRoot::LRULocks);
+---
+>     pm_set_root(item_locks, RPMRoot::ItemLocks);
+>     pm_set_root(stats_lock, RPMRoot::StatLock);
+>     pm_set_root(lru_locks, RPMRoot::LRULocks);
+212a213,215
+> #ifdef MONTAGE
+>   BEGIN_OP();
+> #endif
+213a217,223
+> #ifdef MONTAGE
+>   if(ret == STORED){
+>     // Wentao: it is safe to persist item after do_store_item because of the lock
+>     esys->register_alloc_pblk(item, epochs[_tid].ui);
+>   }
+>   END_OP;
+> #endif
+diff -r ../MemcachedProtectedLibrary/test/basic_test.cc ./ext/threadcached/test/basic_test.cc
+6,8c6,8
+<   RP_init("memcached.rpma");
+<   unsigned *al = RP_get_root<unsigned>(0);
+< //  RP_recover();
+---
+>   pm_init();
+>   unsigned *al = pm_get_root<unsigned>(0);
+> //  pm_recover();

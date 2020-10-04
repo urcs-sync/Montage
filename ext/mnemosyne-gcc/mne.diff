@@ -1,0 +1,181 @@
+diff -r ../mnemosyne-gcc/usermode/bench/doxypage ./ext/mnemosyne-gcc/usermode/bench/doxypage
+186c186
+<     segments_dir = "/tmp/segments";
+---
+>     segments_dir = "/mnt/pmem/psegments";
+diff -r ../mnemosyne-gcc/usermode/library/common/pm_instr.h ./ext/mnemosyne-gcc/usermode/library/common/pm_instr.h
+139c139
+< 	__pm_trace_print(format, args);						\
+---
+> 	/*__pm_trace_print(format, args);*/						\
+diff -r ../mnemosyne-gcc/usermode/library/mcore/include/config.h ./ext/mnemosyne-gcc/usermode/library/mcore/include/config.h
+42c42
+<   ACTION(config, values, group, segments_dir, string, char *, "/tmp/segments", \
+---
+>   ACTION(config, values, group, segments_dir, string, char *, "/mnt/pmem/psegments", \
+diff -r ../mnemosyne-gcc/usermode/library/mcore/include/hal/pcm_i.h ./ext/mnemosyne-gcc/usermode/library/mcore/include/hal/pcm_i.h
+262c262
+< 	__asm__ __volatile__ ("clflush %0" : : "m"(*addr));	\
+---
+> 	__asm__ __volatile__ ("clwb %0" : : "m"(*addr));	\
+403c403
+< 	asm_mfence(); 
+---
+> 	asm_sfence(); 
+diff -r ../mnemosyne-gcc/usermode/library/mcore/include/pregionlayout.h ./ext/mnemosyne-gcc/usermode/library/mcore/include/pregionlayout.h
+54,55c54,55
+< #define PSEGMENT_RESERVED_REGION_START   0x0000100000000000
+< #define PSEGMENT_RESERVED_REGION_SIZE    0x0000010000000000 /* 1 TB */
+---
+> #define PSEGMENT_RESERVED_REGION_START   0x0000100000000000ULL
+> #define PSEGMENT_RESERVED_REGION_SIZE    0x0000010000000000ULL /* 1 TB */
+71c71
+< #define LOG_POOL_SIZE                    (32*16*1024*1024+32*32*64)
+---
+> #define LOG_POOL_SIZE                    (72*16*1024*1024+72*32*64)
+79a80
+> #define BASE_ROUNDUP(x) ((x & (~0x11111111ULL)) + 0x100000000ULL)
+80a82,93
+> #define HOARD_HEADER_BASE 0xa00000000ULL
+> #define HOARD_SUPERBLOCK_SIZE 16384ULL
+> // change HOARD_SUPERBLOCK_NUM to change heap size.
+> #define HOARD_SUPERBLOCK_NUM (2048ULL*1024)
+> #define HOARD_HEAP_SIZE (HOARD_SUPERBLOCK_NUM * HOARD_SUPERBLOCK_SIZE)
+> // hopefully this is big enough for all the headers
+> // (SuperBlock number ~ 2^32/310 ~ 13,854,733 ~ 13530*1024).
+> #define HOARD_PERSISTENTHEAP_BASE 0xb00000000ULL
+> 
+> #define LARGE_MALLOC_HEAP_BASE BASE_ROUNDUP(HOARD_PERSISTENTHEAP_BASE + HOARD_HEAP_SIZE)
+> #define LARGE_MALLOC_HEAP_SIZE (1024*1024*1024) /* Bytes */
+> #define LARGE_MALLOC_METADATA_SIZE (1024*1024) /* Bytes */
+diff -r ../mnemosyne-gcc/usermode/library/mcore/src/log/mgr.c ./ext/mnemosyne-gcc/usermode/library/mcore/src/log/mgr.c
+56c56
+< #define LOG_NUM 32
+---
+> #define LOG_NUM 90
+diff -r ../mnemosyne-gcc/usermode/library/mcore/src/segment.c ./ext/mnemosyne-gcc/usermode/library/mcore/src/segment.c
+420c420
+< 	                              MAP_PERSISTENT | MAP_SHARED,
+---
+> 	                              0x80003/*MAP_SHARED_VALIDATE | MAP_SYNC*/,
+diff -r ../mnemosyne-gcc/usermode/library/mtm/src/gcc-abi.c ./ext/mnemosyne-gcc/usermode/library/mtm/src/gcc-abi.c
+455c455
+< {   
+---
+> { 
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/include/config.h ./ext/mnemosyne-gcc/usermode/library/pmalloc/include/config.h
+56a57,58
+> #include "pregionlayout.h"
+> 
+65c67
+< enum { SUPERBLOCK_SIZE = 16384 };
+---
+> enum { SUPERBLOCK_SIZE = HOARD_SUPERBLOCK_SIZE };
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/include/persistentheap.h ./ext/mnemosyne-gcc/usermode/library/pmalloc/include/persistentheap.h
+70a71
+> #include "pregionlayout.h"
+77,81c78,86
+< //FIXME: enum types are signed types, so they can't store integer larger 
+< // than 2G-1 thus overflowing when having a 2GBytes heap
+< enum {PERSISTENTHEAP_HEADER_BASE = 0xa00000000};
+< enum {PERSISTENTHEAP_BASE = 0xb00000000};
+< enum {PERSISTENTSUPERBLOCK_NUM = (128*1024)}; /* this controls the size of the heap */
+---
+> const size_t PERSISTENTHEAP_HEADER_BASE = HOARD_HEADER_BASE;
+> const size_t PERSISTENTSUPERBLOCK_NUM = HOARD_SUPERBLOCK_NUM; /* this controls the size of the heap */
+> const size_t PERSISTENTHEAP_BASE = HOARD_PERSISTENTHEAP_BASE;
+> 
+> // const size_t PERSISTENTHEAP_BASE = (PERSISTENTHEAP_HEADER_BASE + (PERSISTENTSUPERBLOCK_NUM * sizeof(persistentSuperblock))) + 0x100000000ULL;
+> 
+> // const size_t PERSISTENTSUPERBLOCK_NUM = (128*1024); /* this controls the size of the heap */
+> // const size_t PERSISTENTHEAP_BASE = 0xb00000000ULL;
+> 
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/include/pmalloc.h ./ext/mnemosyne-gcc/usermode/library/pmalloc/include/pmalloc.h
+41a42,43
+> inline  __attribute__((transaction_pure)) void nofree(void*);
+> 
+45a48
+>   //#define pfree nofree
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/src/hoardheap.cpp ./ext/mnemosyne-gcc/usermode/library/pmalloc/src/hoardheap.cpp
+210c210
+<                                   persistentHeap *)
+---
+>                                   persistentHeap * persistentheap)
+217a218
+> 	assert (sb->getBlockRegion(0) >= persistentheap->getPersistentSegmentBase());
+290d290
+< 
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/src/pdlmalloc.c ./ext/mnemosyne-gcc/usermode/library/pmalloc/src/pdlmalloc.c
+303a304
+> #include "pregionlayout.h"
+305,306c306,307
+< #define DLMALLOC_PHEAP_BASE 0xc00000000
+< #define DLMALLOC_PHEAP_SIZE (1024*1024*1024) /* Bytes */
+---
+> #define DLMALLOC_PHEAP_BASE LARGE_MALLOC_HEAP_BASE
+> #define DLMALLOC_PHEAP_SIZE LARGE_MALLOC_HEAP_SIZE
+816c817
+<     if (!inuse(l))  
+---
+>     /*if (!inuse(l))  
+821c822
+<     }
+---
+>       }*/
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/src/persistentheap.cpp ./ext/mnemosyne-gcc/usermode/library/pmalloc/src/persistentheap.cpp
+40a41,42
+> #include "segment.h"
+> #include "pregionlayout.h"
+63c65
+< 	}	
+---
+> 	}
+69c71
+< 	int   i;
+---
+> 	size_t   i;
+75a78,79
+> 		// std::cout<<"header_region_size:"<<std::hex<<PERSISTENTSUPERBLOCK_NUM*sizeof(persistentSuperblock)<<std::endl;
+> 		// std::cout<<"header_region_end:"<<std::hex<<SEGMENT_MAP_START+PERSISTENTHEAP_HEADER_BASE+PERSISTENTSUPERBLOCK_NUM*sizeof(persistentSuperblock)<<std::endl;
+79a84,87
+> 		// std::cout<<"PERSISTENTHEAP_HEADER_BASE:"<<std::hex<<PERSISTENTHEAP_HEADER_BASE<<std::endl;
+> 		// std::cout<<"psegmentheader:"<<psegmentheader<<std::endl;
+> 		// std::cout<<"PERSISTENTHEAP_BASE:"<<std::hex<<PERSISTENTHEAP_BASE<<std::endl;
+> 		// std::cout<<"psegment before map:"<<psegment<<std::endl;
+82a91
+> 		// std::cout<<"psegment after map:"<<psegment<<std::endl;
+88a98,101
+> 		// std::cout<<"end of headers:"<<psegmentheader+(PERSISTENTSUPERBLOCK_NUM*sizeof(persistentSuperblock))<<std::endl;
+> 		// std::cout<<"beginning of psegment:"<<psegment<<std::endl;
+> 		// std::cout<<"end of psegment:"<<psegment+(PERSISTENTSUPERBLOCK_NUM*persistentSuperblock::PERSISTENTSUPERBLOCK_SIZE)<<std::endl;
+> 		
+118c131
+< 		insertSuperblock (sizeclass, sb, (persistentHeap *) NULL);
+---
+> 		insertSuperblock (sizeclass, sb, (persistentHeap *) this);
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/src/threadheap.cpp ./ext/mnemosyne-gcc/usermode/library/pmalloc/src/threadheap.cpp
+66a67
+> 		// assert(sb->getBlockRegion(0) >= _persistentHeap->getPersistentSegmentBase());
+90c91
+< 
+---
+> 	
+diff -r ../mnemosyne-gcc/usermode/library/pmalloc/src/vhalloc.c ./ext/mnemosyne-gcc/usermode/library/pmalloc/src/vhalloc.c
+40,41c40,43
+< #define VHALLOC_PREGION_BASE          0xc00000000
+< #define VHALLOC_PREGION_METADATA_SIZE (1024*1024)        /* Bytes */
+---
+> #include "pregionlayout.h"
+> 
+> #define VHALLOC_PREGION_BASE          LARGE_MALLOC_HEAP_BASE
+> #define VHALLOC_PREGION_METADATA_SIZE LARGE_MALLOC_METADATA_SIZE        /* Bytes */
+43c45
+< #define VHALLOC_PREGION_HEAP_SIZE     (1024*1024*1024)   /* Bytes */
+---
+> #define VHALLOC_PREGION_HEAP_SIZE     LARGE_MALLOC_HEAP_SIZE   /* Bytes */
+Only in ./ext/mnemosyne-gcc/usermode: Makefile
+diff -r ../mnemosyne-gcc/usermode/mnemosyne.ini ./ext/mnemosyne-gcc/usermode/mnemosyne.ini
+3c3
+<         segments_dir="/dev/shm/psegments"
+---
+>         segments_dir="/mnt/pmem/psegments"

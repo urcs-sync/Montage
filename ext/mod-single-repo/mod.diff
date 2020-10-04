@@ -1,0 +1,158 @@
+diff -r ../mod-single-repo/Immutable-Datastructure-c++/immer/detail/list/list.hpp ./ext/mod-single-repo/Immutable-Datastructure-c++/immer/detail/list/list.hpp
+11c11
+< #include <iostream> // debugging
+---
+> // #include <iostream> // debugging
+16d15
+< 
+32c31
+<             heap::deallocate(sizeof(list<T>), data);
+---
+>             heap::deallocate(sizeof(Item),data);
+36c35
+<             heap::deallocate(size, data);
+---
+>             heap::deallocate(sizeof(Item),data);
+42c41
+<         ~Item() { std::cout << "! " << _val << std::endl; }
+---
+>         // ~Item() { std::cout << "! " << _val << std::endl; }
+56c55
+<         heap::deallocate(sizeof(list<T>), data);
+---
+>         heap::deallocate(sizeof(list),data);
+60c59
+<         heap::deallocate(size, data);
+---
+>         heap::deallocate(sizeof(list),data);
+136a136,139
+>     }
+> 
+>     void delete_head(){
+>         delete(_head);
+diff -r ../mod-single-repo/Immutable-Datastructure-c++/immer/nvm_utils.hpp ./ext/mod-single-repo/Immutable-Datastructure-c++/immer/nvm_utils.hpp
+35c35
+<     
+---
+> 
+62c62,63
+<                 _mm_clflushopt((void*)lines_to_flush[i]);
+---
+>                 //_mm_clflushopt((void*)lines_to_flush[i]);
+>                 _mm_clwb((void*)lines_to_flush[i]);
+76c77,78
+<             _mm_clflushopt((void*)start);
+---
+>             //_mm_clflushopt((void*)start);
+>             _mm_clwb((void*)start);
+diff -r ../mod-single-repo/Immutable-Datastructure-c++/immer/queue.hpp ./ext/mod-single-repo/Immutable-Datastructure-c++/immer/queue.hpp
+28c28
+<         heap::deallocate(sizeof(queue<T>), data);
+---
+>         heap::deallocate(sizeof(queue),data);
+32c32
+<         heap::deallocate(size, data);
+---
+>         heap::deallocate(sizeof(queue),data);
+66c66,69
+< 
+---
+>     void delete_front(){
+>         // call this after pop_front_ptr and old version is being deleted
+>         _front.delete_head();
+>     }
+Only in ./ext/mod-single-repo/Immutable-Datastructure-c++/immer/: unordered_map.hpp
+diff -r ../mod-single-repo/nvm_malloc/Makefile ./ext/mod-single-repo/nvm_malloc/Makefile
+2,4c2,4
+< debug:   CFLAGS := -O0 -ggdb -fpic -Wall -I. -Iulib-svn/include -DHAS_CLFLUSHOPT -DLOGGING
+< release: CFLAGS := -O3 -fpic -Wall -I. -Iulib-svn/include -DHAS_CLFLUSHOPT
+< no_flush: CFLAGS := -O3 -fpic -Wall -I. -Iulib-svn/include -DHAS_CLFLUSHOPT -DIMMER_DISABLE_FLUSHING
+---
+> debug:   CFLAGS := -O0 -ggdb -fpic -Wall -I. -Iulib-svn/include -DHAS_CLWB -DLOGGING
+> release: CFLAGS := -O3 -fpic -Wall -I. -Iulib-svn/include -DHAS_CLWB
+> no_flush: CFLAGS := -O3 -fpic -Wall -I. -Iulib-svn/include -DHAS_CLWB -DIMMER_DISABLE_FLUSHING
+12c12
+< release: $(LIBNAME) libnvmmallocnoflush.so libnvmmallocnofence.so libnvmmallocnone.so
+---
+> release: $(LIBNAME) # libnvmmallocnoflush.so libnvmmallocnofence.so libnvmmallocnone.so
+16c16
+< no_flush: $(LIBNAME)
+---
+> # no_flush: $(LIBNAME)
+19c19
+< 	$(CC) $(CFLAGS) -shared -o $@ $(addprefix $(OBJDIR)/, $(OBJECTS)) ulib-svn/lib/libulib.a $(LDFLAGS)
+---
+> 	$(CC) $(CFLAGS) -shared -o $@ $(addprefix $(OBJDIR)/, $(OBJECTS)) ulib-svn/lib/libulib.a $(LDFLAGS) -DPMEM_ENABLED
+22c22
+< 	$(CC) $(CFLAGS) -shared -o $@ -DNOFLUSH $+ ulib-svn/lib/libulib.a $(LDFLAGS)
+---
+> 	$(CC) $(CFLAGS) -shared -o $@ -DNOFLUSH $+ ulib-svn/lib/libulib.a $(LDFLAGS) -DPMEM_ENABLED
+25c25
+< 	$(CC) $(CFLAGS) -shared -o $@ -DNOFENCE $+ ulib-svn/lib/libulib.a $(LDFLAGS)
+---
+> 	$(CC) $(CFLAGS) -shared -o $@ -DNOFENCE $+ ulib-svn/lib/libulib.a $(LDFLAGS) -DPMEM_ENABLED
+28c28
+< 	$(CC) $(CFLAGS) -shared -o $@ -DNOFLUSH -DNOFENCE $+ ulib-svn/lib/libulib.a $(LDFLAGS)
+---
+> 	$(CC) $(CFLAGS) -shared -o $@ -DNOFLUSH -DNOFENCE $+ ulib-svn/lib/libulib.a $(LDFLAGS) -DPMEM_ENABLED
+32c32
+< 	$(CC) $(CFLAGS) -c -o $@ $<
+---
+> 	$(CC) $(CFLAGS) -c -o $@ $< -DPMEM_ENABLED
+diff -r ../mod-single-repo/nvm_malloc/src/chunk.c ./ext/mod-single-repo/nvm_malloc/src/chunk.c
+107c107
+<     if ((chunk_region_start = mmap(NVM_BASE_ADDR, max_chunks*CHUNK_SIZE, PROT_NONE, MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0)) == MAP_FAILED) {
+---
+>     if ((chunk_region_start = mmap((void*)NVM_BASE_ADDR, max_chunks*CHUNK_SIZE, PROT_NONE, MAP_SHARED|MAP_ANONYMOUS|MAP_NORESERVE, -1, 0)) == MAP_FAILED) {
+137c137
+<     if ((meta_info = mmap(META_BASE_ADDR, BLOCK_SIZE, PROT_READ|PROT_WRITE, MMAP_FLAGS, meta_file_fd, 0)) == MAP_FAILED)
+---
+>     if ((meta_info = mmap((void*)META_BASE_ADDR, BLOCK_SIZE, PROT_READ|PROT_WRITE, MMAP_FLAGS, meta_file_fd, 0)) == MAP_FAILED)
+156c156
+<     if ((meta_info = mmap(META_BASE_ADDR, BLOCK_SIZE, PROT_READ|PROT_WRITE, MMAP_FLAGS, meta_file_fd, 0)) == MAP_FAILED)
+---
+>     if ((meta_info = mmap((void*)META_BASE_ADDR, BLOCK_SIZE, PROT_READ|PROT_WRITE, MMAP_FLAGS, meta_file_fd, 0)) == MAP_FAILED)
+diff -r ../mod-single-repo/nvm_malloc/src/nvm_malloc.c ./ext/mod-single-repo/nvm_malloc/src/nvm_malloc.c
+106c106
+<     printf("Chunks recovered:%lu\n", n_chunks_recovered);
+---
+>     // printf("Chunks recovered:%lu\n", n_chunks_recovered);
+diff -r ../mod-single-repo/nvm_malloc/src/util.h ./ext/mod-single-repo/nvm_malloc/src/util.h
+10,11c10,11
+< inline uint64_t round_up(uint64_t num, uint64_t multiple);
+< inline char identify_usage(void *ptr);
+---
+> uint64_t round_up(uint64_t num, uint64_t multiple);
+> char identify_usage(void *ptr);
+13,14c13,14
+< inline void clflush(const void *ptr);
+< inline void clflush_range(const void *ptr, uint64_t len);
+---
+> void clflush(const void *ptr);
+> void clflush_range(const void *ptr, uint64_t len);
+17,18c17,18
+< inline void clflushopt(const void *ptr);
+< inline void clflushopt_range(const void *ptr, uint64_t len);
+---
+> void clflushopt(const void *ptr);
+> void clflushopt_range(const void *ptr, uint64_t len);
+22,23c22,23
+< inline void clwb(const void *ptr);
+< inline void clwb_range(const void *ptr, uint64_t len);
+---
+> void clwb(const void *ptr);
+> void clwb_range(const void *ptr, uint64_t len);
+26,27c26,27
+< inline void sfence();
+< inline void mfence();
+---
+> void sfence();
+> void mfence();
+Only in ../mod-single-repo/: pmdk
+Only in ../mod-single-repo/: PMEM_NOTES
+Only in ../mod-single-repo/: pmem-valgrind
+Only in ../mod-single-repo/: README
+Only in ../mod-single-repo/: run.sh
+Only in ../mod-single-repo/: source.sh
+Only in ../mod-single-repo/: temp
+Only in ../mod-single-repo/: vacation-pmdk

@@ -1,0 +1,219 @@
+diff -r ../pronto-v1.1/src/ckpt_alloc.cpp ./ext/pronto-v1.1/src/ckpt_alloc.cpp
+827c827,829
+<     if (prev == NULL && next == NULL) return (free_header_t *)chunk;
+---
+>     // Wentao: commenting this out to disable coalescing since it's buggy.
+>     // if (prev == NULL && next == NULL) 
+>         return (free_header_t *)chunk;
+diff -r ../pronto-v1.1/src/context.cpp ./ext/pronto-v1.1/src/context.cpp
+59c59
+< #ifndef SYNC_SL
+---
+> // #ifndef SYNC_SL
+61c61
+< #endif // SYNC_SL
+---
+> // #endif // SYNC_SL
+91c91
+< #ifndef SYNC_SL
+---
+> // #ifndef SYNC_SL
+93c93
+< #endif // SYNC_SL
+---
+> // #endif // SYNC_SL
+diff -r ../pronto-v1.1/src/Makefile ./ext/pronto-v1.1/src/Makefile
+6c6
+< CXXFLAGS+=-o3
+---
+> #CXXFLAGS+=-O3
+8c8
+< TARGET=libsavitar.a
+---
+> # TARGET=libsavitar.a
+10c10
+< all: $(TARGET)
+---
+> all: libsavitar.a libsavitar_sync.a
+17a18,19
+> else
+> CXXFLAGS+=-DLOG_SIZE="((off_t)32 << 30)"
+24,26c26,29
+< ifdef PRONTO_SYNC
+< CXXFLAGS+=-DSYNC_SL # no ASL
+< endif
+---
+> # Comment out since we generate sync version of libsavitar separately
+> # ifdef PRONTO_SYNC
+> # CXXFLAGS+=-DSYNC_SL # no ASL
+> # endif
+28c31
+< $(TARGET): thread.o persister.o nv_log.o nv_object.o context.o cpu_info.o nv_catalog.o nvm_manager.o nv_factory.o ckpt_alloc.o snapshot.o
+---
+> libsavitar.a: thread.o persister.o nv_log.o nv_object.o context.o cpu_info.o nv_catalog.o nvm_manager.o nv_factory.o ckpt_alloc.o snapshot.o
+63a67,102
+> libsavitar_sync.a: thread_sync.o persister_sync.o nv_log_sync.o nv_object_sync.o context_sync.o cpu_info_sync.o nv_catalog_sync.o nvm_manager_sync.o nv_factory_sync.o ckpt_alloc_sync.o snapshot_sync.o
+> 	$(AR) rvs $@ $^
+> 
+> ckpt_alloc_sync.o: ckpt_alloc.cpp ckpt_alloc.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> snapshot_sync.o: snapshot.cpp snapshot.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> thread_sync.o: thread.cpp thread.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> persister_sync.o: persister.cpp persister.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> nv_log_sync.o: nv_log.cpp nv_log.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> nv_object_sync.o: nv_object.cpp nv_object.hpp recovery_context.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> context_sync.o: context.cpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $^
+> 
+> cpu_info_sync.o: cpu_info.cpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $^
+> 
+> nv_catalog_sync.o: nv_catalog.cpp nv_catalog.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> nvm_manager_sync.o: nvm_manager.cpp nvm_manager.hpp recovery_context.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+> nv_factory_sync.o: nv_factory.cpp nv_factory.hpp
+> 	$(CXX) -c $(CXXFLAGS) -DSYNC_SL -O3 -o $@ $<
+> 
+66c105
+< 	rm -f $(TARGET)
+---
+> 	rm -f *.a
+diff -r ../pronto-v1.1/src/nvm_manager.cpp ./ext/pronto-v1.1/src/nvm_manager.cpp
+167a168
+>     return NULL;
+diff -r ../pronto-v1.1/src/savitar.hpp ./ext/pronto-v1.1/src/savitar.hpp
+12c12
+< #define MAX_THREADS                 64
+---
+> #define MAX_THREADS                 40
+15c15
+< #define MAX_CORES                   40
+---
+> #define MAX_CORES                   80
+20c20
+< #define PMEM_PATH                   "/mnt/ram/"
+---
+> #define PMEM_PATH                   "/mnt/pmem/"
+diff -r ../pronto-v1.1/src/snapshot.cpp ./ext/pronto-v1.1/src/snapshot.cpp
+97c97
+<             PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+---
+>             PROT_READ | PROT_WRITE, MAP_SHARED_VALIDATE | MAP_SYNC, fd, 0);
+442c442
+<             PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+---
+>             PROT_READ | PROT_WRITE, MAP_SHARED_VALIDATE | MAP_SYNC, fd, 0);
+494c494
+<             PROT_READ, MAP_SHARED, fd, 0);
+---
+>             PROT_READ, MAP_SHARED_VALIDATE | MAP_SYNC, fd, 0);
+500c500
+<             PROT_READ, MAP_SHARED, fd, 0);
+---
+>             PROT_READ, MAP_SHARED_VALIDATE | MAP_SYNC, fd, 0);
+diff -r ../pronto-v1.1/src/thread.cpp ./ext/pronto-v1.1/src/thread.cpp
+12c12
+< static int available_cores = 0; // including Hyper-Threaded cores
+---
+> static int available_cores = 80; // including Hyper-Threaded cores
+68,70c68,70
+<     for (int i = 0; i < (available_cores >> 1); i++) {
+<         while (core_tenants[i] != 0); // wait for all threads to terminate
+<     }
+---
+>     // for (int i = 0; i < (available_cores >> 1); i++) {
+>     //     while (core_tenants[i] != 0); // wait for all threads to terminate
+>     // }
+73c73,84
+< 
+---
+> // thread pinning strategy for 2x20a:
+> // 1 thread per core on one socket -> hyperthreads on the same socket -> cross socket.
+> static const int pinning_map_2x20a_1[] = {
+>     0,2,4,6,8,10,12,14,16,18,
+>     20,22,24,26,28,30,32,34,36,38,
+>     40,42,44,46,48,50,52,54,56,58,
+>     60,62,64,66,68,70,72,74,76,78,
+>     1,3,5,7,9,11,13,15,17,19,
+>     21,23,25,27,29,31,33,35,37,39,
+>     41,43,45,47,49,51,53,55,57,59,
+>     61,63,65,67,69,71,73,75,77,79};
+> volatile static int init_count = 0;
+77c88,93
+<     for (int i = 0; i < (available_cores >> 1); i++) {
+---
+> // #ifndef SYNC_SL
+>     int total_cores = available_cores;
+> // #else // SYNC_SL
+> //     int total_cores = available_cores >> 1;// force to reuse cores within socket
+> // #endif // SYNC_SL
+>     for (int i = 0; i < (total_cores >> 1); i++) {
+82a99,101
+>     int curr_tenants=core_tenants[least_occupied];
+>     int tid = init_count;
+>     init_count++;
+84,85c103,119
+<     core_ids[0] = core_ht_map[least_occupied][0];
+<     core_ids[1] = core_ht_map[least_occupied][1];
+---
+>     // core_ids[0] = core_ht_map[least_occupied][0];
+> #ifndef SYNC_SL
+>     // core_ids[1] = core_ht_map[least_occupied][1];
+>     assert(tid<40);
+>     if(tid>=20) tid+=20;
+>     core_ids[0] = pinning_map_2x20a_1[(tid+20)%80]; // logger
+>     core_ids[1] = pinning_map_2x20a_1[tid%80];
+> #else // SYNC_SL
+>     // if(curr_tenants%2==1){
+>     //     core_ids[1] = core_ht_map[least_occupied][1];
+>     // } else {
+>     //     core_ids[1] = core_ht_map[least_occupied][0];
+>     // }
+>     core_ids[0] = 0; //unused
+>     core_ids[1] = pinning_map_2x20a_1[tid%80];
+> #endif // SYNC_SL
+> 
+132c166
+< #ifndef SYNC_SL
+---
+> // #ifndef SYNC_SL
+137c171
+< #endif // SYNC_SL
+---
+> // #endif // SYNC_SL
+147,149d180
+< #ifndef SYNC_SL
+<         Savitar_core_free(cfg->core_id);
+< #endif // SYNC_SL
+158a190,192
+> // #ifndef SYNC_SL
+>         Savitar_core_free(cfg->core_id);
+> // #endif // SYNC_SL
+182d215
+< #ifndef SYNC_SL
+186c219
+< 
+---
+> #ifndef SYNC_SL
+202c235
+< #endif // SYNC_SL
+---
+> #endif // !SYNC_SL
+206d238
+< #ifndef SYNC_SL
+208d239
+< #endif // SYNC_SL

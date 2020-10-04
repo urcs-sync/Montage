@@ -1,0 +1,9 @@
+*.test
+*.a
+*.o
+*.out
+bin
+obj
+*.swp
+*.csv
+*.pdf

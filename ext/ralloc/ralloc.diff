@@ -1,0 +1,550 @@
+diff -r ../ralloc/src/AllocatorMacro.hpp ./ext/ralloc/src/AllocatorMacro.hpp
+55c55
+< #define REGION_SIZE (6*1024*1024*1024ULL + 24)
+---
+> #define REGION_SIZE (64*1024*1024*1024ULL + 24)
+diff -r ../ralloc/src/BaseMeta.cpp ./ext/ralloc/src/BaseMeta.cpp
+153a154
+>     FLUSH(&dirty_mtx);
+158,177c159,191
+<     int s = pthread_mutex_trylock(&dirty_mtx);
+<     switch(s){
+<     case EOWNERDEAD:
+<         pthread_mutex_consistent(&dirty_mtx);
+<         return true;
+<     case 0:
+<         // succeeds
+<         pthread_mutex_unlock(&dirty_mtx);
+<         return false;
+<     case EBUSY:
+<     case EAGAIN:
+<         return false;
+<     case EINVAL:
+<         pthread_mutex_destroy(&dirty_mtx);
+<         pthread_mutex_init(&dirty_mtx, &dirty_attr);
+<         return true;
+<     default:
+<         printf("something unexpected happens when check dirty_mtx\n"); 
+<         exit(1);
+<     }// switch(s)
+---
+>     // check if heap is dirty and set heap to dirty anyway, for either recovery or normal execution
+>     bool ret = false;
+>     if(fake_dirty){
+>         fake_dirty=false;
+>         ret = true;
+>     } else {
+>         int s = pthread_mutex_trylock(&dirty_mtx);
+>         switch(s){
+>         case EOWNERDEAD:
+>             pthread_mutex_consistent(&dirty_mtx);
+>             ret = true;
+>             break;
+>         case 0:
+>             // succeeds
+>             pthread_mutex_unlock(&dirty_mtx);
+>             ret = false;
+>             break;
+>         case EBUSY:
+>         case EAGAIN:
+>             ret = false;
+>             break;
+>         case EINVAL:
+>             pthread_mutex_destroy(&dirty_mtx);
+>             pthread_mutex_init(&dirty_mtx, &dirty_attr);
+>             ret = true;
+>             break;
+>         default:
+>             printf("something unexpected happens when check dirty_mtx\n"); 
+>             exit(1);
+>         }// switch(s)
+>     }
+>     set_dirty();
+>     return ret;
+268c282
+< inline SizeClassData* BaseMeta::get_sizeclass(ProcHeap* h){
+---
+> inline const SizeClassData* BaseMeta::get_sizeclass(ProcHeap* h){
+272c286
+< inline SizeClassData* BaseMeta::get_sizeclass_by_idx(size_t idx) { 
+---
+> inline const SizeClassData* BaseMeta::get_sizeclass_by_idx(size_t idx) { 
+277c291
+<     SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+---
+>     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+319c333
+<     SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+---
+>     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+327c341
+<     SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+---
+>     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+511c525
+<     SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+---
+>     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+581c595,596
+<     ptr_cnt<Descriptor> oldhead = avail_sb.load();
+---
+>     ptr_cnt<Descriptor> oldhead;
+>     char * old_curr_addr;
+582a598,599
+>         old_curr_addr = _rgs->regions[SB_IDX]->curr_addr_ptr->load();
+>         oldhead = avail_sb.load();
+595c612
+<             char * old_curr_addr = _rgs->regions[SB_IDX]->curr_addr_ptr->load();
+---
+>             // char * old_curr_addr = _rgs->regions[SB_IDX]->curr_addr_ptr->load();
+601,605c618,620
+<             next = new_curr_addr + SB_REGION_EXPAND_SIZE;
+<             if (avail_sb.load().get_ptr() != nullptr){
+<                 // ensure this expansion is necessary
+<                 continue;
+<             }
+---
+>             uint64_t sb_to_expand = SB_REGION_EXPAND_SIZE/SBSIZE;
+>             sb_to_expand /= ralloc::thd_cnt.load(std::memory_order_relaxed);
+>             next = new_curr_addr + sb_to_expand*SBSIZE;
+609a625,628
+>             // if (old_curr_addr != _rgs->regions[SB_IDX]->curr_addr_ptr->load()){
+>             //     // someone expanded the region, retry
+>             //     continue;
+>             // }
+613a633
+>                 DBG_PRINT("expand sb space for small sb allocation\n");
+616,617c636
+<                 DBG_PRINT("expand sb space for small sb allocation\n");
+<                 organize_sb_list((char*)((uint64_t)res+SBSIZE), SB_REGION_EXPAND_SIZE/SBSIZE-1);
+---
+>                 organize_sb_list((char*)((uint64_t)res+SBSIZE), sb_to_expand-1);
+629a649,651
+>     // no need for further flush and fence since they were called in constructor
+>     // FLUSH(desc);
+>     // FLUSHFENCE;
+651a674,678
+>     Descriptor* desc = desc_lookup(sb);
+>     new (desc) Descriptor();
+>     // no need for further flush and fence since they were called in constructor
+>     // FLUSH(desc); //flush reinitialized desc
+>     // FLUSHFENCE;
+714c741
+<     SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+---
+>     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
+896a924,1104
+> 
+> int InuseRecovery::iterator::update_status_dirty(){
+>     if(curr_desc->heap == nullptr) {
+>         // unused
+>         assert(curr_desc->block_size == 0);
+>         return stat=0;
+>     } else {
+>         // in use
+>         assert((RallocBlock *)curr_desc->superblock == (RallocBlock*)((size_t)curr_blk&SB_MASK));
+>         assert(curr_desc->block_size != 0);
+>         if(curr_desc->heap->sc_idx == 0) {
+>             // large
+>             assert(curr_desc->maxcount == 1);
+>             return stat=2;
+>         } else {
+>             return stat=1;
+>         }
+>     }
+>     //should never reach here
+>     assert(0&&"updating status failed!");
+> }
+> 
+> int InuseRecovery::iterator::update_status_clean(){
+>     //anchor is transient but since it's clean restart, we can utilize its value
+>     Anchor anchor = curr_desc->anchor.load();
+>     if(curr_desc->heap == nullptr || anchor.state == SB_EMPTY) {
+>         // unused, including the case when sb is empty but still in partial list
+>         return stat=0;
+>     } else {
+>         // in use
+>         assert((RallocBlock *)curr_desc->superblock == (RallocBlock*)((size_t)curr_blk&SB_MASK));
+>         assert(curr_desc->block_size != 0);
+>         if(curr_desc->heap->sc_idx == 0) {
+>             // large
+>             assert(curr_desc->maxcount == 1);
+>             return stat=2;
+>         } else {
+>             return stat=1;
+>         }
+>     }
+>     //should never reach here
+>     assert(0&&"updating status failed!");
+> }
+> 
+> void InuseRecovery::iterator::set_sb_free(){
+>     new (curr_desc) Descriptor();
+>     curr_desc->next_free.store(base_md->avail_sb.load().ptr);
+>     ptr_cnt<Descriptor> tmp_avail_sb(curr_desc, 0);
+>     base_md->avail_sb.store(tmp_avail_sb);
+> }
+> 
+> bool InuseRecovery::iterator::action_at_new_sb_dirty(){
+>     // this func is called when curr_blk points at the first block of a sb
+>     // curr_blk will skip not-in-use sb and properly update metadata of sb it went through
+>     while(update_status() == 0){
+>         // skip all not-in-use sb
+>         if(is_last()) return false;
+>         set_sb_free();
+>         curr_blk = (RallocBlock*)((uint64_t)curr_blk + SBSIZE);
+>         curr_desc++;
+>     }
+> 
+>     Anchor anchor(0, 0, SB_EMPTY);
+>     if(stat == 1) {
+>         // small block, treating all blocks in the sb as in-use
+>         anchor.avail = curr_desc->maxcount;
+>         anchor.count = 0;
+>         anchor.state = SB_FULL;
+>     } else {
+>         // stat == 2, large block
+>         anchor.avail = 0;
+>         anchor.count = 0;
+>         anchor.state = SB_FULL;
+>     }
+>     // set transient variables in curr_desc
+>     curr_desc->next_free.store(nullptr);
+>     curr_desc->next_partial.store(nullptr);
+>     curr_desc->anchor.store(anchor);
+>     return true;
+> }
+> 
+> bool InuseRecovery::iterator::action_at_new_sb_clean(){
+>     // this func is called when curr_blk points at the first block of a sb
+>     // curr_blk will skip not-in-use sb and properly update metadata of sb it went through
+>     while(update_status() == 0){
+>         // skip all not-in-use sb
+>         if(is_last()) return false;
+>         curr_blk = (RallocBlock*)((uint64_t)curr_blk + SBSIZE);
+>         curr_desc++;
+>     }
+> 
+>     Anchor anchor = curr_desc->anchor.load();
+>     if(stat == 1) {
+>         // small block
+>         free_blks.clear();
+>         if(anchor.count == 0) return true;
+>         uint32_t maxcount = curr_desc->maxcount;
+>         uint32_t block_size = curr_desc->block_size;
+>         assert(curr_desc->superblock == (char*)curr_blk);
+>         char* block = (char*)curr_desc->superblock + anchor.avail * block_size;
+>         assert(block != nullptr);
+>         for(int cnt = anchor.count; cnt > 0;cnt--){
+>             //build the set of free blk for lookup
+>             free_blks.emplace(block);
+>             block = (char*)(*(pptr<char>*)block);
+>             assert((size_t)block>>SB_SHIFT == (size_t)curr_blk>>SB_SHIFT);
+>         }
+>         size_t next_blk = (size_t)curr_blk;
+>         while(free_blks.count((char*)next_blk) != 0){
+>             // stop until next_blk is not free
+>             next_blk+=size();
+>         }
+>         assert(next_blk>>SB_SHIFT == (size_t)curr_blk>>SB_SHIFT);
+>         curr_blk = (RallocBlock*) next_blk;
+>     }
+>     return true;
+> }
+> 
+> InuseRecovery::iterator::iterator(bool d) : dirty(d) {
+>     // start recovery and construct the iterator
+>     
+>     curr_blk = reinterpret_cast<RallocBlock*>(
+>         _rgs->translate(SB_IDX, reinterpret_cast<char*>(SBSIZE)));
+>     curr_desc = base_md->desc_lookup((void*)curr_blk);
+> 
+>     if(dirty) {
+>         // initialize transient sb free and partial lists
+>         base_md->avail_sb.off.store(nullptr); // initialize avail_sb
+>         for(int i = 0; i< MAX_SZ_IDX; i++) {
+>             // initialize partial list of each heap
+>             base_md->heaps[i].partial_list.off.store(nullptr);
+>         }
+>     }
+>     action_at_new_sb();
+> }
+> 
+> InuseRecovery::iterator& InuseRecovery::iterator::operator++() {
+>     if(is_last()) return *this;
+>     size_t next_blk = (size_t)curr_blk + size();
+>     if(!dirty){
+>         while(free_blks.count((char*)next_blk) != 0 && next_blk>>SB_SHIFT == (size_t)curr_blk>>SB_SHIFT){
+>             // stop until next_blk is not free
+>             if(next_blk+size() > ((next_blk+SBSIZE) & SB_MASK)){
+>                 // next_blk is at the leftover of the sb
+>                 // bring next_blk to the first blk of the next sb
+>                 next_blk = (next_blk+SBSIZE) & SB_MASK;
+>             } else {
+>                 next_blk+=size();
+>             }
+>         }
+>     }
+>     if(is_last((RallocBlock*)next_blk)){
+>        curr_blk = reinterpret_cast<RallocBlock*>(
+>         _rgs->regions[SB_IDX]->curr_addr_ptr->load());
+>         return *this;
+>     } 
+>     assert(next_blk <=  (size_t)_rgs->regions[SB_IDX]->curr_addr_ptr->load());
+>     if(next_blk+size() > ((next_blk+SBSIZE) & SB_MASK)){
+>         next_blk = (next_blk+SBSIZE) & SB_MASK;
+>     }
+>     if(next_blk>>SB_SHIFT != (size_t)curr_blk>>SB_SHIFT){
+>         // operator++ brings curr_blk to next sb
+>         curr_blk = (RallocBlock*) next_blk;
+>         curr_desc = base_md->desc_lookup((void*)curr_blk);
+>         action_at_new_sb();
+>     } else {
+>         // still in the same sb
+>         curr_blk = (RallocBlock*) next_blk;
+>     }
+>     return *this;
+> }
+> 
+> bool InuseRecovery::iterator::is_last(InuseRecovery::RallocBlock* blk) {
+>     auto boundary = reinterpret_cast<RallocBlock*>(_rgs->regions[SB_IDX]->curr_addr_ptr->load());
+>     return blk >= boundary ||
+>         (size_t)blk+size() > ((size_t)boundary & SB_MASK);
+> }
+> 
+> bool InuseRecovery::iterator::is_last() {
+>     return is_last(curr_blk);
+> }
+\ No newline at end of file
+diff -r ../ralloc/src/BaseMeta.hpp ./ext/ralloc/src/BaseMeta.hpp
+258,264c258,264
+<         next_free(),
+<         next_partial(),
+<         anchor(),
+<         superblock(),
+<         heap(),
+<         block_size(),
+<         maxcount(){
+---
+>         next_free(nullptr),
+>         next_partial(nullptr),
+>         anchor(0),
+>         superblock(nullptr),
+>         heap(nullptr),
+>         block_size(0),
+>         maxcount(0){
+338a339,398
+> 
+> 
+> #include <iterator>
+> #include <unordered_set>
+> class InuseRecovery{
+> public:
+>     class RallocBlock{ };
+>     class iterator : public std::iterator<
+>                         std::forward_iterator_tag,  // iterator_category
+>                         RallocBlock*,               // value_type
+>                         RallocBlock*,               // difference_type
+>                         RallocBlock**,              // pointer
+>                         RallocBlock*                // reference
+>                                       >{
+>     private:
+>         // this iterator reconstructs all descriptors during iterating, treating
+>         // all potentially in use blocks allocated.
+>         static const SizeClass sizeclass;
+>         RallocBlock* curr_blk = nullptr;
+>         Descriptor* curr_desc = nullptr;
+>         int stat = 0;
+>         const bool dirty; 
+>         // in-use blks in the curr sb, valid only when dirty is false
+>         std::unordered_set<char*> free_blks; 
+>         // 0: unused, 1: small, 2: large
+>         inline int update_status(){
+>             if(dirty) return update_status_dirty();
+>             else return update_status_clean();
+>         }
+>         int update_status_dirty();
+>         int update_status_clean();
+>         void set_sb_free();
+>         // return true if succeed, otherwise false.
+>         inline bool action_at_new_sb(){
+>             if(dirty) return action_at_new_sb_dirty();
+>             else return action_at_new_sb_clean();
+>         }
+>         bool action_at_new_sb_dirty();
+>         bool action_at_new_sb_clean();
+>     public:
+>         explicit iterator(bool d);
+>         iterator& operator++();
+>         inline bool operator==(iterator other) const { return curr_blk == other.curr_blk; }
+>         inline bool operator!=(iterator other) const { return !(*this == other); }
+>         inline reference operator*() const { return curr_blk; }
+>         bool is_last();
+>         bool is_last(RallocBlock* blk);
+>         inline size_t size() const{
+>             return curr_desc->block_size;
+>         }
+>         inline bool is_dirty() const{
+>             return dirty;
+>         }
+>     };
+>     // inline iterator& operator() (bool dirty){
+>     //     return iterator(dirty);
+>     // };
+> };
+> 
+> 
+357a418,419
+>     // fake_dirty is set only in RP_simulate_crash and is transient. Don't call RP_simulate_crash if there may be real crash
+>     RP_PERSIST bool fake_dirty = false;
+361a424
+>     friend class InuseRecovery;
+370a434
+>     // this func can be called only once during restart
+405a470,471
+>         //obsolete function, left only for test purpose
+>         assert(0);
+408a475,477
+>         // "dirty" should be set to true until
+>         // writeback() is called so that crash will result in a dirty.
+>         set_dirty();
+410,411c479,483
+<             GarbageCollection gc;
+<             gc();
+---
+>             // Wentao: by this we make all blocks in an in-use sb in-use.
+>             InuseRecovery::iterator iter (true);
+>             while(!iter.is_last()){
+>                 ++iter;
+>             }
+414,416d485
+<         // here restart is done, and "dirty" should be set to true until
+<         // writeback() is called so that crash will result in a true dirty.
+<         set_dirty();
+420c489
+<         // Give back tcached blocks *Wentao: no actually ~TCache will do this*
+---
+>         // Give back tcached blocks
+422c491,493
+<         // ralloc::public_flush_cache();
+---
+> 
+>         // Wentao: cache flush is done in caches' destructor (~TCaches)
+> 	// ralloc::public_flush_cache();
+441,442c512,513
+<     SizeClassData* get_sizeclass(ProcHeap* h);
+<     SizeClassData* get_sizeclass_by_idx(size_t idx);
+---
+>     const SizeClassData* get_sizeclass(ProcHeap* h);
+>     const SizeClassData* get_sizeclass_by_idx(size_t idx);
+499a571
+> 
+diff -r ../ralloc/src/pm_config.hpp ./ext/ralloc/src/pm_config.hpp
+93a94
+> const uint64_t SB_MASK = ~((1ULL<<SB_SHIFT) - 1);
+diff -r ../ralloc/src/pptr.hpp ./ext/ralloc/src/pptr.hpp
+133a134,136
+>     inline const T* operator -> () const { //arrow
+>         return static_cast<T*>(*this);
+>     }
+diff -r ../ralloc/src/ralloc.cpp ./ext/ralloc/src/ralloc.cpp
+95,96c95,96
+< int RP_recover(){
+<     return (int) base_md->restart();
+---
+> InuseRecovery::iterator RP_recover(){
+>     return InuseRecovery::iterator(base_md->is_dirty());
+103a104,108
+> void RP_simulate_crash(){
+>     base_md->fake_dirty = true;
+>     RP_close();
+> }
+> 
+169a175,180
+> }
+> 
+> int RP_recover_c(){
+>     //obsolete routine
+>     assert(0&&"ralloc has to be compiled as C++!");
+>     return (int) base_md->restart();
+diff -r ../ralloc/src/ralloc.hpp ./ext/ralloc/src/ralloc.hpp
+26a27,28
+> 
+> InuseRecovery::iterator RP_recover();
+32a35,36
+> /* return 1 if it's dirty, otherwise 0. */
+> int RP_recover_c();
+35,36d38
+< /* return 1 if it's dirty, otherwise 0. */
+< int RP_recover();
+37a40
+> void RP_simulate_crash();
+diff -r ../ralloc/src/SizeClass.hpp ./ext/ralloc/src/SizeClass.hpp
+60,61c60,61
+< 	inline size_t get_sizeclass(size_t size){return sizeclass_lookup[size];}
+< 	inline SizeClassData* get_sizeclass_by_idx(size_t idx){return &sizeclasses[idx];}
+---
+> 	inline size_t get_sizeclass(size_t size) const { return sizeclass_lookup[size]; }
+> 	inline const SizeClassData* get_sizeclass_by_idx(size_t idx) const { return &sizeclasses[idx]; }
+diff -r ../ralloc/src/TCache.cpp ./ext/ralloc/src/TCache.cpp
+17a18
+> std::atomic<uint64_t> ralloc::thd_cnt;
+diff -r ../ralloc/src/TCache.hpp ./ext/ralloc/src/TCache.hpp
+65a66
+> 	extern std::atomic<uint64_t> thd_cnt;
+70c71,73
+< 	TCaches():t_cache(){};
+---
+> 	TCaches():t_cache(){
+> 		ralloc::thd_cnt.fetch_add(1,std::memory_order_relaxed);
+> 	};
+72a76
+> 		ralloc::thd_cnt.fetch_sub(1,std::memory_order_relaxed);
+diff -r ../ralloc/test/benchmark/AllocatorMacro.hpp ./ext/ralloc/test/benchmark/AllocatorMacro.hpp
+55c55
+< #define REGION_SIZE (6*1024*1024*1024ULL + 24)
+---
+> #define REGION_SIZE (64*1024*1024*1024ULL + 24)
+diff -r ../ralloc/test/Makefile ./ext/ralloc/test/Makefile
+13a14
+> # FLAGS = -O0 -g -fpermissive $(WARNING_FLAGS) -fno-omit-frame-pointer -fPIC -DDEBUG #-DSHM_SIMULATING #-DDESTROY -DMEM_CONSUME_TEST
+15,16d15
+< MAKALU_FLAGS = $(FLAGS) -I../ext/makalu_alloc/include -DMAKALU -L../ext/makalu_alloc/lib -lmakalu 
+< PMDK_FLAGS = $(FLAGS) -DPMDK -lpmemobj 
+18,45c17
+< R_CXXFLAGS = $(RALLOC_FLAGS) -ljemalloc -L. -lralloc 
+< MAK_CXXFLAGS = $(MAKALU_FLAGS) -ljemalloc 
+< JE_CXXFLAGS = $(FLAGS) -ljemalloc
+< LR_CXXFLAGS = $(FLAGS) -L../ext/lrmalloc -l:lrmalloc.a -ldl# for built-in malloc
+< PMDK_CXXFLAGS = $(PMDK_FLAGS) -ljemalloc
+< 
+< # Ralloc by default
+< CXXFLAGS = $(R_CXXFLAGS)
+< ifeq ($(ALLOC),r)
+< 	CXXFLAGS = $(R_CXXFLAGS)
+< endif
+< 
+< ifeq ($(ALLOC),mak)
+< 	CXXFLAGS = $(MAK_CXXFLAGS)
+< endif
+< 
+< ifeq ($(ALLOC),je)
+< 	CXXFLAGS = $(JE_CXXFLAGS)
+< endif
+< 
+< ifeq ($(ALLOC),lr)
+< 	# Ralloc without flush and fence is effectively LRMalloc, with optimization
+< 	CXXFLAGS = $(R_CXXFLAGS) -DPWB_IS_NOOP
+< endif
+< 
+< ifeq ($(ALLOC),pmdk)
+< 	CXXFLAGS = $(PMDK_CXXFLAGS)
+< endif
+---
+> CXXFLAGS = $(RALLOC_FLAGS) -ljemalloc -L. -lralloc 
+63,64c35,36
+< # ralloc_test: ralloc_test.cpp libralloc.a
+< # 	$(CXX) -I $(SRC) -o $@ $< $(CXXFLAGS) $(LIBS) -L. -lralloc
+---
+> ralloc_test: ralloc_test.cpp libralloc.a
+> 	$(CXX) -I $(SRC) -o $@ $< $(CXXFLAGS) $(LIBS)

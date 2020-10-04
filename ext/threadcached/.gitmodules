@@ -1,0 +1,6 @@
+[submodule "ralloc"]
+	path = ralloc
+	url = git@github.com:qtcwt/ralloc.git
+[submodule "hodor"]
+	path = hodor
+	url = git@github.com:hedayati/hodor.git
