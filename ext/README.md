@@ -20,7 +20,7 @@ any) are listed as follows:
 ## 1. [libitm](https://pkgs.org/download/libitm)
 
 No modification has been made. A dynamic library (.so) tested on
-Fedora 30 is included in the directory.
+Fedora 30 is included in the directory in case needed.
 
 ## 2. [mnemosyne-gcc](https://github.com/snalli/mnemosyne-gcc/tree/master)
 

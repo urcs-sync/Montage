@@ -4,8 +4,8 @@ Montage is a system for building fast buffered persistent data
 structures, developed at the University of Rochester by H. Wen, W.
 Cai, M. Du, L. Jenkins, B. Valpey, and M. L. Scott. The work has been
 published in ArXiv ([link](https://arxiv.org/abs/2009.701)). You can
-also find its short version in DISC' 20 as a brief announcement (link
-to appear).
+also find its short version on DISC' 20 as a brief announcement
+([link](https://doi.org/10.4230/LIPIcs.DISC.2020.52)).
 
 The testing harness is based on J. Izraelevitz's
 [parHarness](https://github.com/izrajoe/parHarness).
@@ -24,7 +24,8 @@ The testing harness is based on J. Izraelevitz's
 
 ## 1. Required Libraries
 
-Most of required libraries are provided in `./ext`, which includes
+Source code of most of required libraries are provided in `./ext`,
+which includes
 [Mnemosyne](https://github.com/snalli/mnemosyne-gcc/tree/master),
 [libitm.so](https://pkgs.org/download/libitm),
 [Pronto](https://zenodo.org/record/3605351#.X3YlJmhKj-g),
@@ -33,10 +34,15 @@ nvm_malloc and immutable data structures),
 [Ralloc](https://github.com/urcs-sync/ralloc), and
 [threadcached](https://github.com/ChrisKjellqvist/MemcachedProtectedLibrary/tree/nohodor).
 Most of them are customized for the experiment.
-[nvm_malloc](https://github.com/IMCG/nvm-malloc) is vanilla.
+[nvm_malloc](https://github.com/IMCG/nvm-malloc) is vanilla. Please
+refer to
+[ext/README.md](https://github.com/urcs-sync/Montage/blob/master/ext/README.md)
+for more information of those libraries.
 
-Other than those in `./ext`, this repository also depends on libhwloc,
-libjemalloc, libuuid, and libpthread.
+Other than those in `./ext`, this repository also depends on
+`libhwloc`, `libjemalloc`, `libuuid`, `libpthread`, and `libgomp`.
+Running with Mnemosyne requires additional `libelf`, `libconfig`, and
+`libitm` libraries.
 
 Before running Pronto, ensure that huge pages are turned on, or an
 error such as `ckpt_alloc.cpp:44: GlobalAlloc::GlobalAlloc(const
