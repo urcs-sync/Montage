@@ -20,6 +20,7 @@ LIBS = -pthread -lstdc++ -latomic
 all: libralloc.a
 
 ./obj/%.o: ./src/%.cpp
+	@mkdir -p $(@D)
 	$(CXX) -I $(SRC) -o $@ -c $^ $(CXXFLAGS)
 
 libralloc.a:./obj/SizeClass.o ./obj/RegionManager.o ./obj/TCache.o ./obj/BaseMeta.o ./obj/ralloc.o
