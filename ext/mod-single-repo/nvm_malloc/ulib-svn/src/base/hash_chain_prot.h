@@ -289,6 +289,7 @@
 				 chainhash_set_entry_##name##_t *b)	\
 	{								\
 		chainhash_set_entry_##name##_t *head, *tail;		\
+		head = NULL;						\
 		tail = (chainhash_set_entry_##name##_t *)&head;		\
 		while (a && b) {					\
 			/* if equal, take 'a' -- important for sort stability */ \
