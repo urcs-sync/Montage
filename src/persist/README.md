@@ -1,8 +1,4 @@
-This folder contains infrastructures for fast recoverable data structures. For
-pseudocode of (the original) epoch system, see:
-
-https://docs.google.com/document/d/1J_hAxgGEVqVhe89moDAQskpgZQAUYICUoWUUBOYqK1U/edit
-
+This folder contains infrastructures for Montage.
 
 ## Environment variables and values
 usage: add argument:
