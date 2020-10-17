@@ -99,7 +99,7 @@ public:
         uid_generator.init(task_num);
     }
     // PBlk(uint64_t e): epoch(e), persisted(false){}
-    PBlk(): id(uid_generator.get_id(_tid)){}
+    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), id(uid_generator.get_id(_tid)), retire(nullptr){}
     // PBlk(bool is_data): blktype(is_data?DATA:INIT), id(uid_generator.get_id(tid)) {}
     PBlk(const PBlk* owner): 
         blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id), 
@@ -453,7 +453,9 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     }
     PBlk* blk = b;
     blk->epoch = c;
-    assert(blk->blktype == INIT || blk->blktype == OWNED);
+    // Wentao: It's possible that payload is registered multiple times
+    assert(blk->blktype == INIT || blk->blktype == OWNED || 
+           blk->blktype == ALLOC); 
     if (blk->blktype == INIT){
         blk->blktype = ALLOC;
     }
@@ -661,6 +663,181 @@ T* EpochSys::openwrite_pblk(T* b, uint64_t c){
     // because help() may grab and flush it before the modification. This is currently
     // done by the API module.
     return b;
+}
+
+/*
+ * Below is the API for nonblocking data structures which provide:
+ *  atomic_dword_t: Atomic double word for storing pointers that point
+ *                  to nodes, which link payloads in.
+ */
+struct cas_desc_t;
+struct dword_t{
+    uint64_t val;
+    uint64_t cnt; // least significant 1 bit in count: 0 is val, 1 is desc
+    inline bool is_desc(){
+        return (cnt & 1UL) == 1UL;
+    }
+    inline cas_desc_t* get_desc(){
+        assert(is_desc());
+        return reinterpret_cast<cas_desc_t*>(val);
+    }
+    template <typename T>
+    inline T get_val(){
+        static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
+        return reinterpret_cast<T>(val);
+    }
+    dword_t(uint64_t v, uint64_t c) : val(v), cnt(c) {};
+    dword_t() : dword_t(0, 2) {};
+}__attribute__((aligned(16)));
+
+
+extern thread_local uint64_t local_cnt;
+extern thread_local cas_desc_t local_desc;
+extern EpochSys* esys;
+extern padded<uint64_t>* epochs;
+
+template <typename T = uint64_t>
+class atomic_dword_t{
+    static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
+public:
+    std::atomic<dword_t> dword;
+    T load();
+    T load_linked();
+    bool store_conditional(T expected, const T& desired);
+    void store(const T& desired);
+    atomic_dword_t(const T& v) : dword(dword_t(reinterpret_cast<uint64_t>(v), 2)){};
+    atomic_dword_t() : atomic_dword_t(T()){};
+};
+
+struct cas_desc_t{
+    enum status_t {IN_PROGRESS = 0, COMMITTED = 1, ABORTED = 2};
+    std::atomic<status_t> status;
+    const uint64_t cnt; // previous cnt+1
+    atomic_dword_t<>* const addr;
+    const uint64_t old_val;
+    const uint64_t new_val;
+    const uint64_t cas_epoch;
+    inline void abort(){
+        status_t expected = IN_PROGRESS;
+        status.compare_exchange_strong(expected, ABORTED);
+    }
+    inline void commit(){
+        status_t expected = IN_PROGRESS;
+        status.compare_exchange_strong(expected, COMMITTED);
+    }
+    inline void complete(EpochSys* esys){
+        if(esys->check_epoch(cas_epoch)){
+            commit();
+        } else {
+            abort();
+        }
+    }
+    inline bool committed(){
+        return status.load() == COMMITTED;
+    }
+    inline bool in_progress(){
+        return status.load() == IN_PROGRESS;
+    }
+    uint64_t cleanup(){
+        // must be called after desc is aborted or committed
+        status_t cur_status = status.load();
+        assert(cur_status!=IN_PROGRESS);
+        dword_t expected(reinterpret_cast<uint64_t>(addr),cnt);
+        if(cur_status == COMMITTED) {
+            addr->dword.compare_exchange_strong(expected, 
+                                                dword_t(new_val,cnt+1));
+            return new_val;
+        } else {
+            //aborted
+            addr->dword.compare_exchange_strong(expected, 
+                                                dword_t(old_val,cnt+1));
+            return old_val;
+        }
+    }
+
+    cas_desc_t( uint64_t c, atomic_dword_t<>* a, uint64_t o, 
+                uint64_t n, uint64_t e) : 
+        status(IN_PROGRESS), cnt(c), addr(a), 
+        old_val(o), new_val(n), cas_epoch(e){};
+    cas_desc_t() : cas_desc_t(0,nullptr,0,0,0){};
+};
+
+template<typename T>
+T atomic_dword_t<T>::load(){
+    dword_t r = dword.load();
+    if(r.is_desc()) {
+        cas_desc_t* D = r.get_desc();
+        if(D->in_progress()){
+            D->complete(esys);
+        }
+        return reinterpret_cast<T>(D->cleanup());
+    } else {
+        return r.get_val<T>();
+    }
+}
+
+template<typename T>
+T atomic_dword_t<T>::load_linked(){
+    dword_t r = dword.load();
+    if(r.is_desc()) {
+        cas_desc_t* D = r.get_desc();
+        if(D->in_progress()){
+            D->complete(esys);
+        }
+        local_cnt = D->cnt+1;
+        return reinterpret_cast<T>(D->cleanup());
+    } else {
+        local_cnt = r.cnt;
+        return r.get_val<T>();
+    }
+}
+template<typename T>
+bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
+    assert(local_cnt != 0); // ll should be called before sc
+    dword_t r = dword.load();
+    if(r.is_desc()){
+        cas_desc_t* D = r.get_desc();
+        if(D->in_progress()){
+            D->complete(esys);
+        }
+        uint64_t new_cnt = D->cnt;
+        uint64_t new_val = D->cleanup();
+        if( new_cnt!=local_cnt || 
+            new_val!=reinterpret_cast<uint64_t>(expected)) {
+            local_cnt = 0;
+            return false;
+        }
+    } else {
+        if( r.cnt!=local_cnt || 
+            r.val!=reinterpret_cast<uint64_t>(expected)) {
+            local_cnt = 0;
+            return false;
+        }
+    }
+    assert(epochs[_tid].ui != NULL_EPOCH);
+    new (&local_desc) cas_desc_t((r.cnt%2==1) ? (r.cnt+1) : r.cnt, 
+                                 reinterpret_cast<atomic_dword_t<>*>(this), 
+                                 reinterpret_cast<uint64_t>(expected), 
+                                 reinterpret_cast<uint64_t>(desired), 
+                                 epochs[_tid].ui);
+    dword_t new_r(reinterpret_cast<uint64_t>(&local_desc),r.cnt+1);
+    if(!dword.compare_exchange_strong(r,new_r)){
+        local_cnt = 0;
+        return false;
+    }
+    local_desc.complete(esys);
+    local_desc.cleanup();
+    local_cnt = 0;
+    if(local_desc.committed()) return true;
+    else return false;
+}
+
+template<typename T>
+void atomic_dword_t<T>::store(const T& desired){
+    // this function must be used only when there's no data race
+    dword_t r = dword.load();
+    dword_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt+2);
+    dword.store(new_r);
 }
 
 }

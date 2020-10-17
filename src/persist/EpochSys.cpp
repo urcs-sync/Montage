@@ -8,6 +8,9 @@ namespace pds{
     SysMode sys_mode = ONLINE;
 
     UIDGenerator PBlk::uid_generator;
+    
+    thread_local uint64_t local_cnt = 0;
+    thread_local cas_desc_t local_desc;
 
     void EpochSys::parse_env(){
         if (to_be_persisted){

@@ -20,19 +20,21 @@ public:
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
-        Payload(){}
-        Payload(T v): m_val(v), m_sn(0){}
+        Payload(): PBlk(){}
+        Payload(T v): PBlk(), m_val(v), m_sn(0){}
         // Payload(const Payload& oth): PBlk(oth), m_sn(0), m_val(oth.m_val){}
         void persist(){}
     };
 
 private:
     struct Node{
-        std::atomic<Node*> next;
+        atomic_dword_t<Node*> next;
         Payload* payload;
 
         Node(): next(nullptr), payload(nullptr){}; 
-        Node(T v): next(nullptr), payload(PNEW(Payload, v)){};
+        Node(T v): next(nullptr), payload(PNEW(Payload, v)){
+            assert(epochs[_tid].ui == NULL_EPOCH);
+        };
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
@@ -48,7 +50,7 @@ public:
 
 private:
     // dequeue pops node from head
-    std::atomic<Node*> head;
+    atomic_dword_t<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
     RCUTracker<Node> tracker;
@@ -77,7 +79,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        Node* next = cur_tail->next.load();
+        Node* next = cur_tail->next.load_linked();
         if(cur_tail == tail.load()){
             if(next == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
@@ -89,7 +91,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
                  * the same epoch.
                  */
                 // new_node->set_sn(s);
-                if((cur_tail->next).compare_exchange_strong(next, new_node)){
+                if((cur_tail->next).store_conditional(next, new_node)){
                     END_OP;
                     break;
                 }
@@ -112,7 +114,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
         Node* cur_tail = tail.load();
         Node* next = cur_head->next.load();
 
-        if(cur_head == head.load()){
+        if(cur_head == head.load_linked()){
             if(cur_head == cur_tail){
                 // queue is empty
                 if(next == nullptr) {
@@ -123,7 +125,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
             } else {
                 BEGIN_OP();
                 Payload* payload = next->payload;// get payload for PDELETE
-                if(head.compare_exchange_strong(cur_head, next)){
+                if(head.store_conditional(cur_head, next)){
                     res = (T)payload->get_val();// old see new is impossible
                     PRETIRE(payload); // semantically we are removing next from queue
                     END_OP;
