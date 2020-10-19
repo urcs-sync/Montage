@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <list>
+#include <string>
 #include <map>
 #include <type_traits>
 
