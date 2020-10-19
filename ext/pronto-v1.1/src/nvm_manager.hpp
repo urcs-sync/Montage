@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <pthread.h>
+#include <string>
 
 using namespace std;
 class NVCatalog;
@@ -42,7 +43,7 @@ class NVManager {
         void destroy(PersistentObject *);
 
         // Find pointer to persistent objects using its unique identifier
-        PersistentObject *findObject(string);
+        PersistentObject *findObject(std::string);
 
         const char *getArgumentPointer(CatalogEntry *);
 
@@ -56,7 +57,7 @@ class NVManager {
         pthread_mutex_t _lock;
         pthread_mutex_t _ckptLock;
         pthread_cond_t _ckptCondition;
-        map<string, PersistentObject *> objects;
+        map<std::string, PersistentObject *> objects;
         NVCatalog *catalog = NULL;
         map<pthread_t, ThreadConfig *> program_threads;
 

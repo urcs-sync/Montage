@@ -22,7 +22,7 @@ else:
 if buildEnv['BUILD_STATS'] == True:
 	buildEnv.Append(CCFLAGS = ' -D_M_STATS_BUILD')
 
-CCFLAGS = CCFLAGS + WARNINGS + string.join(DISABLE_WARNINGS, ' ') + ' -fgnu-tm -fpic -fno-omit-frame-pointer'
+CCFLAGS = CCFLAGS + WARNINGS + ' '.join(DISABLE_WARNINGS) + ' -fgnu-tm -fpic -fno-omit-frame-pointer'
 CCFLAGS = CCFLAGS + ' -m64 '
 
 buildEnv.Append(CCFLAGS = CCFLAGS)
