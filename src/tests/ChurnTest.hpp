@@ -109,11 +109,11 @@ void ChurnTest::init(GlobalTestConfig* gtc){
 	assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
 
-	// init Persistent allocator
-	Persistent::init();
+	// // init Persistent allocator
+	// Persistent::init();
 
-	// init epoch system
-	pds::init(gtc);
+	// // init epoch system
+	// pds::init(gtc);
 
 	getRideable(gtc);
 	

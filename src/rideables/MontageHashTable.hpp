@@ -62,7 +62,12 @@ public:
     std::hash<K> hash_fn;
     Bucket buckets[idxSize];
     GlobalTestConfig* gtc;
-    MontageHashTable(GlobalTestConfig* gtc_):gtc(gtc_){ };
+    MontageHashTable(GlobalTestConfig* gtc_):gtc(gtc_){
+        // init Persistent allocator
+        Persistent::init();
+        // init epoch system
+        pds::init(gtc);
+    };
 
 
     optional<V> get(K key, int tid){
