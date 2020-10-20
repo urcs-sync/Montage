@@ -6,7 +6,7 @@ import string
 import SCons.Environment
 from SCons.Script import ARGUMENTS
 from SCons.Variables import Variables, EnumVariable, BoolVariable
-import helper
+from . import helper
 
 
 class Environment(SCons.Environment.Environment):
