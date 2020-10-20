@@ -46,6 +46,11 @@ public:
 		ChurnTest::init(gtc);
 	}
 
+	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+		ChurnTest::parInit(gtc, ltc);
+		m->init_thread(gtc, ltc);
+	}
+
 	void getRideable(GlobalTestConfig* gtc){
 		Rideable* ptr = gtc->allocRideable();
 		m = dynamic_cast<RMap<K, V>*>(ptr);
@@ -54,7 +59,6 @@ public:
 		}
 	}
 	void doPrefill(GlobalTestConfig* gtc){
-		pds::init_thread(0);
 		if (this->prefill > 0){
 			/* Wentao: 
 			 *	to avoid repeated k during prefilling, we instead 
@@ -91,7 +95,6 @@ public:
 			m->remove(k,tid);
 		}
 	}
-
 };
 
 template <class K, class V>

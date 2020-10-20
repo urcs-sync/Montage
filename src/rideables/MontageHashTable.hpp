@@ -67,8 +67,13 @@ public:
         Persistent::init();
         // init epoch system
         pds::init(gtc);
+        // init main thread
+        pds::init_thread(0);
     };
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        pds::init_thread(ltc->tid);
+    }
 
     optional<V> get(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
