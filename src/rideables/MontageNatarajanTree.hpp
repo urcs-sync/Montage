@@ -148,14 +148,25 @@ private:
     bool cleanup(K key, int tid);
     // void doRangeQuery(Node& k1, Node& k2, int tid, Node* root, std::map<K,V>& res);
 public:
-    MontageNatarajanTree(int task_num): tracker(task_num, 100, 1000, true){
+    MontageNatarajanTree(GlobalTestConfig* gtc): tracker(gtc->task_num, 100, 1000, true){
+        // init Persistent allocator
+        Persistent::init();
+        // init epoch system
+        pds::init(gtc);
+        // init main thread
+        pds::init_thread(0);
+
         r.right.store(new Node(inf2));
         r.left.store(&s);
         s.right.store(new Node(inf1));
         s.left.store(new Node(inf0));
-        records = new padded<SeekRecord>[task_num]{};
+        records = new padded<SeekRecord>[gtc->task_num]{};
     };
     ~MontageNatarajanTree(){};
+
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        pds::init_thread(ltc->tid);
+    }
 
     optional<V> get(K key, int tid);
     optional<V> put(K key, V val, int tid);
@@ -168,7 +179,7 @@ public:
 template<class T>
 class MontageNatarajanTreeFactory : public RideableFactory{
     Rideable* build(GlobalTestConfig* gtc){
-        return new MontageNatarajanTree<T,T>(gtc->task_num);
+        return new MontageNatarajanTree<T,T>(gtc);
     }
 };
 

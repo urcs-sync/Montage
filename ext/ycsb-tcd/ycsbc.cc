@@ -131,7 +131,7 @@ int main(const int argc, char *argv[]) {
   hwloc_get_type_depth(gtc.topology, HWLOC_OBJ_PU));
   std::cout<<"initial affinity built"<<std::endl;
   gtc.buildAffinity(gtc.affinities);
-  pds::init(&gtc);
+  // pds::init(&gtc);
 #endif
   if (do_cache_test_flag){
     do_cache_test();

@@ -79,8 +79,19 @@ private:
         return mixPtrMark(mptr,true);
     }
 public:
-    MontageLfHashTable(int task_num) : tracker(task_num, 100, 1000, true) {};
+    MontageLfHashTable(GlobalTestConfig* gtc) : tracker(gtc->task_num, 100, 1000, true) {
+        // init Persistent allocator
+        Persistent::init();
+        // init epoch system
+        pds::init(gtc);
+        // init main thread
+        pds::init_thread(0);
+    };
     ~MontageLfHashTable(){};
+
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        pds::init_thread(ltc->tid);
+    }
 
     optional<V> get(K key, int tid);
     optional<V> put(K key, V val, int tid);
@@ -92,7 +103,7 @@ public:
 template <class T> 
 class MontageLfHashTableFactory : public RideableFactory{
     Rideable* build(GlobalTestConfig* gtc){
-        return new MontageLfHashTable<T,T>(gtc->task_num);
+        return new MontageLfHashTable<T,T>(gtc);
     }
 };
 

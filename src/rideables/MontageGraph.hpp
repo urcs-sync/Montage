@@ -118,12 +118,23 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         MontageGraph(GlobalTestConfig* gtc) {
+            // init Persistent allocator
+            Persistent::init();
+            // init epoch system
+            pds::init(gtc);
+            // init main thread
+            pds::init_thread(0);
+
             BEGIN_OP_AUTOEND();
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i] = new tVertex(i, -1);
             }
+        }
+
+        void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+            pds::init_thread(ltc->tid);
         }
 
         tVertex** idxToVertex; // Transient set of transient vertices to index map

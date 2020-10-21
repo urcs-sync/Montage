@@ -28,7 +28,7 @@ public:
 		}
 	}
 	void doPrefill(GlobalTestConfig* gtc){
-		pds::init_thread(0);
+		// pds::init_thread(0);
 		// prefill deterministically:
 		if (this->prefill > 0){
 			/* Wentao: 

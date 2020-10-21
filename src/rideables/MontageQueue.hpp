@@ -64,11 +64,21 @@ private:
     std::mutex lock;
 
 public:
-    MontageQueue(int task_num): 
+    MontageQueue(GlobalTestConfig* gtc): 
         global_sn(0), head(nullptr), tail(nullptr){
+        // init Persistent allocator
+        Persistent::init();
+        // init epoch system
+        pds::init(gtc);
+        // init main thread
+        pds::init_thread(0);
     }
 
     ~MontageQueue(){};
+
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        pds::init_thread(ltc->tid);
+    }
 
     void enqueue(T val, int tid);
     optional<T> dequeue(int tid);
@@ -119,7 +129,7 @@ optional<T> MontageQueue<T>::dequeue(int tid){
 template <class T> 
 class MontageQueueFactory : public RideableFactory{
     Rideable* build(GlobalTestConfig* gtc){
-        return new MontageQueue<T>(gtc->task_num);
+        return new MontageQueue<T>(gtc);
     }
 };
 

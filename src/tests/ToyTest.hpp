@@ -27,6 +27,7 @@ class ToyTest : public Test{
 
 	// called by all threads in parallel
 	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        t->init_thread(gtc, ltc);
         // pds::init_thread(ltc->tid);
     }
 	// runs the test

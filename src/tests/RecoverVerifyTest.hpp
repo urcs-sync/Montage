@@ -33,7 +33,8 @@ public:
 
 template <class K, class V>
 void RecoverVerifyTest<K,V>::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-    pds::init_thread(ltc->tid);
+    m->init_thread(gtc, ltc);
+    // pds::init_thread(ltc->tid);
 }
 
 template <class K, class V>
@@ -41,11 +42,11 @@ void RecoverVerifyTest<K,V>::init(GlobalTestConfig* gtc){
     if (gtc->task_num != 1){
         errexit("RecoverVerifyTest only runs on single thread.");
     }
-    // init Persistent allocator
-    Persistent::init();
+    // // init Persistent allocator
+    // Persistent::init();
 
-    // init epoch system
-    pds::init(gtc);
+    // // init epoch system
+    // pds::init(gtc);
 
     Rideable* ptr = gtc->allocRideable();
     m = dynamic_cast<RMap<K,V>*>(ptr);

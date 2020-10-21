@@ -54,12 +54,23 @@ private:
     RCUTracker<Node> tracker;
 
 public:
-    MontageMSQueue(int task_num): 
+    MontageMSQueue(GlobalTestConfig* gtc): 
         global_sn(0), head(nullptr), tail(nullptr), 
-        tracker(task_num, 100, 1000, true){
+        tracker(gtc->task_num, 100, 1000, true){
+        // init Persistent allocator
+        Persistent::init();
+        // init epoch system
+        pds::init(gtc);
+        // init main thread
+        pds::init_thread(0);
+
         Node* dummy = new Node();
         head.store(dummy);
         tail.store(dummy);
+    }
+
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        pds::init_thread(ltc->tid);
     }
 
     ~MontageMSQueue(){};
@@ -142,7 +153,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
 template <class T> 
 class MontageMSQueueFactory : public RideableFactory{
     Rideable* build(GlobalTestConfig* gtc){
-        return new MontageMSQueue<T>(gtc->task_num);
+        return new MontageMSQueue<T>(gtc);
     }
 };
 

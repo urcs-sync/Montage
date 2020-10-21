@@ -39,14 +39,15 @@ public:
         }
     }
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        m->init_thread(gtc, ltc);
+        // pds::init_thread(ltc->tid);
     }
     void init(GlobalTestConfig* gtc){
-        // init Persistent allocator
-        Persistent::init();
+        // // init Persistent allocator
+        // Persistent::init();
 
-        // init epoch system
-        pds::init(gtc);
+        // // init epoch system
+        // pds::init(gtc);
 
         if(gtc->checkEnv("ValueSize")){
             val_size = atoi((gtc->getEnv("ValueSize")).c_str());

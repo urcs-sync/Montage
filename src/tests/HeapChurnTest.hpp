@@ -29,15 +29,16 @@ public:
     inline V fromInt(uint64_t v);
 
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        q->init_thread(gtc, ltc);
+        // pds::init_thread(ltc->tid);
     }
 
     void init(GlobalTestConfig* gtc){
-        // init Persistent allocator
-        Persistent::init();
+        // // init Persistent allocator
+        // Persistent::init();
 
-        // init epoch system
-        pds::init(gtc);
+        // // init epoch system
+        // pds::init(gtc);
 
         getRideable(gtc);
         
