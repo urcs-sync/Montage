@@ -47,8 +47,8 @@ public:
 	}
 
 	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-		ChurnTest::parInit(gtc, ltc);
 		m->init_thread(gtc, ltc);
+		ChurnTest::parInit(gtc, ltc);
 	}
 
 	void getRideable(GlobalTestConfig* gtc){
@@ -111,7 +111,6 @@ inline std::string MapChurnTest<std::string,std::string>::fromInt(uint64_t v){
 template<>
 inline void MapChurnTest<std::string,std::string>::doPrefill(GlobalTestConfig* gtc){
 	// randomly prefill until specified amount of keys are successfully inserted
-	pds::init_thread(0);
 	if (this->prefill > 0){
 		std::mt19937_64 gen_k(0);
 		// int stride = this->range/this->prefill;
