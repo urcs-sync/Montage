@@ -101,6 +101,7 @@ public:
     void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
         pthread_barrier_wait(&pthread_barrier);
         auto begin = chrono::high_resolution_clock::now();
+        g->init_thread(gtc, ltc);
         // pds::init_thread(ltc->tid);
         // Loop through the files in parallel
         int num_threads = gtc->task_num;

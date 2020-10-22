@@ -99,6 +99,7 @@ class GraphTest : public Test {
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             // pds::init_thread(ltc->tid);
+            g->init_thread(gtc, ltc);
             size_t x = max_verts;
             size_t numEdges = (x * x) * 0.5;
             std::random_device rd;
