@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <pthread.h>
+#include <string>
 
 using namespace std;
 class NVCatalog;

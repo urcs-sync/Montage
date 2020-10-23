@@ -3,8 +3,8 @@ import string
 import SCons.Environment
 from SCons.Script import ARGUMENTS, Dir
 from SCons.Variables import Variables, EnumVariable, BoolVariable
-import helper
-import mnemosyne
+from . import helper
+from . import mnemosyne
 
 class Environment(mnemosyne.Environment):
 	"""
