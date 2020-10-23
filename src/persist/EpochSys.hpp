@@ -692,7 +692,7 @@ struct dword_t{
 
 
 extern thread_local uint64_t local_cnt;
-extern thread_local cas_desc_t local_desc;
+extern padded<cas_desc_t>* local_descs;
 extern EpochSys* esys;
 extern padded<uint64_t>* epochs;
 
@@ -742,7 +742,7 @@ struct cas_desc_t{
         // must be called after desc is aborted or committed
         status_t cur_status = status.load();
         assert(cur_status!=IN_PROGRESS);
-        dword_t expected(reinterpret_cast<uint64_t>(addr),cnt);
+        dword_t expected(reinterpret_cast<uint64_t>(this),cnt);
         if(cur_status == COMMITTED) {
             addr->dword.compare_exchange_strong(expected, 
                                                 dword_t(new_val,cnt+1));
@@ -815,20 +815,21 @@ bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
         }
     }
     assert(epochs[_tid].ui != NULL_EPOCH);
-    new (&local_desc) cas_desc_t((r.cnt%2==1) ? (r.cnt+1) : r.cnt, 
+    r.cnt = ((r.cnt%2==1) ? (r.cnt+1) : r.cnt); // set r.cnt to the nearest even number
+    new (&local_descs[_tid].ui) cas_desc_t(r.cnt+1, 
                                  reinterpret_cast<atomic_dword_t<>*>(this), 
                                  reinterpret_cast<uint64_t>(expected), 
                                  reinterpret_cast<uint64_t>(desired), 
                                  epochs[_tid].ui);
-    dword_t new_r(reinterpret_cast<uint64_t>(&local_desc),r.cnt+1);
+    dword_t new_r(reinterpret_cast<uint64_t>(&local_descs[_tid].ui),r.cnt+1);
     if(!dword.compare_exchange_strong(r,new_r)){
         local_cnt = 0;
         return false;
     }
-    local_desc.complete(esys);
-    local_desc.cleanup();
+    local_descs[_tid].ui.complete(esys);
+    local_descs[_tid].ui.cleanup();
     local_cnt = 0;
-    if(local_desc.committed()) return true;
+    if(local_descs[_tid].ui.committed()) return true;
     else return false;
 }
 

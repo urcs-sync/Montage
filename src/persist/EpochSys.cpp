@@ -10,7 +10,7 @@ namespace pds{
     UIDGenerator PBlk::uid_generator;
     
     thread_local uint64_t local_cnt = 0;
-    thread_local cas_desc_t local_desc;
+    padded<cas_desc_t>* local_descs = nullptr;
 
     void EpochSys::parse_env(){
         if (to_be_persisted){
