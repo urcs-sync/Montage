@@ -264,7 +264,7 @@ void GlobalTestConfig::buildSingleAffinity(std::vector<hwloc_obj_t>& aff){
 // Per-core affinity: pin one thread to PU pu of each core in the same socket, then go cross socket.
 // Assuming 
 
-void GlobalTestConfig::buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff, int pu, hwloc_obj_t obj){
+void GlobalTestConfig::buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff, unsigned pu, hwloc_obj_t obj){
 	if (obj->type==HWLOC_OBJ_CORE){
 		assert(obj->arity > pu);
 		assert(obj->children[pu]->type == HWLOC_OBJ_PU);
@@ -276,7 +276,7 @@ void GlobalTestConfig::buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff
 	}
 }
 
-void GlobalTestConfig::buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, int pu){
+void GlobalTestConfig::buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu){
 	buildPerCoreAffinity_helper(aff,pu,hwloc_get_root_obj(topology));
 }
 
