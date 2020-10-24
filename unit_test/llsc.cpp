@@ -11,6 +11,7 @@ using namespace std;
 using namespace pds;
 namespace llsc{
     const int THREAD_NUM = 10;
+    const int CNT_UPPER = 100000;
 
     atomic_dword_t<uint64_t> d;
     atomic<uint64_t> real;
@@ -29,7 +30,7 @@ namespace llsc{
         while(true){
             BEGIN_OP();
             auto x = d.load_linked();
-            if(x>=100) {
+            if(x>=CNT_UPPER) {
                 END_OP;
                 break;
             }

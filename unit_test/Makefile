@@ -7,7 +7,7 @@ CXXFLAG+=-L../ext/ralloc -lralloc -L../lib -lnbMontage
 RECURSEDIRS := ../
 
 llsc: llsc.cpp
-	for rec in $(RECURSEDIRS); do $(MAKE) -C $$rec; done
+	for rec in $(RECURSEDIRS); do $(MAKE) debug -C $$rec; done
 	g++ $^ -o $@ $(CXXFLAG)
 	
 clean:
