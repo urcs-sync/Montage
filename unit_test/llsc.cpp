@@ -1,5 +1,6 @@
 #include "Persistent.hpp"
 #include "persist_struct_api.hpp"
+#include "LLSC.hpp"
 #include "TestConfig.hpp"
 #include <thread>
 #include <atomic>

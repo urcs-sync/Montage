@@ -1,4 +1,6 @@
 #include "EpochSys.hpp"
+#include "LLSC.hpp"
+
 #include <omp.h>
 namespace pds{
 
@@ -10,7 +12,7 @@ namespace pds{
     UIDGenerator PBlk::uid_generator;
     
     thread_local uint64_t local_cnt = 0;
-    padded<cas_desc_t>* local_descs = nullptr;
+    padded<sc_desc_t>* local_descs = nullptr;
 
     void EpochSys::parse_env(){
         if (to_be_persisted){

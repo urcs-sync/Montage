@@ -10,6 +10,7 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "persist_struct_api.hpp"
+#include "LLSC.hpp"
 
 using namespace pds;
 
