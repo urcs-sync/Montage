@@ -173,13 +173,13 @@ bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
     //     if(!r.is_desc()){
     //         if( r.cnt!=local_cnt ||
     //             r.val!=reinterpret_cast<uint64_t>(expected)){
-    //             local_cnt = 0;
-    //             _xend();
+    //             // local_cnt = 0;
+    //             _xabort(1);
     //             return false;
     //         }
     //         if(!esys->check_epoch(epochs[_tid].ui)){
-    //             local_cnt = 0;
-    //             _xend();
+    //             // local_cnt = 0;
+    //             _xabort(1);
     //             return false;
     //         }
     //         dword_t new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
@@ -189,7 +189,7 @@ bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
     //         return true;
     //     } else {
     //         // we don't handle cases when r is a descriptor
-    //         _xend();
+    //         _xabort(1);
     //         return false;
     //     }
     // }
