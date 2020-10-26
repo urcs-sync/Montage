@@ -95,6 +95,10 @@ public:
 			m->remove(k,tid);
 		}
 	}
+	void cleanup(GlobalTestConfig* gtc){
+		ChurnTest::cleanup(gtc);
+		delete m;
+	}
 };
 
 template <class K, class V>

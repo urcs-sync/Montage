@@ -50,7 +50,9 @@ public:
             payload = payload->set_val(v);
         }
         ~ListNode(){
-            PDELETE(payload);
+            if (payload){
+                PDELETE(payload);
+            }
         }
     }__attribute__((aligned(CACHELINE_SIZE)));
     struct Bucket{
@@ -62,17 +64,10 @@ public:
     std::hash<K> hash_fn;
     Bucket buckets[idxSize];
     GlobalTestConfig* gtc;
-    MontageHashTable(GlobalTestConfig* gtc_):gtc(gtc_){
-        // init Persistent allocator
-        Persistent::init();
-        // init epoch system
-        pds::init(gtc);
-        // init main thread
-        pds::init_thread(0);
-    };
+    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){};
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        Recoverable::init_thread(gtc, ltc);
     }
 
     optional<V> get(K key, int tid){

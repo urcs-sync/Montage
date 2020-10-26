@@ -37,6 +37,7 @@ namespace pds{
 
     inline void finalize(){
         delete esys;
+        esys = nullptr; // for debugging.
     }
 
     #define CHECK_EPOCH() ({\

@@ -55,9 +55,9 @@ public:
 		ChurnTest(p_gets, p_puts, p_inserts, p_removes, range,0){}
 	void init(GlobalTestConfig* gtc);
 	int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
-	void cleanup(GlobalTestConfig* gtc);
 	pthread_barrier_t barrier;
 
+	virtual void cleanup(GlobalTestConfig* gtc);
 	virtual void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
 	virtual void getRideable(GlobalTestConfig* gtc) = 0;
 	virtual void doPrefill(GlobalTestConfig* gtc) = 0;
@@ -179,8 +179,8 @@ void ChurnTest::cleanup(GlobalTestConfig* gtc){
 	Savitar_core_finalize();
 	pthread_mutex_destroy(&snapshot_lock);
 #endif
-	pds::finalize();
-	Persistent::finalize();
+	// pds::finalize();
+	// Persistent::finalize();
 }
 
 #ifdef PRONTO
