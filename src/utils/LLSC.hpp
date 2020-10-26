@@ -33,14 +33,20 @@ struct dword_t{
     }
     dword_t(uint64_t v, uint64_t c) : val(v), cnt(c) {};
     dword_t() : dword_t(0, 0) {};
+
+    inline bool operator==(const dword_t & b) const{
+        return val==b.val && cnt==b.cnt;
+    }
+    inline bool operator!=(const dword_t & b) const{
+        return !operator==(b);
+    }
 }__attribute__((aligned(16)));
 
-extern thread_local uint64_t local_cnt;
 extern padded<sc_desc_t>* local_descs;
 extern EpochSys* esys;
 extern padded<uint64_t>* epochs;
 
-template <typename T = uint64_t>
+template <class T = uint64_t>
 class atomic_dword_t{
     static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
 public:
@@ -48,13 +54,24 @@ public:
     // desc: ....01
     // real val: ....00
     std::atomic<dword_t> dword;
-    T load();
-    T load_linked();
-    bool store_conditional(T expected, const T& desired);
+    dword_t load_dword();
+    inline T load_val(){
+        return reinterpret_cast<T>(load_dword().val);
+    }
+    bool CAS_check(dword_t expected, const T& desired);
+    inline bool CAS_check(dword_t expected, const dword_t& desired){
+        return CAS_check(expected,desired.get_val<T>());
+    }
+    // CAS doesn't check epoch nor cnt
+    bool CAS(dword_t expected, const T& desired);
+    inline bool CAS(dword_t expected, const dword_t& desired){
+        return CAS(expected,desired.get_val<T>());
+    }
     void store(const T& desired);
-    // Wentao: count has to start from 4, since 0 is reserved for
-    // noting local_cnt isn't assigned by a valid number
-    atomic_dword_t(const T& v) : dword(dword_t(reinterpret_cast<uint64_t>(v), 4)){};
+    inline void store(const dword_t& desired){
+        store(desired.get_val<T>());
+    }
+    atomic_dword_t(const T& v) : dword(dword_t(reinterpret_cast<uint64_t>(v), 0)){};
     atomic_dword_t() : atomic_dword_t(T()){};
 };
 
@@ -62,25 +79,25 @@ struct sc_desc_t{
 private:
     // for cnt in dword:
     // in progress: ....01
-    // committed: ....10 TODO
+    // committed: ....10 
     // aborted: ....11
     std::atomic<dword_t> dword;
     const uint64_t old_val;
     const uint64_t new_val;
     const uint64_t cas_epoch;
-    inline void abort(dword_t _d){
+    inline bool abort(dword_t _d){
         // bring cnt from ..01 to ..11
         dword_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
-        dword_t desired = expected;
+        dword_t desired(expected);
         desired.cnt += 2;
-        dword.compare_exchange_strong(expected, desired);
+        return dword.compare_exchange_strong(expected, desired);
     }
-    inline void commit(dword_t _d){
+    inline bool commit(dword_t _d){
         // bring cnt from ..01 to ..10
         dword_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
         dword_t desired(expected);
         desired.cnt += 1;
-        dword.compare_exchange_strong(expected, desired);
+        return dword.compare_exchange_strong(expected, desired);
     }
     inline bool committed(dword_t _d) const {
         return (_d.cnt & 0x3UL) == 2UL;
@@ -122,12 +139,15 @@ public:
     }
     inline void try_complete(EpochSys* esys, uint64_t addr){
         dword_t _d = dword.load();
+        int ret = 0;
         if(_d.val!=addr) return;
         if(in_progress(_d)){
             if(esys->check_epoch(cas_epoch)){
-                commit(_d);
+                ret = 2;
+                ret |= commit(_d);
             } else {
-                abort(_d);
+                ret = 4;
+                ret |= abort(_d);
             }
         }
         cleanup(_d);
@@ -139,7 +159,7 @@ public:
 };
 
 template<typename T>
-T atomic_dword_t<T>::load(){
+dword_t atomic_dword_t<T>::load_dword(){
     dword_t r;
     do { 
         r = dword.load();
@@ -148,26 +168,11 @@ T atomic_dword_t<T>::load(){
             D->try_complete(esys, reinterpret_cast<uint64_t>(this));
         }
     } while(r.is_desc());
-    return r.get_val<T>();
+    return r;
 }
 
 template<typename T>
-T atomic_dword_t<T>::load_linked(){
-    dword_t r;
-    do { 
-        r = dword.load();
-        if(r.is_desc()) {
-            sc_desc_t* D = r.get_desc();
-            D->try_complete(esys, reinterpret_cast<uint64_t>(this));
-        }
-    } while(r.is_desc());
-    local_cnt = r.cnt;
-    return r.get_val<T>();
-}
-
-template<typename T>
-bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
-    assert(local_cnt != 0); // ll should be called before sc
+bool atomic_dword_t<T>::CAS_check(dword_t expected, const T& desired){
     // if (_xbegin() == _XBEGIN_STARTED) {
     //     dword_t r = dword.load();
     //     if(!r.is_desc()){
@@ -198,37 +203,44 @@ bool atomic_dword_t<T>::store_conditional(T expected, const T& desired){
     if(r.is_desc()){
         sc_desc_t* D = r.get_desc();
         D->try_complete(esys, reinterpret_cast<uint64_t>(this));
-        local_cnt = 0;
         return false;
     } else {
-        if( r.cnt!=local_cnt || 
-            r.val!=reinterpret_cast<uint64_t>(expected)) {
-            local_cnt = 0;
+        if( r.cnt!=expected.cnt || 
+            r.val!=expected.val) {
             return false;
         }
     }
     assert(epochs[_tid].ui != NULL_EPOCH);
     new (&local_descs[_tid].ui) sc_desc_t(r.cnt+1, 
                                 reinterpret_cast<uint64_t>(this), 
-                                reinterpret_cast<uint64_t>(expected), 
+                                expected.val, 
                                 reinterpret_cast<uint64_t>(desired), 
                                 epochs[_tid].ui);
     dword_t new_r(reinterpret_cast<uint64_t>(&local_descs[_tid].ui), r.cnt+1);
     if(!dword.compare_exchange_strong(r,new_r)){
-        local_cnt = 0;
         return false;
     }
     local_descs[_tid].ui.try_complete(esys, reinterpret_cast<uint64_t>(this));
-    local_cnt = 0;
     if(local_descs[_tid].ui.committed()) return true;
     else return false;
+}
+
+template<typename T>
+bool atomic_dword_t<T>::CAS(dword_t expected, const T& desired){
+    // CAS doesn't check epoch; just cas ptr to desired, with cnt+=4
+    assert(!expected.is_desc());
+    dword_t new_r(reinterpret_cast<uint64_t>(desired), expected.cnt + 4);
+    if(!dword.compare_exchange_strong(expected,new_r)){
+        return false;
+    }
+    return true;
 }
 
 template<typename T>
 void atomic_dword_t<T>::store(const T& desired){
     // this function must be used only when there's no data race
     dword_t r = dword.load();
-    dword_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt+4);
+    dword_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
     dword.store(new_r);
 }
 

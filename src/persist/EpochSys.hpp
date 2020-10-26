@@ -95,6 +95,10 @@ protected:
     //     persisted = true;
     // }
 public:
+    void set_epoch(uint64_t e){
+        // only for testing
+        epoch=e;
+    }
     static void init(int task_num){
         uid_generator.init(task_num);
     }

@@ -25,17 +25,32 @@ namespace llsc{
         // create barrier
         pthread_barrier_init(&pthread_barrier, NULL, task_num);
     }
-    void increment(size_t tid){
+    void increment_llsc(size_t tid){
         pds::init_thread(tid);
         barrier();
         while(true){
             BEGIN_OP();
-            auto x = d.load_linked();
-            if(x>=CNT_UPPER) {
+            auto x = d.load_dword();
+            if(x.get_val<uint64_t>()>=CNT_UPPER) {
                 END_OP;
                 break;
             }
-            if(d.store_conditional(x,x+1)) 
+            if(d.CAS_check(x,x.get_val<uint64_t>()+1)) 
+                real.fetch_add(1);
+            END_OP;
+        }
+    }
+    void increment_cas(size_t tid){
+        pds::init_thread(tid);
+        barrier();
+        while(true){
+            BEGIN_OP();
+            auto x = d.load_dword();
+            if(x.get_val<uint64_t>()>=CNT_UPPER) {
+                END_OP;
+                break;
+            }
+            if(d.CAS(x,x.get_val<uint64_t>()+1)) 
                 real.fetch_add(1);
             END_OP;
         }
@@ -52,11 +67,14 @@ int main(){
     vector<thread> thds;
     llsc::initSynchronizationPrimitives(llsc::THREAD_NUM);
     for(int i=0;i<llsc::THREAD_NUM;i++){
-        thds.emplace_back(llsc::increment,i);
+        if(i%2)
+            thds.emplace_back(llsc::increment_llsc,i);
+        else
+            thds.emplace_back(llsc::increment_cas,i);
     }
     for(int i=0;i<llsc::THREAD_NUM;i++){
         thds[i].join();
     }
-    cout<<"d = "<<llsc::d.load()<<endl<<"real = "<<llsc::real.load()<<endl;
+    cout<<"d = "<<llsc::d.load_val()<<endl<<"real = "<<llsc::real.load()<<endl;
     return 0;
 }
