@@ -13,9 +13,6 @@
 #include "HarnessUtils.hpp"
 #include "Persistent.hpp"
 #include "persist_utils.hpp"
-// #include "EpochSysVerifyTest.hpp"
-
-class EpochSysVerifyTest;
 
 namespace pds{
 
@@ -70,7 +67,6 @@ enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
 // class PBlk{
 class PBlk : public Persistent{
     friend class EpochSys;
-    friend class EpochSysVerifyTest;
     static UIDGenerator uid_generator;
 protected:
     // Wentao: the first word should NOT be any persistent value for
@@ -277,7 +273,6 @@ class EpochSys{
         void on_end_transaction(EpochSys* esys, uint64_t c){}
     };
 
-    friend class EpochSysVerifyTest;
     
 private:
     // persistent fields:

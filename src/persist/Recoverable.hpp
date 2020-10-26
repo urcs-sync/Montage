@@ -2,10 +2,12 @@
 #define RECOVERABLE_HPP
 
 #include "TestConfig.hpp"
+#include "EpochSys.hpp"
 #include "pblk_naked.hpp"
 // TODO: report recover errors/exceptions
 
 class Recoverable{
+    pds::EpochSys* _esys = nullptr;
 public:
     Recoverable(GlobalTestConfig* gtc){
         // init Persistent allocator

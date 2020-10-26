@@ -71,7 +71,6 @@
 #include "MapTest.hpp"
 #include "MapChurnTest.hpp"
 #ifndef MNEMOSYNE
-#include "EpochSysVerifyTest.hpp"
 #include "RecoverVerifyTest.hpp"
 #include "GraphRecoveryTest.hpp"
 #include "TGraphConstructionTest.hpp"
