@@ -2,11 +2,11 @@
 #define RECOVERABLE_HPP
 
 #include "TestConfig.hpp"
+#include "pblk_naked.hpp"
 // TODO: report recover errors/exceptions
 
 class Recoverable{
 public:
-    Recoverable(){} // TODO: get rid of default constructor.
     Recoverable(GlobalTestConfig* gtc){
         // init Persistent allocator
         Persistent::init();

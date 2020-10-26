@@ -9,13 +9,14 @@
 #include "RQueue.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
+#include "Recoverable.hpp"
 #include "persist_struct_api.hpp"
 #include <mutex>
 
 using namespace pds;
 
 template<typename T>
-class MontageQueue : public RQueue<T>{
+class MontageQueue : public RQueue<T>, public Recoverable{
 public:
     class Payload : public PBlk{
         GENERATE_FIELD(T, val, Payload);
@@ -65,19 +66,18 @@ private:
 
 public:
     MontageQueue(GlobalTestConfig* gtc): 
-        global_sn(0), head(nullptr), tail(nullptr){
-        // init Persistent allocator
-        Persistent::init();
-        // init epoch system
-        pds::init(gtc);
-        // init main thread
-        pds::init_thread(0);
+        Recoverable(gtc), global_sn(0), head(nullptr), tail(nullptr){
     }
 
     ~MontageQueue(){};
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageQueue not implemented.");
+        return 0;
     }
 
     void enqueue(T val, int tid);

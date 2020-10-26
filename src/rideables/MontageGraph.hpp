@@ -63,7 +63,7 @@ class MontageGraph : public RGraph, public Recoverable{
         };
         class tVertex {
             public:
-                Vertex *payload;
+                Vertex *payload = nullptr;
 
                 int id; // cached id
                 uint64_t seqNumber; 
@@ -83,7 +83,11 @@ class MontageGraph : public RGraph, public Recoverable{
                     this->id = p->get_unsafe_id();
                 }
 
-                ~tVertex() { PDELETE(payload); }
+                ~tVertex() {
+                    if (payload){
+                        PDELETE(payload);
+                    }
+                }
 
                 void set_lbl(int l) {
                     payload = payload->set_lbl(l);
@@ -117,14 +121,7 @@ class MontageGraph : public RGraph, public Recoverable{
             Relation *e;
         };
 
-        MontageGraph(GlobalTestConfig* gtc) {
-            // init Persistent allocator
-            Persistent::init();
-            // init epoch system
-            pds::init(gtc);
-            // init main thread
-            pds::init_thread(0);
-
+        MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc) {
             BEGIN_OP_AUTOEND();
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
@@ -134,7 +131,7 @@ class MontageGraph : public RGraph, public Recoverable{
         }
 
         void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-            pds::init_thread(ltc->tid);
+            Recoverable::init_thread(gtc, ltc);
         }
 
         tVertex** idxToVertex; // Transient set of transient vertices to index map

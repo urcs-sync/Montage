@@ -9,12 +9,13 @@
 #include "RMap.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
+#include "Recoverable.hpp"
 #include "persist_struct_api.hpp"
 
 using namespace pds;
 
 template <class K, class V>
-class MontageNatarajanTree : public RMap<K,V>{
+class MontageNatarajanTree : public RMap<K,V>, public Recoverable{
 public:
     class Payload : public PBlk{
         GENERATE_FIELD(K, key, Payload);
@@ -148,14 +149,8 @@ private:
     bool cleanup(K key, int tid);
     // void doRangeQuery(Node& k1, Node& k2, int tid, Node* root, std::map<K,V>& res);
 public:
-    MontageNatarajanTree(GlobalTestConfig* gtc): tracker(gtc->task_num, 100, 1000, true){
-        // init Persistent allocator
-        Persistent::init();
-        // init epoch system
-        pds::init(gtc);
-        // init main thread
-        pds::init_thread(0);
-
+    MontageNatarajanTree(GlobalTestConfig* gtc):
+        Recoverable(gtc), tracker(gtc->task_num, 100, 1000, true){
         r.right.store(new Node(inf2));
         r.left.store(&s);
         s.right.store(new Node(inf1));
@@ -165,7 +160,12 @@ public:
     ~MontageNatarajanTree(){};
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageNatarajanTree not implemented.");
+        return 0;
     }
 
     optional<V> get(K key, int tid);

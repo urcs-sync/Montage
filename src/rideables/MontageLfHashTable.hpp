@@ -16,9 +16,10 @@
 #include "RMap.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
+#include "Recoverable.hpp"
 
 template <class K, class V>
-class MontageLfHashTable : public RMap<K,V>{
+class MontageLfHashTable : public RMap<K,V>, Recoverable{
 public:
     class Payload : public PBlk{
         GENERATE_FIELD(K, key, Payload);
@@ -79,18 +80,17 @@ private:
         return mixPtrMark(mptr,true);
     }
 public:
-    MontageLfHashTable(GlobalTestConfig* gtc) : tracker(gtc->task_num, 100, 1000, true) {
-        // init Persistent allocator
-        Persistent::init();
-        // init epoch system
-        pds::init(gtc);
-        // init main thread
-        pds::init_thread(0);
+    MontageLfHashTable(GlobalTestConfig* gtc) : Recoverable(gtc), tracker(gtc->task_num, 100, 1000, true) {
     };
     ~MontageLfHashTable(){};
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageLfHashTable not implemented.");
+        return 0;
     }
 
     optional<V> get(K key, int tid);

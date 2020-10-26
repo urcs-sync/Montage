@@ -9,12 +9,13 @@
 #include "RQueue.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
+#include "Recoverable.hpp"
 #include "persist_struct_api.hpp"
 
 using namespace pds;
 
 template<typename T>
-class MontageMSQueue : public RQueue<T>{
+class MontageMSQueue : public RQueue<T>, Recoverable{
 public:
     class Payload : public PBlk{
         GENERATE_FIELD(T, val, Payload);
@@ -55,14 +56,8 @@ private:
 
 public:
     MontageMSQueue(GlobalTestConfig* gtc): 
-        global_sn(0), head(nullptr), tail(nullptr), 
+        Recoverable(gtc), global_sn(0), head(nullptr), tail(nullptr), 
         tracker(gtc->task_num, 100, 1000, true){
-        // init Persistent allocator
-        Persistent::init();
-        // init epoch system
-        pds::init(gtc);
-        // init main thread
-        pds::init_thread(0);
 
         Node* dummy = new Node();
         head.store(dummy);
@@ -70,7 +65,12 @@ public:
     }
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageMSQueue not implemented.");
+        return 0;
     }
 
     ~MontageMSQueue(){};
