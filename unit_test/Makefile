@@ -6,15 +6,15 @@ CXXFLAG+=-L../ext/ralloc -lralloc -L../lib -lnbMontage
 
 RECURSEDIRS := ../
 
-all: llsc llsc_visible
+all: dcas dcas_visible
 
-llsc: llsc.cpp
+dcas: dcas.cpp
 	for rec in $(RECURSEDIRS); do $(MAKE) debug -C $$rec; done
 	g++ $^ -o $@ $(CXXFLAG)
 
-llsc_visible: llsc.cpp
+dcas_visible: dcas.cpp
 	for rec in $(RECURSEDIRS); do $(MAKE) debug -C $$rec; done
 	g++ $^ -o $@ $(CXXFLAG) -DVISIBLE_READ
 
 clean:
-	rm llsc llsc_visible
+	rm dcas dcas_visible

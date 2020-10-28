@@ -33,8 +33,8 @@
  *          since BEGIN_OP
  */
 
-#ifndef LLSC_HPP
-#define LLSC_HPP
+#ifndef DCAS_HPP
+#define DCAS_HPP
 #include <atomic>
 
 #include <cassert>
