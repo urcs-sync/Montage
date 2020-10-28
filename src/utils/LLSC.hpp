@@ -1,7 +1,36 @@
 /*
- * API for nonblocking data structures which provide:
- *  atomic_dword_t: Atomic double word for storing pointers that point
- *                  to nodes, which link payloads in.
+ * Macro VISIBLE_READ determines which version of API will be used.
+ * 
+ * We highly recommend you to use default invisible read version,
+ * since it doesn't need you to handle EpochVerifyException and you
+ * can call just load rather than load_verify throughout your program
+ * 
+ * We provides following API for nonblocking data structures to use: 
+ * 
+ *  atomic_dword_t<T=uint64_t>: atomic double word for storing pointers
+ *  that point to nodes, which link payloads in. It contains following
+ *  functions:
+ * 
+ *      store(T val): 
+ *          store 64-bit long data without sync; cnt doesn't increment
+ * 
+ *      store(dword_t d): store(d.val)
+ * 
+ *      dword_t load(): 
+ *          load dword without verifying epoch
+ * 
+ *      dword_t load_verify(): 
+ *          load dword and verify epoch, used as lin point; 
+ *          for invisible reads this won't verify epoch
+ * 
+ *      bool CAS(dword_t expected, T desired): 
+ *          CAS in desired value and increment cnt if expected 
+ *          matches current dword
+ * 
+ *      bool CAS_verify(dword_t expected, T desired): 
+ *          CAS in desired value and increment cnt if expected 
+ *          matches current dword and global epoch doesn't change
+ *          since BEGIN_OP
  */
 
 #ifndef LLSC_HPP
@@ -22,9 +51,11 @@ struct EpochVerifyException : public std::exception {
 };
 
 struct sc_desc_t;
-struct dword_t{
-    uint64_t val;
-    uint64_t cnt;
+template <class T>
+class atomic_dword_t;
+class dword_t{
+    template <class T>
+    friend class atomic_dword_t;
     inline bool is_desc() const {
         return (cnt & 3UL) == 1UL;
     }
@@ -32,7 +63,10 @@ struct dword_t{
         assert(is_desc());
         return reinterpret_cast<sc_desc_t*>(val);
     }
-    template <typename T>
+public:
+    uint64_t val;
+    uint64_t cnt;
+    template <typename T=uint64_t>
     inline T get_val() const {
         static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
         return reinterpret_cast<T>(val);
