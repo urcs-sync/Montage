@@ -6,7 +6,8 @@
  * since it doesn't need you to handle EpochVerifyException and you
  * can call just load rather than load_verify throughout your program
  * 
- * We provides following API for nonblocking data structures to use: 
+ * We provides following double-compare-single-swap (DCSS) API for
+ * nonblocking data structures to use: 
  * 
  *  atomic_dword_t<T=uint64_t>: atomic double word for storing pointers
  *  that point to nodes, which link payloads in. It contains following
@@ -34,8 +35,8 @@
  *          since BEGIN_OP
  */
 
-#ifndef DCAS_HPP
-#define DCAS_HPP
+#ifndef DCSS_HPP
+#define DCSS_HPP
 #include <atomic>
 
 #include <cassert>

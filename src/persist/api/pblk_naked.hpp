@@ -4,7 +4,7 @@
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
 #include "ConcurrentPrimitives.hpp"
-#include "DCAS.hpp"
+#include "DCSS.hpp"
 #include <typeinfo>
 
 // This api is inspired by object-based RSTM's api.

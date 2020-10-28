@@ -10,7 +10,7 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "persist_struct_api.hpp"
-#include "DCAS.hpp"
+#include "DCSS.hpp"
 
 using namespace pds;
 

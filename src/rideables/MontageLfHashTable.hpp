@@ -16,7 +16,7 @@
 #include "RMap.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
-#include "DCAS.hpp"
+#include "DCSS.hpp"
 
 template <class K, class V>
 class MontageLfHashTable : public RMap<K,V>{
