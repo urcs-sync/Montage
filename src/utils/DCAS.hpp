@@ -1,5 +1,6 @@
 /*
  * Macro VISIBLE_READ determines which version of API will be used.
+ * Macro USE_TSX determines whether TSX (Intel HTM) will be used.
  * 
  * We highly recommend you to use default invisible read version,
  * since it doesn't need you to handle EpochVerifyException and you
