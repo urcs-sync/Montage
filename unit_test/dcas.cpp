@@ -11,7 +11,7 @@
 using namespace std;
 using namespace pds;
 namespace dcas{
-    const int THREAD_NUM = 10;
+    const int THREAD_NUM = 1;
     const int CNT_UPPER = 100000;
 
     atomic_dword_t<uint64_t> d;
@@ -43,12 +43,12 @@ namespace dcas{
         pds::init_thread(tid);
         barrier();
         while(true){
-            BEGIN_OP_AUTOEND();
             try{
-                auto x = d.load_verify();
+                auto x = d.load();
                 if(x.get_val<uint64_t>()>=CNT_UPPER) {
                     break;
                 }
+                BEGIN_OP_AUTOEND();
                 if(d.CAS_verify(x,x.get_val<uint64_t>()+1)) 
                     real.fetch_add(1);
             } catch(EpochVerifyException& e){
@@ -57,7 +57,10 @@ namespace dcas{
         }
     }
 }
-
+// namespace pds{
+// extern std::atomic<size_t> abort_cnt;
+// extern std::atomic<size_t> total_cnt;
+// }
 int main(){
     GlobalTestConfig gtc;
     gtc.task_num=dcas::THREAD_NUM;
@@ -77,5 +80,6 @@ int main(){
         thds[i].join();
     }
     cout<<"d = "<<dcas::d.load_val()<<endl<<"real = "<<dcas::real.load()<<endl;
+    // cout<<"total cas: "<<pds::total_cnt.load()<<endl<<"abort cas: "<<pds::abort_cnt.load()<<endl;
     return 0;
 }

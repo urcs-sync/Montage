@@ -38,8 +38,9 @@
 #include <atomic>
 
 #include <cassert>
-// #include <immintrin.h>
 
+// #include "rtm.hpp"
+#include <immintrin.h>
 #include "ConcurrentPrimitives.hpp"
 #include "EpochSys.hpp"
 namespace pds{
@@ -279,34 +280,41 @@ dword_t atomic_dword_t<T>::load_verify(){
     return load();
 }
 
+// extern std::atomic<size_t> abort_cnt;
+// extern std::atomic<size_t> total_cnt;
+
 template<typename T>
 bool atomic_dword_t<T>::CAS_verify(dword_t expected, const T& desired){
-    // if (_xbegin() == _XBEGIN_STARTED) {
-    //     dword_t r = dword.load();
-    //     if(!r.is_desc()){
-    //         if( r.cnt!=local_cnt ||
-    //             r.val!=reinterpret_cast<uint64_t>(expected)){
-    //             // local_cnt = 0;
-    //             _xabort(1);
-    //             return false;
-    //         }
-    //         if(!esys->check_epoch(epochs[_tid].ui)){
-    //             // local_cnt = 0;
-    //             _xabort(1);
-    //             return false;
-    //         }
-    //         dword_t new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
-    //         dword.store(new_r);
-    //         local_cnt = 0;
-    //         _xend();
-    //         return true;
-    //     } else {
-    //         // we don't handle cases when r is a descriptor
-    //         _xabort(1);
-    //         return false;
-    //     }
-    // }
+    assert(epochs[_tid].ui != NULL_EPOCH);
+    // total_cnt.fetch_add(1);
+#ifdef USE_TSX
+    unsigned status = _xbegin();
+    if (status == _XBEGIN_STARTED) {
+        dword_t r = dword.load();
+        if(!r.is_desc()){
+            if( r.cnt!=expected.cnt ||
+                r.val!=expected.val ||
+                !esys->check_epoch(epochs[_tid].ui)){
+                _xend();
+                return false;
+            } else {
+                dword_t new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
+                dword.store(new_r);
+                _xend();
+                return true;
+            }
+        } else {
+            // we only help complete descriptor, but not retry
+            _xend();
+            r.get_desc()->try_complete(esys, reinterpret_cast<uint64_t>(this));
+            return false;
+        }
+        // execution won't reach here; program should have returned
+        return false;
+    }
+#endif
     // txn fails; fall back routine
+    // abort_cnt.fetch_add(1);
     dword_t r = dword.load();
     if(r.is_desc()){
         sc_desc_t* D = r.get_desc();
@@ -318,7 +326,6 @@ bool atomic_dword_t<T>::CAS_verify(dword_t expected, const T& desired){
             return false;
         }
     }
-    assert(epochs[_tid].ui != NULL_EPOCH);
     new (&local_descs[_tid].ui) sc_desc_t(r.cnt+1, 
                                 reinterpret_cast<uint64_t>(this), 
                                 expected.val, 
@@ -344,7 +351,7 @@ bool atomic_dword_t<T>::CAS(dword_t expected, const T& desired){
     return true;
 }
 
-#endif /* !INVISIBLE_READ */
+#endif /* !VISIBLE_READ */
 
 }
 #endif

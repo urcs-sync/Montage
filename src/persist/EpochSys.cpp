@@ -2,12 +2,15 @@
 #include "DCAS.hpp"
 
 #include <omp.h>
+#include <atomic>
 namespace pds{
 
     __thread int _tid = -1;
     EpochSys* esys = nullptr;
     padded<uint64_t>* epochs = nullptr;
     SysMode sys_mode = ONLINE;
+    // std::atomic<size_t> abort_cnt(0);
+    // std::atomic<size_t> total_cnt(0);
 
     UIDGenerator PBlk::uid_generator;
     
