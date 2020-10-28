@@ -131,12 +131,10 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
             tmpNode->next.ptr.store(curr);
-            BEGIN_OP();
-            tmpNode->payload->set_epoch(epochs[_tid].ui);
+            BEGIN_OP(tmpNode->payload);
             res=curr.get_val<Node*>()->get_val();
-            if(prev->ptr.CAS_check(curr,tmpNode)) {
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
                 curr.get_val<Node*>()->rm_payload();
-                esys->register_alloc_pblk(tmpNode->payload, epochs[_tid].ui);
                 END_OP;
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
                 while(!curr.get_val<Node*>()->next.ptr.CAS(next,setMark(next)));
@@ -153,10 +151,8 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
             //does not exist; insert.
             res={};
             tmpNode->next.ptr.store(curr);
-            BEGIN_OP();
-            tmpNode->payload->set_epoch(epochs[_tid].ui);
-            if(prev->ptr.CAS_check(curr,tmpNode)) {
-                esys->register_alloc_pblk(tmpNode->payload, epochs[_tid].ui);
+            BEGIN_OP(tmpNode->payload);
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
                 END_OP;
                 break;
             }
@@ -187,10 +183,8 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
         else {
             //does not exist, insert.
             tmpNode->next.ptr.store(curr);
-            BEGIN_OP();
-            tmpNode->payload->set_epoch(epochs[_tid].ui);
-            if(prev->ptr.CAS_check(curr,tmpNode)) {
-                esys->register_alloc_pblk(tmpNode->payload, epochs[_tid].ui);
+            BEGIN_OP(tmpNode->payload);
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
                 END_OP;
                 res=true;
                 break;
@@ -218,7 +212,7 @@ optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
         }
         BEGIN_OP();
         res=curr.get_val<Node*>()->get_val();
-        if(!curr.get_val<Node*>()->next.ptr.CAS_check(next,setMark(next))) {
+        if(!curr.get_val<Node*>()->next.ptr.CAS_verify(next,setMark(next))) {
             ABORT_OP;
             continue;
         }
@@ -251,7 +245,7 @@ optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
             tmpNode->next.ptr.store(curr);
             BEGIN_OP(tmpNode->payload);
             res=curr.get_val<Node*>()->get_val();
-            if(prev->ptr.CAS_check(curr,tmpNode)){
+            if(prev->ptr.CAS_verify(curr,tmpNode)){
                 curr.get_val<Node*>()->rm_payload();
                 END_OP;
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
@@ -281,15 +275,15 @@ bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, dword_t &curr, dword_t &n
         size_t idx=hash_fn(key)%idxSize;
         bool cmark=false;
         prev=&buckets[idx].ui;
-        curr=getPtr(prev->ptr.load_dword());
+        curr=getPtr(prev->ptr.load());
 
         while(true){//to lock old and curr
             if(curr.get_val<Node*>()==nullptr) return false;
-            next=curr.get_val<Node*>()->next.ptr.load_dword();
+            next=curr.get_val<Node*>()->next.ptr.load();
             cmark=getMark(next);
             next=getPtr(next);
             auto ckey=curr.get_val<Node*>()->key;
-            if(prev->ptr.load_dword()!=curr) break;//retry
+            if(prev->ptr.load()!=curr) break;//retry
             if(!cmark) {
                 if(ckey>=key) return ckey==key;
                 prev=&(curr.get_val<Node*>()->next);

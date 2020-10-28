@@ -15,6 +15,12 @@
 #include "EpochSys.hpp"
 namespace pds{
 
+struct EpochVerifyException : public std::exception {
+   const char * what () const throw () {
+      return "Epoch in which operation wants to linearize has passed; retry required.";
+   }
+};
+
 struct sc_desc_t;
 struct dword_t{
     uint64_t val;
@@ -54,13 +60,14 @@ public:
     // desc: ....01
     // real val: ....00
     std::atomic<dword_t> dword;
-    dword_t load_dword();
+    dword_t load();
+    dword_t load_verify();
     inline T load_val(){
-        return reinterpret_cast<T>(load_dword().val);
+        return reinterpret_cast<T>(load().val);
     }
-    bool CAS_check(dword_t expected, const T& desired);
-    inline bool CAS_check(dword_t expected, const dword_t& desired){
-        return CAS_check(expected,desired.get_val<T>());
+    bool CAS_verify(dword_t expected, const T& desired);
+    inline bool CAS_verify(dword_t expected, const dword_t& desired){
+        return CAS_verify(expected,desired.get_val<T>());
     }
     // CAS doesn't check epoch nor cnt
     bool CAS(dword_t expected, const T& desired);
@@ -159,7 +166,66 @@ public:
 };
 
 template<typename T>
-dword_t atomic_dword_t<T>::load_dword(){
+void atomic_dword_t<T>::store(const T& desired){
+    // this function must be used only when there's no data race
+    dword_t r = dword.load();
+    dword_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
+    dword.store(new_r);
+}
+
+#ifdef VISIBLE_READ
+// implementation of load and cas for visible reads
+
+template<typename T>
+dword_t atomic_dword_t<T>::load(){
+    dword_t r;
+    while(true){
+        r = dword.load();
+        dword_t ret(r.val,r.cnt+1);
+        if(dword.compare_exchange_strong(r, ret))
+            return ret;
+    }
+}
+
+template<typename T>
+dword_t atomic_dword_t<T>::load_verify(){
+    assert(epochs[_tid].ui != NULL_EPOCH);
+    dword_t r;
+    while(true){
+        r = dword.load();
+        if(esys->check_epoch(epochs[_tid].ui)){
+            dword_t ret(r.val,r.cnt+1);
+            if(dword.compare_exchange_strong(r, ret)){
+                return r;
+            }
+        } else {
+            throw EpochVerifyException();
+        }
+    }
+}
+
+template<typename T>
+bool atomic_dword_t<T>::CAS_verify(dword_t expected, const T& desired){
+    assert(epochs[_tid].ui != NULL_EPOCH);
+    if(esys->check_epoch(epochs[_tid].ui)){
+        dword_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
+        return dword.compare_exchange_strong(expected, new_r);
+    } else {
+        return false;
+    }
+}
+
+template<typename T>
+bool atomic_dword_t<T>::CAS(dword_t expected, const T& desired){
+    dword_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
+    return dword.compare_exchange_strong(expected, new_r);
+}
+
+#else /* !VISIBLE_READ */
+/* implementation of load and cas for invisible reads */
+
+template<typename T>
+dword_t atomic_dword_t<T>::load(){
     dword_t r;
     do { 
         r = dword.load();
@@ -172,7 +238,15 @@ dword_t atomic_dword_t<T>::load_dword(){
 }
 
 template<typename T>
-bool atomic_dword_t<T>::CAS_check(dword_t expected, const T& desired){
+dword_t atomic_dword_t<T>::load_verify(){
+    // invisible read doesn't need to verify epoch even if it's a
+    // linearization point
+    // this saves users from catching EpochVerifyException
+    return load();
+}
+
+template<typename T>
+bool atomic_dword_t<T>::CAS_verify(dword_t expected, const T& desired){
     // if (_xbegin() == _XBEGIN_STARTED) {
     //     dword_t r = dword.load();
     //     if(!r.is_desc()){
@@ -236,13 +310,7 @@ bool atomic_dword_t<T>::CAS(dword_t expected, const T& desired){
     return true;
 }
 
-template<typename T>
-void atomic_dword_t<T>::store(const T& desired){
-    // this function must be used only when there's no data race
-    dword_t r = dword.load();
-    dword_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
-    dword.store(new_r);
-}
+#endif /* !INVISIBLE_READ */
 
 }
 #endif

@@ -80,7 +80,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        dword_t next = cur_tail->next.load_dword();
+        dword_t next = cur_tail->next.load();
         if(cur_tail == tail.load()){
             if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
@@ -93,7 +93,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
                  * the same epoch.
                  */
                 // new_node->set_sn(s);
-                if((cur_tail->next).CAS_check(next, new_node)){
+                if((cur_tail->next).CAS_verify(next, new_node)){
                     esys->register_alloc_pblk(new_node->payload, epochs[_tid].ui);
                     END_OP;
                     break;
@@ -113,11 +113,11 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        dword_t cur_head = head.load_dword();
+        dword_t cur_head = head.load();
         Node* cur_tail = tail.load();
         Node* next = cur_head.get_val<Node*>()->next.load_val();
 
-        if(cur_head == head.load_dword()){
+        if(cur_head == head.load()){
             if(cur_head.get_val<Node*>() == cur_tail){
                 // queue is empty
                 if(next == nullptr) {
@@ -128,7 +128,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
             } else {
                 BEGIN_OP();
                 Payload* payload = next->payload;// get payload for PDELETE
-                if(head.CAS_check(cur_head, next)){
+                if(head.CAS_verify(cur_head, next)){
                     res = (T)payload->get_val();// old see new is impossible
                     PRETIRE(payload); // semantically we are removing next from queue
                     END_OP;

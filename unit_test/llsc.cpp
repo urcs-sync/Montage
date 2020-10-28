@@ -29,27 +29,28 @@ namespace llsc{
         pds::init_thread(tid);
         barrier();
         while(true){
-            BEGIN_OP();
-            auto x = d.load_dword();
-            if(x.get_val<uint64_t>()>=CNT_UPPER) {
-                END_OP;
-                break;
+            BEGIN_OP_AUTOEND();
+            try{
+                auto x = d.load_verify();
+                if(x.get_val<uint64_t>()>=CNT_UPPER) {
+                    break;
+                }
+                if(d.CAS_verify(x,x.get_val<uint64_t>()+1)) 
+                    real.fetch_add(1);
+            } catch(EpochVerifyException& e){
+                continue;
             }
-            if(d.CAS_check(x,x.get_val<uint64_t>()+1)) 
-                real.fetch_add(1);
-            END_OP;
         }
     }
     void increment_cas(size_t tid){
         pds::init_thread(tid);
         barrier();
         while(true){
-            BEGIN_OP();
-            auto x = d.load_dword();
+            auto x = d.load();
             if(x.get_val<uint64_t>()>=CNT_UPPER) {
-                END_OP;
                 break;
             }
+            BEGIN_OP();
             if(d.CAS(x,x.get_val<uint64_t>()+1)) 
                 real.fetch_add(1);
             END_OP;
