@@ -6,6 +6,27 @@
 #include<vector>
 #include<functional>
 
+class UIDGenerator{
+    padded<uint64_t>* curr_ids;
+public:
+    void init(uint64_t task_num){
+        uint64_t buf = task_num-1;
+        int shift = 64;
+        uint64_t max = 1;
+        for (; buf != 0; buf >>= 1){
+            shift--;
+            max <<= 1;
+        }
+        curr_ids = new padded<uint64_t>[max];
+        for (uint64_t i = 0; i < max; i++){
+            curr_ids[i].ui = i << shift;
+        }
+    }
+    uint64_t get_id(int tid){
+        return curr_ids[tid].ui++;
+    }
+};
+
 // A single-threaded circular buffer that grows exponentially
 // when populated and never shrinks (for now).
 // The buffer always allocates new spaces in chunks: the key
