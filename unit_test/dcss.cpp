@@ -14,7 +14,7 @@ namespace dcas{
     const int THREAD_NUM = 1;
     const int CNT_UPPER = 100000;
 
-    atomic_dword_t<uint64_t> d;
+    atomic_nbptr_t<uint64_t> d;
     atomic<uint64_t> real;
     pthread_barrier_t pthread_barrier;
     void barrier()

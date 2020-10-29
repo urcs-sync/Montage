@@ -29,7 +29,7 @@ public:
 
 private:
     struct Node{
-        atomic_dword_t<Node*> next;
+        atomic_nbptr_t<Node*> next;
         Payload* payload;
 
         Node(): next(nullptr), payload(nullptr){}; 
@@ -51,7 +51,7 @@ public:
 
 private:
     // dequeue pops node from head
-    atomic_dword_t<Node*> head;
+    atomic_nbptr_t<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
     RCUTracker<Node> tracker;
@@ -80,7 +80,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        dword_t next = cur_tail->next.load();
+        nbptr_t next = cur_tail->next.load();
         if(cur_tail == tail.load()){
             if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
@@ -113,7 +113,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        dword_t cur_head = head.load();
+        nbptr_t cur_head = head.load();
         Node* cur_tail = tail.load();
         Node* next = cur_head.get_val<Node*>()->next.load_val();
 
