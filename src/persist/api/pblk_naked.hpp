@@ -4,6 +4,7 @@
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
 #include "ConcurrentPrimitives.hpp"
+#include "DCSS.hpp"
 #include <typeinfo>
 
 // This api is inspired by object-based RSTM's api.
@@ -13,6 +14,7 @@ namespace pds{
     extern EpochSys* esys;
     extern padded<uint64_t>* epochs;
     extern __thread int _tid;
+    extern padded<sc_desc_t>* local_descs;
 
     inline void init(GlobalTestConfig* gtc){
         // here we assume that pds::init is called before pds::init_thread, hence the assertion.
@@ -24,6 +26,7 @@ namespace pds{
         sys_mode = ONLINE;
         PBlk::init(gtc->task_num);
         epochs = new padded<uint64_t>[gtc->task_num];
+        local_descs = new padded<sc_desc_t>[gtc->task_num];
         for(int i = 0; i < gtc->task_num; i++){
             epochs[i].ui = NULL_EPOCH;
         }

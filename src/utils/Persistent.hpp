@@ -5,6 +5,7 @@
 #include <cstring>
 #include <AllocatorMacro.hpp>
 #include <ralloc.hpp>
+#include <HarnessUtils.hpp>
 
 using namespace std;
 

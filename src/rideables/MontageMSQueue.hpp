@@ -10,6 +10,7 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "persist_struct_api.hpp"
+#include "DCSS.hpp"
 
 using namespace pds;
 
@@ -20,19 +21,21 @@ public:
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
-        Payload(){}
-        Payload(T v): m_val(v), m_sn(0){}
+        Payload(): PBlk(){}
+        Payload(T v): PBlk(), m_val(v), m_sn(0){}
         // Payload(const Payload& oth): PBlk(oth), m_sn(0), m_val(oth.m_val){}
         void persist(){}
     };
 
 private:
     struct Node{
-        std::atomic<Node*> next;
+        atomic_nbptr_t<Node*> next;
         Payload* payload;
 
         Node(): next(nullptr), payload(nullptr){}; 
-        Node(T v): next(nullptr), payload(PNEW(Payload, v)){};
+        Node(T v): next(nullptr), payload(PNEW(Payload, v)){
+            assert(epochs[_tid].ui == NULL_EPOCH);
+        };
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
@@ -48,7 +51,7 @@ public:
 
 private:
     // dequeue pops node from head
-    std::atomic<Node*> head;
+    atomic_nbptr_t<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
     RCUTracker<Node> tracker;
@@ -77,25 +80,27 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        Node* next = cur_tail->next.load();
+        nbptr_t next = cur_tail->next.load();
         if(cur_tail == tail.load()){
-            if(next == nullptr) {
+            if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
                 new_node->set_sn(s);
-                BEGIN_OP(new_node->payload);
+                BEGIN_OP();
+                new_node->payload->set_epoch(epochs[_tid].ui);
                 /* set_sn must happen before PDELETE of payload since it's 
                  * before linearization point.
                  * Also, this must set sn in place since we still remain in
                  * the same epoch.
                  */
                 // new_node->set_sn(s);
-                if((cur_tail->next).compare_exchange_strong(next, new_node)){
+                if((cur_tail->next).CAS_verify(next, new_node)){
+                    esys->register_alloc_pblk(new_node->payload, epochs[_tid].ui);
                     END_OP;
                     break;
                 }
                 ABORT_OP;
             } else {
-                tail.compare_exchange_strong(cur_tail, next); // try to swing tail to next node
+                tail.compare_exchange_strong(cur_tail, next.get_val<Node*>()); // try to swing tail to next node
             }
         }
     }
@@ -108,12 +113,12 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        Node* cur_head = head.load();
+        nbptr_t cur_head = head.load();
         Node* cur_tail = tail.load();
-        Node* next = cur_head->next.load();
+        Node* next = cur_head.get_val<Node*>()->next.load_val();
 
         if(cur_head == head.load()){
-            if(cur_head == cur_tail){
+            if(cur_head.get_val<Node*>() == cur_tail){
                 // queue is empty
                 if(next == nullptr) {
                     res.reset();
@@ -123,12 +128,12 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
             } else {
                 BEGIN_OP();
                 Payload* payload = next->payload;// get payload for PDELETE
-                if(head.compare_exchange_strong(cur_head, next)){
+                if(head.CAS_verify(cur_head, next)){
                     res = (T)payload->get_val();// old see new is impossible
                     PRETIRE(payload); // semantically we are removing next from queue
                     END_OP;
-                    cur_head->payload = payload; // let payload have same lifetime as dummy node
-                    tracker.retire(cur_head, tid);
+                    cur_head.get_val<Node*>()->payload = payload; // let payload have same lifetime as dummy node
+                    tracker.retire(cur_head.get_val<Node*>(), tid);
                     break;
                 }
                 ABORT_OP;
