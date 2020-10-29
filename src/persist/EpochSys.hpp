@@ -91,11 +91,15 @@ protected:
     //     persisted = true;
     // }
 public:
+    void set_epoch(uint64_t e){
+        // only for testing
+        epoch=e;
+    }
     static void init(int task_num){
         uid_generator.init(task_num);
     }
     // PBlk(uint64_t e): epoch(e), persisted(false){}
-    PBlk(): id(uid_generator.get_id(_tid)){}
+    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), id(uid_generator.get_id(_tid)), retire(nullptr){}
     // PBlk(bool is_data): blktype(is_data?DATA:INIT), id(uid_generator.get_id(tid)) {}
     PBlk(const PBlk* owner): 
         blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id), 
@@ -448,7 +452,9 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     }
     PBlk* blk = b;
     blk->epoch = c;
-    assert(blk->blktype == INIT || blk->blktype == OWNED);
+    // Wentao: It's possible that payload is registered multiple times
+    assert(blk->blktype == INIT || blk->blktype == OWNED || 
+           blk->blktype == ALLOC); 
     if (blk->blktype == INIT){
         blk->blktype = ALLOC;
     }
