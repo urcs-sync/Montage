@@ -1,4 +1,5 @@
-
+# This Makefile is no longer in use; please use the main Makefile and
+# run ./bin/dcss
 CXXFLAG:=-I../src -I../src/utils -I../src/rideables -I../src/tests -I../src/persist -I../src/persist/api -I../ext/ralloc/src 
 CXXFLAG+=-O0 -g 
 CXXFLAG+=-lpthread -lhwloc -lgomp -latomic -std=c++17 -mrtm
