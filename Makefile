@@ -75,7 +75,7 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
-LIBS :=-l:libjemalloc.so.2 -lpthread -lhwloc -lralloc -lgomp 
+LIBS :=-l:libjemalloc.so.2 -lpthread -lhwloc -lralloc -lgomp -latomic
 LIBS+=-lnvmmalloc
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
@@ -118,7 +118,7 @@ ARCHIVEDIR:=./lib
 # -since we do pattern matching between this list and the
 # source files, the file path specified must be the same
 # type (absolute or relative)
-EXECUTABLES:= ./src/main.cpp
+EXECUTABLES:= ./src/main.cpp ./unit_test/dcss.cpp
 
 # A list of source files contained in the
 # source directory to exclude from the build
@@ -144,10 +144,10 @@ WARNING_FLAGS:=-ftrapv -Wreturn-type -W -Wall \
 
 # Default build flags.  
 # CFLAGS:=-pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) 
-CFLAGS:=-fopnemp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ)
+CFLAGS:=-fopnemp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm 
 
 # CXXFLAGS:= -pthread -std=c++11 -g -fpic $(WARNING_FLAGS) #-std=c++1y 
-CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -std=c++17 -mclwb -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ)
+CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -std=c++17 -mclwb -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm
 # linker flags
 # LDFLAGS := 
 

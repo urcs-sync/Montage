@@ -16,6 +16,7 @@
 #include "RMap.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
+#include "DCSS.hpp"
 
 template <class K, class V>
 class MontageLfHashTable : public RMap<K,V>{
@@ -33,7 +34,7 @@ private:
     struct Node;
 
     struct MarkPtr{
-        std::atomic<Node*> ptr;
+        atomic_nbptr_t<Node*> ptr;
         MarkPtr(Node* n):ptr(n){};
         MarkPtr():ptr(nullptr){};
     };
@@ -61,22 +62,22 @@ private:
     std::hash<K> hash_fn;
     const int idxSize=1000000;//number of buckets for hash table
     padded<MarkPtr>* buckets=new padded<MarkPtr>[idxSize]{};
-    bool findNode(MarkPtr* &prev, Node* &curr, Node* &next, K key, int tid);
+    bool findNode(MarkPtr* &prev, nbptr_t &curr, nbptr_t &next, K key, int tid);
 
     RCUTracker<Node> tracker;
 
     const uint64_t MARK_MASK = ~0x1;
-    inline Node* getPtr(Node* mptr){
-        return (Node*) ((uint64_t)mptr & MARK_MASK);
+    inline nbptr_t getPtr(const nbptr_t& d){
+        return nbptr_t(d.val & MARK_MASK, d.cnt);
     }
-    inline bool getMark(Node* mptr){
-        return (bool)((uint64_t)mptr & 1);
+    inline bool getMark(const nbptr_t& d){
+        return (bool)(d.val & 1);
     }
-    inline Node* mixPtrMark(Node* ptr, bool mk){
-        return (Node*) ((uint64_t)ptr | mk);
+    inline nbptr_t mixPtrMark(const nbptr_t& d, bool mk){
+        return nbptr_t(d.val | mk, d.cnt);
     }
-    inline Node* setMark(Node* mptr){
-        return mixPtrMark(mptr,true);
+    inline Node* setMark(const nbptr_t& d){
+        return reinterpret_cast<Node*>(d.val | 1);
     }
 public:
     MontageLfHashTable(int task_num) : tracker(task_num, 100, 1000, true) {};
@@ -102,14 +103,14 @@ template <class K, class V>
 optional<V> MontageLfHashTable<K,V>::get(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    Node* curr=nullptr;
-    Node* next=nullptr;
+    nbptr_t curr;
+    nbptr_t next;
 
     tracker.start_op(tid);
     // hold epoch from advancing so that the node we find won't be deleted
     if(findNode(prev,curr,next,key,tid)) {
         BEGIN_OP_AUTOEND();
-        res=curr->get_val();//never old see new as we find node before BEGIN_OP
+        res=curr.get_val<Node*>()->get_val();//never old see new as we find node before BEGIN_OP
     }
     tracker.end_op(tid);
 
@@ -121,8 +122,8 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
     optional<V> res={};
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    Node* curr=nullptr;
-    Node* next=nullptr;
+    nbptr_t curr;
+    nbptr_t next;
     tmpNode = new Node(key, val, nullptr);
 
     tracker.start_op(tid);
@@ -131,14 +132,14 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
             // exists; replace
             tmpNode->next.ptr.store(curr);
             BEGIN_OP(tmpNode->payload);
-            res=curr->get_val();
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                curr->rm_payload();
+            res=curr.get_val<Node*>()->get_val();
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
+                curr.get_val<Node*>()->rm_payload();
                 END_OP;
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next)));
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    tracker.retire(curr,tid);
+                while(!curr.get_val<Node*>()->next.ptr.CAS(next,setMark(next)));
+                if(tmpNode->next.ptr.CAS(curr,next)) {
+                    tracker.retire(curr.get_val<Node*>(),tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
                 }
@@ -151,7 +152,7 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
             res={};
             tmpNode->next.ptr.store(curr);
             BEGIN_OP(tmpNode->payload);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
                 END_OP;
                 break;
             }
@@ -168,8 +169,8 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
     bool res=false;
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    Node* curr=nullptr;
-    Node* next=nullptr;
+    nbptr_t curr;
+    nbptr_t next;
     tmpNode = new Node(key, val, nullptr);
 
     tracker.start_op(tid);
@@ -183,7 +184,7 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
             //does not exist, insert.
             tmpNode->next.ptr.store(curr);
             BEGIN_OP(tmpNode->payload);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+            if(prev->ptr.CAS_verify(curr,tmpNode)) {
                 END_OP;
                 res=true;
                 break;
@@ -200,8 +201,8 @@ template <class K, class V>
 optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    Node* curr=nullptr;
-    Node* next=nullptr;
+    nbptr_t curr;
+    nbptr_t next;
 
     tracker.start_op(tid);
     while(true) {
@@ -210,15 +211,15 @@ optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
             break;
         }
         BEGIN_OP();
-        res=curr->get_val();
-        if(!curr->next.ptr.compare_exchange_strong(next,setMark(next))) {
+        res=curr.get_val<Node*>()->get_val();
+        if(!curr.get_val<Node*>()->next.ptr.CAS_verify(next,setMark(next))) {
             ABORT_OP;
             continue;
         }
-        curr->rm_payload();
+        curr.get_val<Node*>()->rm_payload();
         END_OP;
-        if(prev->ptr.compare_exchange_strong(curr,next)) {
-            tracker.retire(curr,tid);
+        if(prev->ptr.CAS(curr,next)) {
+            tracker.retire(curr.get_val<Node*>(),tid);
         } else {
             findNode(prev,curr,next,key,tid);
         }
@@ -232,45 +233,44 @@ optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
 template <class K, class V> 
 optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
     optional<V> res={};
-    // Node* tmpNode = nullptr;
-    // MarkPtr* prev=nullptr;
-    // Node* curr=nullptr;
-    // Node* next=nullptr;
-    // tmpNode = new Node(key, val, nullptr);
+    Node* tmpNode = nullptr;
+    MarkPtr* prev=nullptr;
+    nbptr_t curr;
+    nbptr_t next;
+    tmpNode = new Node(key, val, nullptr);
 
-    // tracker.start_op(tid);
-    // while(true){
-    //     if(findNode(prev,curr,next,key,tid)){
-    //         tmpNode->next.ptr.store(curr);
-    //         BEGIN_OP(tmpNode->payload);
-    //         res=curr->get_val();
-    //         if(prev->ptr.compare_exchange_strong(curr,tmpNode)){
-    //             curr->rm_payload();
-    //             END_OP;
-    //             // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-    //             while(!curr->next.ptr.compare_exchange_strong(next,setMark(next)));
-    //             if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-    //                 tracker.retire(curr,tid);
-    //             } else {
-    //                 findNode(prev,curr,next,key,tid);
-    //             }
-    //             break;
-    //         }
-    //         ABORT_OP;
-    //     }
-    //     else{//does not exist
-    //         res={};
-    //         delete tmpNode;
-    //         break;
-    //     }
-    // }
-    // tracker.end_op(tid);
-    assert(0&&"replace isn't implemented");
+    tracker.start_op(tid);
+    while(true){
+        if(findNode(prev,curr,next,key,tid)){
+            tmpNode->next.ptr.store(curr);
+            BEGIN_OP(tmpNode->payload);
+            res=curr.get_val<Node*>()->get_val();
+            if(prev->ptr.CAS_verify(curr,tmpNode)){
+                curr.get_val<Node*>()->rm_payload();
+                END_OP;
+                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
+                while(!curr.get_val<Node*>()->next.ptr.CAS(next,setMark(next)));
+                if(tmpNode->next.ptr.CAS(curr,next)) {
+                    tracker.retire(curr.get_val<Node*>(),tid);
+                } else {
+                    findNode(prev,curr,next,key,tid);
+                }
+                break;
+            }
+            ABORT_OP;
+        }
+        else{//does not exist
+            res={};
+            delete tmpNode;
+            break;
+        }
+    }
+    tracker.end_op(tid);
     return res;
 }
 
 template <class K, class V> 
-bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, Node* &curr, Node* &next, K key, int tid){
+bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, nbptr_t &curr, nbptr_t &next, K key, int tid){
     while(true){
         size_t idx=hash_fn(key)%idxSize;
         bool cmark=false;
@@ -278,18 +278,18 @@ bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, Node* &curr, Node* &next,
         curr=getPtr(prev->ptr.load());
 
         while(true){//to lock old and curr
-            if(curr==nullptr) return false;
-            next=curr->next.ptr.load();
+            if(curr.get_val<Node*>()==nullptr) return false;
+            next=curr.get_val<Node*>()->next.ptr.load();
             cmark=getMark(next);
             next=getPtr(next);
-            auto ckey=curr->key;
+            auto ckey=curr.get_val<Node*>()->key;
             if(prev->ptr.load()!=curr) break;//retry
             if(!cmark) {
                 if(ckey>=key) return ckey==key;
-                prev=&(curr->next);
+                prev=&(curr.get_val<Node*>()->next);
             } else {
-                if(prev->ptr.compare_exchange_strong(curr,next)) {
-                    tracker.retire(curr,tid);
+                if(prev->ptr.CAS(curr,next)) {
+                    tracker.retire(curr.get_val<Node*>(),tid);
                 } else {
                     break;//retry
                 }
