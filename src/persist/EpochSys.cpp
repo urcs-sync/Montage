@@ -5,13 +5,14 @@
 #include <atomic>
 namespace pds{
 
-    __thread int _tid = -1;
+    // __thread int _tid = -1;
     EpochSys* esys = nullptr;
     padded<uint64_t>* epochs = nullptr;
     SysMode sys_mode = ONLINE;
     // std::atomic<size_t> abort_cnt(0);
     // std::atomic<size_t> total_cnt(0);
 
+    thread_local int EpochSys::tid = -1;
     UIDGenerator PBlk::uid_generator;
     
     padded<sc_desc_t>* local_descs = nullptr;

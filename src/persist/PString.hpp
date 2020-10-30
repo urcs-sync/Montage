@@ -8,7 +8,7 @@
 #include "pptr.hpp"
 using namespace pds;
 
-extern __thread int pds::_tid;
+// extern __thread int pds::_tid;
 
 // class PString : public PBlk{
 //     pptr<PBlkArray<char>> char_array;
@@ -16,12 +16,12 @@ extern __thread int pds::_tid;
 // public:
 //     // TODO: it's kind of cheating to use epochs[] here...
 //     PString(PBlk* owner, const std::string& str) : PBlk(owner), 
-//         char_array(esys->alloc_pblk_array<char>(owner, str.size()+1, epochs[_tid].ui)) {
+//         char_array(esys->alloc_pblk_array<char>(owner, str.size()+1, epochs[EpochSys::tid].ui)) {
 //         memcpy(char_array->content, str.c_str(), str.size()+1);
-//         esys->register_update_pblk(char_array, epochs[_tid].ui);
+//         esys->register_update_pblk(char_array, epochs[EpochSys::tid].ui);
 //     }
 //     PString(const PString& oth): PBlk(oth), 
-//         char_array(esys->copy_pblk_array<char>(oth.char_array, epochs[_tid].ui)) {}
+//         char_array(esys->copy_pblk_array<char>(oth.char_array, epochs[EpochSys::tid].ui)) {}
 
 //     pptr<PBlk> get_data(){
 //         return pptr<PBlk>(char_array);
@@ -35,15 +35,15 @@ extern __thread int pds::_tid;
 //     PString& operator = (const PString &oth){ //assignment
 //         // if(char_array!=nullptr) // char_array being null is impossible
 //         PDELETE_DATA((PBlkArray<char>*)char_array);
-//         char_array = esys->copy_pblk_array<char>(oth.char_array, epochs[_tid].ui);
+//         char_array = esys->copy_pblk_array<char>(oth.char_array, epochs[EpochSys::tid].ui);
 //         return *this;
 //     }
 
 //     PString& operator=(const std::string& str){
 //         PDELETE_DATA((PBlkArray<char>*)char_array);
-//         char_array = esys->alloc_pblk_array<char>(this, str.size()+1, epochs[_tid].ui);
+//         char_array = esys->alloc_pblk_array<char>(this, str.size()+1, epochs[EpochSys::tid].ui);
 //         memcpy(char_array->content, str.c_str(), str.size()+1);
-//         esys->register_update_pblk(char_array, epochs[_tid].ui);
+//         esys->register_update_pblk(char_array, epochs[EpochSys::tid].ui);
 //         return *this;
 //     }
 

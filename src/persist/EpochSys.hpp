@@ -14,20 +14,16 @@
 #include "Persistent.hpp"
 #include "persist_utils.hpp"
 
+#include "common_macros.hpp"
+#include "TransactionTrackers.hpp"
+#include "PerThreadContainers.hpp"
+#include "ToBePersistedContainers.hpp"
+#include "ToBeFreedContainers.hpp"
+#include "EpochAdvancers.hpp"
+
 namespace pds{
 
-#define ASSERT_DERIVE(der, base)\
-    static_assert(std::is_convertible<der*, base*>::value,\
-        #der " must inherit " #base " as public");
-
-#define ASSERT_COPY(t)\
-    static_assert(std::is_copy_constructible<t>::value,\
-        "type" #t "requires copying");
-
-#define INIT_EPOCH 3
-#define NULL_EPOCH 0
-
-extern __thread int _tid;
+// extern __thread int _tid;
 
 enum SysMode {ONLINE, RECOVER};
 
@@ -51,16 +47,16 @@ protected:
     // Wentao: the first word should NOT be any persistent value for
     // epoch-system-level recovery (i.e., epoch), as Ralloc repurposes the first
     // word for block free list, which may interfere with the recovery.
-    // Currently we use (transient) payload as the first word. If we decide to
+    // Currently we use (transient) "reserved" as the first word. If we decide to
     // remove this field, we need to either prepend another dummy word, or
     // change the block free list in Ralloc.
 
-    // only used in transient headers.
-    PBlk* payload;
+    // transient.
+    void* _reserved;
 
     uint64_t epoch = NULL_EPOCH;
     PBlkType blktype = INIT;
-    uint64_t owner_id = 0;
+    uint64_t owner_id = 0; // TODO: make consider abandon this field and use id all the time.
     uint64_t id = 0;
     pptr<PBlk> retire = nullptr;
     // bool persisted = false; // For debug purposes. Might not be needed at the end. 
@@ -77,12 +73,11 @@ public:
     static void init(int task_num){
         uid_generator.init(task_num);
     }
-    // PBlk(uint64_t e): epoch(e), persisted(false){}
-    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), id(uid_generator.get_id(_tid)), retire(nullptr){}
-    // PBlk(bool is_data): blktype(is_data?DATA:INIT), id(uid_generator.get_id(tid)) {}
+    // id gets inited by EpochSys instance.
+    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
+    // id gets inited by EpochSys instance.
     PBlk(const PBlk* owner): 
-        blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id), 
-        id(uid_generator.get_id(_tid)) {}
+        blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id) {}
     PBlk(const PBlk& oth): blktype(oth.blktype==OWNED? OWNED:INIT), owner_id(oth.owner_id), id(oth.id) {}
     inline uint64_t get_id() {return id;}
     virtual pptr<PBlk> get_data() {return nullptr;}
@@ -107,18 +102,14 @@ public:
     T* content; //transient ptr
     inline size_t get_size()const{return size;}
 };
-// class PArray : public PBlk{
-//     T* content;
-//     // TODO: set constructor private. use EpochSys::alloc_array
-//     // to get memory from Ralloc and in-place new PArray in the front, and
-//     // in-place new all T objects in the array (with exception for 1-word T's). 
-// };
 
-#include "TransactionTrackers.hpp"
-#include "PerThreadContainers.hpp"
-#include "ToBePersistedContainers.hpp"
-#include "ToBeFreedContainers.hpp"
-#include "EpochAdvancers.hpp"
+struct Epoch : public PBlk{
+    std::atomic<uint64_t> global_epoch;
+    void persist(){}
+    Epoch(){
+        global_epoch.store(NULL_EPOCH, std::memory_order_relaxed);
+    }
+};
 
 class EpochSys{
     
@@ -126,6 +117,10 @@ private:
     // persistent fields:
     Epoch* epoch_container = nullptr;
     std::atomic<uint64_t>* global_epoch = nullptr;
+
+    // semi-persistent fields:
+    // TODO: set a periodic-updated persistent boundary to recover to.
+    UIDGenerator uid_generator;
 
     // transient fields:
     TransactionTracker* trans_tracker = nullptr;
@@ -135,15 +130,17 @@ private:
 
     GlobalTestConfig* gtc = nullptr;
     int task_num;
-    // static __thread int tid;
 
     bool consistent_increment(std::atomic<uint64_t>& counter, const uint64_t c);
 
 public:
 
+    /* static */
+    static thread_local int tid;
+
     std::mutex dedicated_epoch_advancer_lock;
 
-    EpochSys(GlobalTestConfig* _gtc) : gtc(_gtc) {
+    EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
         reset(); // TODO: change to recover() later on.
     }
 
@@ -185,11 +182,11 @@ public:
     }
 
     void simulate_crash(){
-        if(pds::_tid==0){
+        if(tid==0){
             delete epoch_advancer;
             epoch_advancer = nullptr;
         }
-        Persistent::simulate_crash(pds::_tid);
+        Persistent::simulate_crash(tid);
     }
     ////////////////
     // Operations //
@@ -302,7 +299,10 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     if (blk->blktype == INIT){
         blk->blktype = ALLOC;
     }
-    // to_be_persisted[c%4].push(blk);
+    if (blk->id == 0){
+        blk->id = uid_generator.get_id(tid);
+    }
+
     to_be_persisted->register_persist(blk, c);
     PBlk* data = blk->get_data();
     if (data){
@@ -323,7 +323,7 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
         new (p) T();
         p++;
     }
-    ret->epoch = c;
+    register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
     // to_be_persisted->register_persist(ret, c);
@@ -341,7 +341,7 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(PBlk* owner, size_t s, uint64_t c){
         new (p) T();
         p++;
     }
-    ret->epoch = c;
+    register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
     // to_be_persisted->register_persist(ret, c);

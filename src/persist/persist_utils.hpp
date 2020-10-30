@@ -2,13 +2,24 @@
 #define PERSIST_UTILS_HPP
 
 #include "ConcurrentPrimitives.hpp"
-#include<atomic>
-#include<vector>
-#include<functional>
+#include "HarnessUtils.hpp"
+#include <atomic>
+#include <vector>
+#include <unordered_set>
+#include <functional>
 
 class UIDGenerator{
-    padded<uint64_t>* curr_ids;
+    padded<uint64_t>* curr_ids = nullptr;
 public:
+    UIDGenerator(){}
+    UIDGenerator(uint64_t task_num){
+        init(task_num);
+    }
+    ~UIDGenerator(){
+        if (curr_ids){
+            delete curr_ids;
+        }
+    }
     void init(uint64_t task_num){
         uint64_t buf = task_num-1;
         int shift = 64;
@@ -17,7 +28,9 @@ public:
             shift--;
             max <<= 1;
         }
-        curr_ids = new padded<uint64_t>[max];
+        if (!curr_ids){
+            curr_ids = new padded<uint64_t>[max];
+        }
         for (uint64_t i = 0; i < max; i++){
             curr_ids[i].ui = i << shift;
         }
@@ -119,7 +132,7 @@ public:
     void clear(){
         head.ui = tail.ui;
     }
-}__attribute__((aligned(CACHELINE_SIZE)));
+}__attribute__((aligned(CACHE_LINE_SIZE)));
 
 // a group of per-thread circular buffer
 // NOTE: The container is NOT thread safe.
@@ -247,7 +260,7 @@ public:
         head.ui = 0;
         tail.ui = 0;
     }
-}__attribute__((aligned(CACHELINE_SIZE)));
+}__attribute__((aligned(CACHE_LINE_SIZE)));
 
 // a group of per-thread fixed-size circular buffer
 // NOTE: this is designed for single-consumer pattern only. The container is NOT thread safe.

@@ -16,11 +16,11 @@ void SingleThreadEpochAdvancer::set_help_freq(int help_power){
     help_threshold = 0x1ULL << help_power;
 }
 void SingleThreadEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
-    assert(_tid != -1);
-    trans_cnts[_tid].ui++;
-    if (_tid == 0){
+    assert(EpochSys::tid != -1);
+    trans_cnts[EpochSys::tid].ui++;
+    if (EpochSys::tid == 0){
         // only a single thread can advance epochs.
-        if (trans_cnts[_tid].ui % epoch_threshold == 0){
+        if (trans_cnts[EpochSys::tid].ui % epoch_threshold == 0){
             esys->advance_epoch(c);
         } 
     }

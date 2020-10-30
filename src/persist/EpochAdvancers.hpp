@@ -6,6 +6,8 @@
 #include "TestConfig.hpp"
 #include "ConcurrentPrimitives.hpp"
 
+namespace pds{
+
 class EpochSys;
 
 /////////////////////
@@ -67,5 +69,7 @@ public:
     void set_help_freq(int help_power){}
     void on_end_transaction(EpochSys* esys, uint64_t c){}
 };
+
+}
 
 #endif

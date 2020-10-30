@@ -97,7 +97,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
                 // directly set m_sn and BEGIN_OP will flush it
                 new_node->set_sn(s);
                 BEGIN_OP();
-                new_node->payload->set_epoch(epochs[_tid].ui);
+                new_node->payload->set_epoch(epochs[EpochSys::tid].ui);
                 /* set_sn must happen before PDELETE of payload since it's 
                  * before linearization point.
                  * Also, this must set sn in place since we still remain in
@@ -105,7 +105,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
                  */
                 // new_node->set_sn(s);
                 if((cur_tail->next).CAS_verify(next, new_node)){
-                    esys->register_alloc_pblk(new_node->payload, epochs[_tid].ui);
+                    esys->register_alloc_pblk(new_node->payload, epochs[EpochSys::tid].ui);
                     END_OP;
                     break;
                 }

@@ -331,17 +331,17 @@ bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
     // now r.cnt must be ..00, and r.cnt+1 is ..01, which means "nbptr
     // contains a descriptor" and "a descriptor is in progress"
     assert((r.cnt & 3UL) == 0UL);
-    new (&local_descs[_tid].ui) sc_desc_t(r.cnt+1, 
+    new (&local_descs[EpochSys::tid].ui) sc_desc_t(r.cnt+1, 
                                 reinterpret_cast<uint64_t>(this), 
                                 expected.val, 
                                 reinterpret_cast<uint64_t>(desired), 
-                                epochs[_tid].ui);
-    nbptr_t new_r(reinterpret_cast<uint64_t>(&local_descs[_tid].ui), r.cnt+1);
+                                epochs[EpochSys::tid].ui);
+    nbptr_t new_r(reinterpret_cast<uint64_t>(&local_descs[EpochSys::tid].ui), r.cnt+1);
     if(!nbptr.compare_exchange_strong(r,new_r)){
         return false;
     }
-    local_descs[_tid].ui.try_complete(esys, reinterpret_cast<uint64_t>(this));
-    if(local_descs[_tid].ui.committed()) return true;
+    local_descs[EpochSys::tid].ui.try_complete(esys, reinterpret_cast<uint64_t>(this));
+    if(local_descs[EpochSys::tid].ui.committed()) return true;
     else return false;
 }
 
