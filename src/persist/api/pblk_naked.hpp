@@ -4,7 +4,7 @@
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
 #include "ConcurrentPrimitives.hpp"
-#include "DCSS.hpp"
+
 #include <typeinfo>
 
 // This api is inspired by object-based RSTM's api.
@@ -12,9 +12,6 @@
 namespace pds{
 
     extern EpochSys* esys;
-    extern padded<uint64_t>* epochs;
-    // extern __thread int _tid;
-    extern padded<sc_desc_t>* local_descs;
 
     inline void init(GlobalTestConfig* gtc){
         // here we assume that pds::init is called before pds::init_thread, hence the assertion.
@@ -23,13 +20,7 @@ namespace pds{
         if (EpochSys::tid == -1){
             EpochSys::tid = 0;
         }
-        sys_mode = ONLINE;
-        PBlk::init(gtc->task_num);
-        epochs = new padded<uint64_t>[gtc->task_num];
-        local_descs = new padded<sc_desc_t>[gtc->task_num];
-        for(int i = 0; i < gtc->task_num; i++){
-            epochs[i].ui = NULL_EPOCH;
-        }
+        esys->sys_mode = ONLINE;
         esys = new EpochSys(gtc);
     }
 
@@ -44,37 +35,37 @@ namespace pds{
     }
 
     #define CHECK_EPOCH() ({\
-        esys->check_epoch(epochs[EpochSys::tid].ui);\
+        esys->check_epoch(esys->epochs[EpochSys::tid].ui);\
     })
 
     #define BEGIN_OP( ... ) ({ \
-    assert(epochs[EpochSys::tid].ui == NULL_EPOCH);\
-    epochs[EpochSys::tid].ui = esys->begin_transaction();\
+    assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);\
+    esys->epochs[EpochSys::tid].ui = esys->begin_transaction();\
     std::vector<PBlk*> __blks = { __VA_ARGS__ };\
     for (auto b = __blks.begin(); b != __blks.end(); b++){\
-        esys->register_alloc_pblk(*b, epochs[EpochSys::tid].ui);\
+        esys->register_alloc_pblk(*b, esys->epochs[EpochSys::tid].ui);\
     }\
-    assert(epochs[EpochSys::tid].ui != NULL_EPOCH); })
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH); })
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_OP ({\
-    if (epochs[EpochSys::tid].ui != NULL_EPOCH){ \
-        esys->end_transaction(epochs[EpochSys::tid].ui);\
-        epochs[EpochSys::tid].ui = NULL_EPOCH;} })
+    if (esys->epochs[EpochSys::tid].ui != NULL_EPOCH){ \
+        esys->end_transaction(esys->epochs[EpochSys::tid].ui);\
+        esys->epochs[EpochSys::tid].ui = NULL_EPOCH;} })
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_READONLY_OP ({\
-    if (epochs[EpochSys::tid].ui != NULL_EPOCH){ \
-        esys->end_readonly_transaction(epochs[EpochSys::tid].ui);\
-        epochs[EpochSys::tid].ui = NULL_EPOCH;} })
+    if (esys->epochs[EpochSys::tid].ui != NULL_EPOCH){ \
+        esys->end_readonly_transaction(esys->epochs[EpochSys::tid].ui);\
+        esys->epochs[EpochSys::tid].ui = NULL_EPOCH;} })
 
     // end current epoch and not move towards next epoch in esys.
     #define ABORT_OP ({ \
-    assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->abort_transaction(epochs[EpochSys::tid].ui);\
-    epochs[EpochSys::tid].ui = NULL_EPOCH;})
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+    esys->abort_transaction(esys->epochs[EpochSys::tid].ui);\
+    esys->epochs[EpochSys::tid].ui = NULL_EPOCH;})
 
 
     class EpochHolder{
@@ -100,31 +91,31 @@ namespace pds{
     EpochHolderReadOnly __holder;
     
     #define PNEW(t, ...) ({\
-    epochs[EpochSys::tid].ui == NULL_EPOCH ? \
+    esys->epochs[EpochSys::tid].ui == NULL_EPOCH ? \
         new t( __VA_ARGS__ ) : \
-        esys->register_alloc_pblk(new t( __VA_ARGS__ ), epochs[EpochSys::tid].ui);})
+        esys->register_alloc_pblk(new t( __VA_ARGS__ ), esys->epochs[EpochSys::tid].ui);})
 
     #define PDELETE(b) ({\
-    if (sys_mode == ONLINE) {\
-    assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->free_pblk(b, epochs[EpochSys::tid].ui);}})
+    if (esys->sys_mode == ONLINE) {\
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+    esys->free_pblk(b, esys->epochs[EpochSys::tid].ui);}})
 
     #define PDELETE_DATA(b) ({\
-        if (sys_mode == ONLINE) {\
+        if (esys->sys_mode == ONLINE) {\
             delete(b);\
         }})
 
     #define PRETIRE(b) ({\
-    assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->retire_pblk(b, epochs[EpochSys::tid].ui);\
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+    esys->retire_pblk(b, esys->epochs[EpochSys::tid].ui);\
     })
 
     #define PRECLAIM(b) ({\
-    if (epochs[EpochSys::tid].ui == NULL_EPOCH){\
+    if (esys->epochs[EpochSys::tid].ui == NULL_EPOCH){\
         BEGIN_OP_AUTOEND();\
-        esys->reclaim_pblk(b, epochs[EpochSys::tid].ui);\
+        esys->reclaim_pblk(b, esys->epochs[EpochSys::tid].ui);\
     } else {\
-        esys->reclaim_pblk(b, epochs[EpochSys::tid].ui);\
+        esys->reclaim_pblk(b, esys->epochs[EpochSys::tid].ui);\
     }\
     })
 
@@ -142,29 +133,29 @@ namespace pds{
     public:\
     /* get method open a pblk for read. */\
     t TOKEN_CONCAT(get_, n)() const{\
-        assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-        return esys->openread_pblk(this, epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
+        assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return esys->openread_pblk(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
     }\
     /* get method open a pblk for read. Allows old-see-new reads. */\
     t TOKEN_CONCAT(get_unsafe_, n)() const{\
-        if(epochs[EpochSys::tid].ui != NULL_EPOCH)\
-            return esys->openread_pblk_unsafe(this, epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
+        if(esys->epochs[EpochSys::tid].ui != NULL_EPOCH)\
+            return esys->openread_pblk_unsafe(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
         else\
             return TOKEN_CONCAT(m_, n);\
     }\
     /* set method open a pblk for write. return a new copy when necessary */\
     template <class in_type>\
     T* TOKEN_CONCAT(set_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
-        assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-        auto ret = esys->openwrite_pblk(this, epochs[EpochSys::tid].ui);\
+        assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        auto ret = esys->openwrite_pblk(this, esys->epochs[EpochSys::tid].ui);\
         ret->TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
-        esys->register_update_pblk(ret, epochs[EpochSys::tid].ui);\
+        esys->register_update_pblk(ret, esys->epochs[EpochSys::tid].ui);\
         return ret;\
     }\
     /* set the field by the parameter. called only outside BEGIN_OP and END_OP */\
     template <class in_type>\
     void TOKEN_CONCAT(set_unsafe_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
-        assert(epochs[EpochSys::tid].ui == NULL_EPOCH);\
+        assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);\
         TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
     }
 
@@ -178,20 +169,20 @@ namespace pds{
         t TOKEN_CONCAT(m_, n)[s];\
     /* get method open a pblk for read. */\
     t TOKEN_CONCAT(get_, n)(int i) const{\
-        assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-        return esys->openread_pblk(this, epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
+        assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return esys->openread_pblk(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
     }\
     /* get method open a pblk for read. Allows old-see-new reads. */\
     t TOKEN_CONCAT(get_unsafe_, n)(int i) const{\
-        assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-        return esys->openread_pblk_unsafe(this, epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
+        assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return esys->openread_pblk_unsafe(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
     }\
     /* set method open a pblk for write. return a new copy when necessary */\
     T* TOKEN_CONCAT(set_, n)(int i, t TOKEN_CONCAT(tmp_, n)){\
-        assert(epochs[EpochSys::tid].ui != NULL_EPOCH);\
-        auto ret = esys->openwrite_pblk(this, epochs[EpochSys::tid].ui);\
+        assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        auto ret = esys->openwrite_pblk(this, esys->epochs[EpochSys::tid].ui);\
         ret->TOKEN_CONCAT(m_, n)[i] = TOKEN_CONCAT(tmp_, n);\
-        esys->register_update_pblk(ret, epochs[EpochSys::tid].ui);\
+        esys->register_update_pblk(ret, esys->epochs[EpochSys::tid].ui);\
         return ret;\
     }
 
@@ -204,37 +195,11 @@ namespace pds{
     }
 
     inline void recover_mode(){
-        pds::sys_mode = RECOVER;
+        esys->sys_mode = RECOVER;
     }
 
     inline void online_mode(){
-        pds::sys_mode = ONLINE;
+        esys->sys_mode = ONLINE;
     }
-
-    // class PBlk : public PBlkBase{
-    //     friend class EpochSys;
-    // public:
-    //     PBlk():PBlkBase(false){}
-    //     PBlk(const PBlk& oth):PBlkBase(oth){}
-    //     virtual ~PBlk() {}
-    // };
-
-    // class PData : public PBlk{
-    //     friend class EpochSys;
-    // public:
-    //     PData():PBlk(true) {}
-    //     PData(const PData& oth):PBlk(oth){}
-    //     virtual ~PData() {}
-
-    //     template<typename T>
-    //     static T* alloc(size_t s, uint64_t head_id){
-    //         assert(epochs[EpochSys::tid].ui != NULL_EPOCH);
-    //         T* ret = static_cast<T*>(RP_malloc(sizeof(T) + s));
-    //         new (ret) T(data, s);
-    //         esys->register_alloc_pdata(ret, epochs[EpochSys::tid].ui, head_id);
-    //         return ret;
-    //     }
-    // };
-
 }
 #endif

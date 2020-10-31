@@ -15,6 +15,7 @@
 #include "persist_utils.hpp"
 
 #include "common_macros.hpp"
+#include "PersistStructs.hpp"
 #include "TransactionTrackers.hpp"
 #include "PerThreadContainers.hpp"
 #include "ToBePersistedContainers.hpp"
@@ -23,96 +24,9 @@
 
 namespace pds{
 
-// extern __thread int _tid;
-
 enum SysMode {ONLINE, RECOVER};
 
-extern SysMode sys_mode;
-
-struct OldSeeNewException : public std::exception {
-   const char * what () const throw () {
-      return "OldSeeNewException not handled.";
-   }
-};
-
-class EpochSys;
-
-enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
-
-// class PBlk{
-class PBlk : public Persistent{
-    friend class EpochSys;
-    static UIDGenerator uid_generator;
-protected:
-    // Wentao: the first word should NOT be any persistent value for
-    // epoch-system-level recovery (i.e., epoch), as Ralloc repurposes the first
-    // word for block free list, which may interfere with the recovery.
-    // Currently we use (transient) "reserved" as the first word. If we decide to
-    // remove this field, we need to either prepend another dummy word, or
-    // change the block free list in Ralloc.
-
-    // transient.
-    void* _reserved;
-
-    uint64_t epoch = NULL_EPOCH;
-    PBlkType blktype = INIT;
-    uint64_t owner_id = 0; // TODO: make consider abandon this field and use id all the time.
-    uint64_t id = 0;
-    pptr<PBlk> retire = nullptr;
-    // bool persisted = false; // For debug purposes. Might not be needed at the end. 
-
-    // void call_persist(){ // For debug purposes. Might not be needed at the end. 
-    //     persist();
-    //     persisted = true;
-    // }
-public:
-    void set_epoch(uint64_t e){
-        // only for testing
-        epoch=e;
-    }
-    static void init(int task_num){
-        uid_generator.init(task_num);
-    }
-    // id gets inited by EpochSys instance.
-    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
-    // id gets inited by EpochSys instance.
-    PBlk(const PBlk* owner): 
-        blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id) {}
-    PBlk(const PBlk& oth): blktype(oth.blktype==OWNED? OWNED:INIT), owner_id(oth.owner_id), id(oth.id) {}
-    inline uint64_t get_id() {return id;}
-    virtual pptr<PBlk> get_data() {return nullptr;}
-    virtual ~PBlk(){
-        // Wentao: we need to zeroize epoch and flush it, avoiding it left after free
-        epoch = NULL_EPOCH;
-        // persist_func::clwb(&epoch);
-    }
-};
-
-template<typename T>
-class PBlkArray : public PBlk{
-    friend class EpochSys;
-    size_t size;
-    // NOTE: see EpochSys::alloc_pblk_array() for its sementical allocators.
-    PBlkArray(): PBlk(){}
-    PBlkArray(PBlk* owner) : PBlk(owner), content((T*)((char*)this + sizeof(PBlkArray<T>))){}
-public:
-    PBlkArray(const PBlkArray<T>& oth): PBlk(oth), size(oth.size),
-        content((T*)((char*)this + sizeof(PBlkArray<T>))){}
-    virtual ~PBlkArray(){};
-    T* content; //transient ptr
-    inline size_t get_size()const{return size;}
-};
-
-struct Epoch : public PBlk{
-    std::atomic<uint64_t> global_epoch;
-    void persist(){}
-    Epoch(){
-        global_epoch.store(NULL_EPOCH, std::memory_order_relaxed);
-    }
-};
-
 class EpochSys{
-    
 private:
     // persistent fields:
     Epoch* epoch_container = nullptr;
@@ -137,10 +51,24 @@ public:
 
     /* static */
     static thread_local int tid;
-
+    
     std::mutex dedicated_epoch_advancer_lock;
 
+    /* public members for API only */
+    // current epoch of each thread.
+    padded<uint64_t>* epochs = nullptr;
+    // local descriptors for DCSS
+    // TODO: maybe put this into a derived class for NB data structures?
+    padded<sc_desc_t>* local_descs = nullptr;
+    // system mode that toggles on/off PDELETE for recovery purpose.
+    SysMode sys_mode = ONLINE;
+
     EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
+        epochs = new padded<uint64_t>[gtc->task_num];
+        for(int i = 0; i < gtc->task_num; i++){
+            epochs[i].ui = NULL_EPOCH;
+        }
+        local_descs = new padded<sc_desc_t>[gtc->task_num];
         reset(); // TODO: change to recover() later on.
     }
 
@@ -160,6 +88,8 @@ public:
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
+        delete epochs;
+        delete local_descs;
     }
 
     void parse_env();
