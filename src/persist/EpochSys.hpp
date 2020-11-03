@@ -45,8 +45,6 @@ private:
     GlobalTestConfig* gtc = nullptr;
     int task_num;
 
-    bool consistent_increment(std::atomic<uint64_t>& counter, const uint64_t c);
-
 public:
 
     /* static */
