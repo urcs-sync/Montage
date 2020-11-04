@@ -113,8 +113,7 @@ public:
     }
     
     void cleanup(GlobalTestConfig *gtc) {
-        pds::finalize();
-        Persistent::finalize();
+        delete g;
     }
 };
 #endif

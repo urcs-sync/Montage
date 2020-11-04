@@ -138,8 +138,7 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
 
 template <class K, class V>
 void RecoverVerifyTest<K,V>::cleanup(GlobalTestConfig* gtc){
-    pds::finalize();
-    Persistent::finalize();
+    delete m;
 }
 
 #endif

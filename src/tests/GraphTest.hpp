@@ -93,8 +93,7 @@ class GraphTest : public Test {
         }
 
         void cleanup(GlobalTestConfig *gtc) {
-            pds::finalize();
-            Persistent::finalize();
+            delete g;
         }
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {

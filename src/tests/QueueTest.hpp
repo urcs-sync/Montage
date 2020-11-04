@@ -197,8 +197,7 @@ public:
         Savitar_core_finalize();
         pthread_mutex_destroy(&snapshot_lock);
 #endif
-        pds::finalize();
-        Persistent::finalize();
+        delete q;
     }
     void getRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();
