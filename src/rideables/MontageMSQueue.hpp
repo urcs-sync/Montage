@@ -35,7 +35,7 @@ private:
 
         Node(): next(nullptr), payload(nullptr){}; 
         Node(T v): next(nullptr), payload(PNEW(Payload, v)){
-            assert(epochs[_tid].ui == NULL_EPOCH);
+            assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);
         };
 
         void set_sn(uint64_t s){

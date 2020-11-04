@@ -23,9 +23,9 @@ namespace pds{
 
     class EpochSys;
 
-    ////////////////////////////
-    // PBlk-related structurs //
-    ////////////////////////////
+    /////////////////////////////
+    // PBlk-related structures //
+    /////////////////////////////
 
     class PBlk : public Persistent{
         friend class EpochSys;

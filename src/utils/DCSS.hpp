@@ -64,11 +64,11 @@ nbptr_t atomic_nbptr_t<T>::load(){
 
 template<typename T>
 nbptr_t atomic_nbptr_t<T>::load_verify(){
-    assert(esys->epochs[EpochSys::_tid].ui != NULL_EPOCH);
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);
     nbptr_t r;
     while(true){
         r = nbptr.load();
-        if(esys->check_epoch(esys->epochs[EpochSys::_tid].ui)){
+        if(esys->check_epoch(esys->epochs[EpochSys::tid].ui)){
             nbptr_t ret(r.val,r.cnt+1);
             if(nbptr.compare_exchange_strong(r, ret)){
                 return r;
@@ -81,8 +81,8 @@ nbptr_t atomic_nbptr_t<T>::load_verify(){
 
 template<typename T>
 bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
-    assert(esys->epochs[EpochSys::_tid].ui != NULL_EPOCH);
-    if(esys->check_epoch(esys->epochs[EpochSys::_tid].ui)){
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);
+    if(esys->check_epoch(esys->epochs[EpochSys::tid].ui)){
         nbptr_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
         return nbptr.compare_exchange_strong(expected, new_r);
     } else {
@@ -125,7 +125,7 @@ nbptr_t atomic_nbptr_t<T>::load_verify(){
 
 template<typename T>
 bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
-    assert(esys->epochs[EpochSys::_tid].ui != NULL_EPOCH);
+    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);
     // total_cnt.fetch_add(1);
 #ifdef USE_TSX
     unsigned status = _xbegin();
@@ -134,7 +134,7 @@ bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
         if(!r.is_desc()){
             if( r.cnt!=expected.cnt ||
                 r.val!=expected.val ||
-                !esys->check_epoch(esys->epochs[EpochSys::_tid].ui)){
+                !esys->check_epoch(esys->epochs[EpochSys::tid].ui)){
                 _xend();
                 return false;
             } else {

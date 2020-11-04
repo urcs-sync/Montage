@@ -20,7 +20,6 @@ namespace pds{
         if (EpochSys::tid == -1){
             EpochSys::tid = 0;
         }
-        esys->sys_mode = ONLINE;
         esys = new EpochSys(gtc);
     }
 
