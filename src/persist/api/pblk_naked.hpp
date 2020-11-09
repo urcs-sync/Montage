@@ -38,34 +38,22 @@ namespace pds{
     })
 
     #define BEGIN_OP( ... ) ({ \
-    assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);\
-    esys->epochs[EpochSys::tid].ui = esys->begin_transaction();\
     std::vector<PBlk*> __blks = { __VA_ARGS__ };\
-    for (auto b = __blks.begin(); b != __blks.end(); b++){\
-        esys->register_alloc_pblk(*b, esys->epochs[EpochSys::tid].ui);\
-    }\
-    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH); })
+    esys->begin_op(__blks);})
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_OP ({\
-    if (esys->epochs[EpochSys::tid].ui != NULL_EPOCH){ \
-        esys->end_transaction(esys->epochs[EpochSys::tid].ui);\
-        esys->epochs[EpochSys::tid].ui = NULL_EPOCH;} })
+    esys->end_op(); })
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_READONLY_OP ({\
-    if (esys->epochs[EpochSys::tid].ui != NULL_EPOCH){ \
-        esys->end_readonly_transaction(esys->epochs[EpochSys::tid].ui);\
-        esys->epochs[EpochSys::tid].ui = NULL_EPOCH;} })
+    esys->end_readonly_op(); })
 
     // end current epoch and not move towards next epoch in esys.
     #define ABORT_OP ({ \
-    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->abort_transaction(esys->epochs[EpochSys::tid].ui);\
-    esys->epochs[EpochSys::tid].ui = NULL_EPOCH;})
-
+    esys->abort_op(); })
 
     class EpochHolder{
     public:

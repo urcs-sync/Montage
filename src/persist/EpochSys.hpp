@@ -116,6 +116,39 @@ public:
         }
         Persistent::simulate_crash(tid);
     }
+
+    /////////
+    // API //
+    /////////
+
+    void begin_op(std::vector<PBlk*>& blks){
+        assert(epochs[tid].ui == NULL_EPOCH);
+        epochs[tid].ui = esys->begin_transaction();
+        for (auto b = blks.begin(); b != blks.end(); b++){
+            register_alloc_pblk(*b, epochs[tid].ui);
+        }
+    }
+
+    void end_op(){
+        if (epochs[tid].ui != NULL_EPOCH){
+            end_transaction(epochs[tid].ui);
+            epochs[tid].ui = NULL_EPOCH;
+        }
+    }
+
+    void end_readonly_op(){
+        if (epochs[tid].ui != NULL_EPOCH){
+            end_readonly_transaction(epochs[tid].ui);
+            epochs[tid].ui = NULL_EPOCH;
+        }
+    }
+
+    void abort_op(){
+        assert(epochs[tid].ui != NULL_EPOCH);
+        abort_transaction(epochs[tid].ui);
+        epochs[tid].ui = NULL_EPOCH;
+    }
+
     ////////////////
     // Operations //
     ////////////////
