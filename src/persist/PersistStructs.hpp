@@ -12,6 +12,8 @@
 #include "Persistent.hpp"
 #include "common_macros.hpp"
 
+class Recoverable;
+
 namespace pds{
     struct OldSeeNewException : public std::exception {
         const char * what () const throw () {
@@ -22,6 +24,7 @@ namespace pds{
     enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
 
     class EpochSys;
+    
 
     /////////////////////////////
     // PBlk-related structures //
@@ -58,8 +61,9 @@ namespace pds{
         }
         // id gets inited by EpochSys instance.
         PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
+        PBlk(Recoverable* ds);
         // id gets inited by EpochSys instance.
-        PBlk(const PBlk* owner): 
+        PBlk(const PBlk* owner):
             blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id) {}
         PBlk(const PBlk& oth): blktype(oth.blktype==OWNED? OWNED:INIT), owner_id(oth.owner_id), id(oth.id) {}
         inline uint64_t get_id() {return id;}

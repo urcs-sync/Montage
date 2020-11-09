@@ -1,7 +1,12 @@
 #include "PersistStructs.hpp"
 #include "EpochSys.hpp"
+#include "Recoverable.hpp"
 
 namespace pds{
+
+PBlk::PBlk(Recoverable* ds){
+    ds->register_alloc_pblk(this);
+}
 
 void sc_desc_t::try_complete(EpochSys* esys, uint64_t addr){
     nbptr_t _d = nbptr.load();
