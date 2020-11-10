@@ -91,18 +91,10 @@ namespace pds{
         }})
 
     #define PRETIRE(b) ({\
-    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->retire_pblk(b, esys->epochs[EpochSys::tid].ui);\
-    })
+        esys->pretire(b);})
 
     #define PRECLAIM(b) ({\
-    if (esys->epochs[EpochSys::tid].ui == NULL_EPOCH){\
-        BEGIN_OP_AUTOEND();\
-        esys->reclaim_pblk(b, esys->epochs[EpochSys::tid].ui);\
-    } else {\
-        esys->reclaim_pblk(b, esys->epochs[EpochSys::tid].ui);\
-    }\
-    })
+        esys->preclaim(b);})
 
     // macro for concatenating two tokens into a new token
     #define TOKEN_CONCAT(a,b)  a ## b

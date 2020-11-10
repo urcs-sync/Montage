@@ -172,6 +172,30 @@ public:
         }
     }
 
+    template<typename T>
+    void pretire(T* b){
+        ASSERT_DERIVE(T, PBlk);
+        ASSERT_COPY(T);
+
+        assert(eochs[tid].ui != NULL_EPOCH);
+        retire_pblk(b, epochs[tid].ui);
+
+    }
+
+    template<typename T>
+    void preclaim(T* b){
+        ASSERT_DERIVE(T, PBlk);
+        ASSERT_COPY(T);
+
+        if (epochs[tid].ui == NULL_EPOCH){
+            begin_op();
+        }
+        reclaim_pblk(b, epochs[tid].ui);
+        if (epochs[tid].ui == NULL_EPOCH){
+            end_op();
+        }
+    }
+
     ////////////////
     // Operations //
     ////////////////
