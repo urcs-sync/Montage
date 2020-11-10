@@ -3,6 +3,7 @@
 
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
+#include "Recoverable.hpp"
 #include "ConcurrentPrimitives.hpp"
 
 #include <typeinfo>
@@ -37,23 +38,23 @@ namespace pds{
         esys->check_epoch(esys->epochs[EpochSys::tid].ui);\
     })
 
+    // TODO: get rid of arguments in rideables.
     #define BEGIN_OP( ... ) ({ \
-    std::vector<PBlk*> __blks = { __VA_ARGS__ };\
-    esys->begin_op(__blks);})
+        esys->begin_op();})
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_OP ({\
-    esys->end_op(); })
+        esys->end_op(); })
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_READONLY_OP ({\
-    esys->end_readonly_op(); })
+        esys->end_readonly_op(); })
 
     // end current epoch and not move towards next epoch in esys.
     #define ABORT_OP ({ \
-    esys->abort_op(); })
+        esys->abort_op(); })
 
     class EpochHolder{
     public:
@@ -77,15 +78,12 @@ namespace pds{
     BEGIN_OP( __VA_ARGS__ );\
     EpochHolderReadOnly __holder;
     
+    // TODO: replace this with just new(Recoverable* ds, ... )
     #define PNEW(t, ...) ({\
-    esys->epochs[EpochSys::tid].ui == NULL_EPOCH ? \
-        new t( __VA_ARGS__ ) : \
         esys->register_alloc_pblk(new t( __VA_ARGS__ ), esys->epochs[EpochSys::tid].ui);})
 
     #define PDELETE(b) ({\
-    if (esys->sys_mode == ONLINE) {\
-    assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    esys->free_pblk(b, esys->epochs[EpochSys::tid].ui);}})
+        esys->pdelete(b);})
 
     #define PDELETE_DATA(b) ({\
         if (esys->sys_mode == ONLINE) {\

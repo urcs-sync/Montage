@@ -52,12 +52,14 @@ public:
     
     std::mutex dedicated_epoch_advancer_lock;
 
-    /* public members for API only */
+    /* public members for API */
     // current epoch of each thread.
     padded<uint64_t>* epochs = nullptr;
     // local descriptors for DCSS
     // TODO: maybe put this into a derived class for NB data structures?
     padded<sc_desc_t>* local_descs = nullptr;
+    // containers for pending allocations
+    padded<std::unordered_set<PBlk*>>* pending_allocs = nullptr;
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
 
@@ -67,6 +69,7 @@ public:
             epochs[i].ui = NULL_EPOCH;
         }
         local_descs = new padded<sc_desc_t>[gtc->task_num];
+        pending_allocs = new padded<std::unordered_set<PBlk*>>[gtc->task_num];
         reset(); // TODO: change to recover() later on.
     }
 
@@ -121,12 +124,14 @@ public:
     // API //
     /////////
 
-    void begin_op(std::vector<PBlk*>& blks){
+    void begin_op(){
         assert(epochs[tid].ui == NULL_EPOCH);
         epochs[tid].ui = esys->begin_transaction();
-        for (auto b = blks.begin(); b != blks.end(); b++){
+        for (auto b = pending_allocs[tid].ui.begin(); 
+            b != pending_allocs[tid].ui.end(); b++){
             register_alloc_pblk(*b, epochs[tid].ui);
         }
+        pending_allocs[tid].ui.clear();
     }
 
     void end_op(){
@@ -147,6 +152,24 @@ public:
         assert(epochs[tid].ui != NULL_EPOCH);
         abort_transaction(epochs[tid].ui);
         epochs[tid].ui = NULL_EPOCH;
+    }
+
+    template<typename T>
+    void pdelete(T* b){
+        ASSERT_DERIVE(T, PBlk);
+        ASSERT_COPY(T);
+
+        if (sys_mode == ONLINE){
+            if (epochs[tid].ui != NULL_EPOCH){
+                free_pblk(b, epochs[tid].ui);
+            } else {
+                if (b->epoch == NULL_EPOCH){
+                    assert(pending_allocs[tid].ui.find(b) != pending_allocs[tid].ui.end());
+                    pending_allocs[tid].ui.erase(b);
+                }
+                delete b;
+            }
+        }
     }
 
     ////////////////
@@ -246,13 +269,14 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     //             "requires copying");
     ASSERT_DERIVE(T, PBlk);
     ASSERT_COPY(T);
-
+        
+    PBlk* blk = b;
     if (c == NULL_EPOCH){
         // register alloc before BEGIN_OP, return. Will be done by
         // the BEGIN_OP that calls this again with a non-NULL c.
+        pending_allocs[tid].ui.insert(blk);
         return b;
     }
-    PBlk* blk = b;
     blk->epoch = c;
     // Wentao: It's possible that payload is registered multiple times
     assert(blk->blktype == INIT || blk->blktype == OWNED || 
