@@ -71,30 +71,34 @@ namespace pds{
     };
 
     #define BEGIN_OP_AUTOEND( ... ) \
-    BEGIN_OP( __VA_ARGS__ );\
+    BEGIN_OP();\
     EpochHolder __holder;
 
     #define BEGIN_READONLY_OP_AUTOEND( ... ) \
-    BEGIN_OP( __VA_ARGS__ );\
+    BEGIN_OP();\
     EpochHolderReadOnly __holder;
     
-    // TODO: replace this with just new(Recoverable* ds, ... )
     #define PNEW(t, ...) ({\
-        esys->register_alloc_pblk(new t( __VA_ARGS__ ), esys->epochs[EpochSys::tid].ui);})
+        esys->pnew<t>(__VA_ARGS__ );})
 
     #define PDELETE(b) ({\
         esys->pdelete(b);})
-
-    #define PDELETE_DATA(b) ({\
-        if (esys->sys_mode == ONLINE) {\
-            delete(b);\
-        }})
 
     #define PRETIRE(b) ({\
         esys->pretire(b);})
 
     #define PRECLAIM(b) ({\
         esys->preclaim(b);})
+
+    // Hs: This is for "owned" PBlk's, currently not used in code base.
+    // may be useful for "data" blocks like dynamically-sized
+    // persistent String payload.
+    #define PDELETE_DATA(b) ({\
+        if (esys->sys_mode == ONLINE) {\
+            delete(b);\
+        }})
+
+
 
     // macro for concatenating two tokens into a new token
     #define TOKEN_CONCAT(a,b)  a ## b
@@ -109,11 +113,21 @@ namespace pds{
         t TOKEN_CONCAT(m_, n);\
     public:\
     /* get method open a pblk for read. */\
+    t TOKEN_CONCAT(get_, n)(Recoverable* ds) const{\
+        assert(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return ds->_esys->openread_pblk(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
+    }\
     t TOKEN_CONCAT(get_, n)() const{\
         assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
         return esys->openread_pblk(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
     }\
     /* get method open a pblk for read. Allows old-see-new reads. */\
+    t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds) const{\
+        if(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH)\
+            return ds->_esys->openread_pblk_unsafe(this, ds->_esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
+        else\
+            return TOKEN_CONCAT(m_, n);\
+    }\
     t TOKEN_CONCAT(get_unsafe_, n)() const{\
         if(esys->epochs[EpochSys::tid].ui != NULL_EPOCH)\
             return esys->openread_pblk_unsafe(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n);\
@@ -121,6 +135,14 @@ namespace pds{
             return TOKEN_CONCAT(m_, n);\
     }\
     /* set method open a pblk for write. return a new copy when necessary */\
+    template <class in_type>\
+    T* TOKEN_CONCAT(set_, n)(Recoverable* ds, const in_type& TOKEN_CONCAT(tmp_, n)){\
+        assert(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        auto ret = ds->_esys->openwrite_pblk(this, ds->_esys->epochs[EpochSys::tid].ui);\
+        ret->TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
+        ds->_esys->register_update_pblk(ret, ds->_esys->epochs[EpochSys::tid].ui);\
+        return ret;\
+    }\
     template <class in_type>\
     T* TOKEN_CONCAT(set_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
         assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
@@ -130,6 +152,11 @@ namespace pds{
         return ret;\
     }\
     /* set the field by the parameter. called only outside BEGIN_OP and END_OP */\
+    template <class in_type>\
+    void TOKEN_CONCAT(set_unsafe_, n)(Recoverable* ds, const in_type& TOKEN_CONCAT(tmp_, n)){\
+        assert(ds->_esys->epochs[EpochSys::tid].ui == NULL_EPOCH);\
+        TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
+    }\
     template <class in_type>\
     void TOKEN_CONCAT(set_unsafe_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
         assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);\
@@ -145,16 +172,31 @@ namespace pds{
     protected:\
         t TOKEN_CONCAT(m_, n)[s];\
     /* get method open a pblk for read. */\
+    t TOKEN_CONCAT(get_, n)(Recoverable* ds, int i) const{\
+        assert(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return ds->_esys->openread_pblk(this, ds->_esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
+    }\
     t TOKEN_CONCAT(get_, n)(int i) const{\
         assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
         return esys->openread_pblk(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
     }\
     /* get method open a pblk for read. Allows old-see-new reads. */\
+    t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds, int i) const{\
+        assert(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        return ds->_esys->openread_pblk_unsafe(this, ds->_esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
+    }\
     t TOKEN_CONCAT(get_unsafe_, n)(int i) const{\
         assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
         return esys->openread_pblk_unsafe(this, esys->epochs[EpochSys::tid].ui)->TOKEN_CONCAT(m_, n)[i];\
     }\
     /* set method open a pblk for write. return a new copy when necessary */\
+    T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
+        assert(ds->_esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+        auto ret = ds->_esys->openwrite_pblk(this, ds->_esys->epochs[EpochSys::tid].ui);\
+        ret->TOKEN_CONCAT(m_, n)[i] = TOKEN_CONCAT(tmp_, n);\
+        ds->_esys->register_update_pblk(ret, ds->_esys->epochs[EpochSys::tid].ui);\
+        return ret;\
+    }\
     T* TOKEN_CONCAT(set_, n)(int i, t TOKEN_CONCAT(tmp_, n)){\
         assert(esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
         auto ret = esys->openwrite_pblk(this, esys->epochs[EpochSys::tid].ui);\
@@ -172,11 +214,11 @@ namespace pds{
     }
 
     inline void recover_mode(){
-        esys->sys_mode = RECOVER;
+        esys->recover_mode();
     }
 
     inline void online_mode(){
-        esys->sys_mode = ONLINE;
+        esys->online_mode();
     }
 }
 #endif

@@ -61,7 +61,6 @@ namespace pds{
         }
         // id gets inited by EpochSys instance.
         PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
-        PBlk(Recoverable* ds);
         // id gets inited by EpochSys instance.
         PBlk(const PBlk* owner):
             blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id) {}

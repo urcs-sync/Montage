@@ -129,8 +129,8 @@ namespace pds{
         do{
             ret = global_epoch->load(std::memory_order_seq_cst);
         } while(!trans_tracker->consistent_register_active(ret, ret));
-        //to_be_freed->free_on_new_epoch(ret);
         to_be_freed->free_on_new_epoch(ret);
+        
         return ret;
     }
 

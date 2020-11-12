@@ -18,6 +18,3 @@ Recoverable::~Recoverable(){
 void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){
     pds::init_thread(ltc->tid);
 }
-void Recoverable::register_alloc_pblk(pds::PBlk* pblk){
-    _esys->register_alloc_pblk(pblk, _esys->epochs[pds::EpochSys::tid].ui);
-}

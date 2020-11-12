@@ -95,7 +95,6 @@ public:
 
     void parse_env();
 
-    // reset the epoch system. Maybe put it in the constructor later on.
     void reset(){
         task_num = gtc->task_num;
         if (!epoch_container){
@@ -105,11 +104,6 @@ public:
         }
         global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         parse_env();
-
-        // if (uid_generator){
-        //     delete uid_generator;
-        // }
-        // uid_generator = new UIDGenerator(gtc->task_num);
     }
 
     void simulate_crash(){
@@ -125,13 +119,14 @@ public:
     /////////
 
     void begin_op(){
-        assert(epochs[tid].ui == NULL_EPOCH);
+        assert(epochs[tid].ui == NULL_EPOCH); 
         epochs[tid].ui = esys->begin_transaction();
+        // TODO: any room for optimization here?
+        // TODO: put pending_allocs-related stuff into operations?
         for (auto b = pending_allocs[tid].ui.begin(); 
             b != pending_allocs[tid].ui.end(); b++){
             register_alloc_pblk(*b, epochs[tid].ui);
         }
-        pending_allocs[tid].ui.clear();
     }
 
     void end_op(){
@@ -139,6 +134,7 @@ public:
             end_transaction(epochs[tid].ui);
             epochs[tid].ui = NULL_EPOCH;
         }
+        pending_allocs[tid].ui.clear();
     }
 
     void end_readonly_op(){
@@ -146,6 +142,7 @@ public:
             end_readonly_transaction(epochs[tid].ui);
             epochs[tid].ui = NULL_EPOCH;
         }
+        assert(pending_allocs[tid].ui.empty());
     }
 
     void abort_op(){
@@ -179,7 +176,6 @@ public:
 
         assert(eochs[tid].ui != NULL_EPOCH);
         retire_pblk(b, epochs[tid].ui);
-
     }
 
     template<typename T>
@@ -194,6 +190,18 @@ public:
         if (epochs[tid].ui == NULL_EPOCH){
             end_op();
         }
+    }
+
+    // pnew is in a separate file since there are a bunch of them.
+    // add more as needed.
+    #include "pnew.hpp"
+
+    void recover_mode(){
+        sys_mode = RECOVER; // PDELETE -> nop
+    }
+
+    void online_mode(){
+        sys_mode = ONLINE;
     }
 
     ////////////////
@@ -296,8 +304,9 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
         
     PBlk* blk = b;
     if (c == NULL_EPOCH){
-        // register alloc before BEGIN_OP, return. Will be done by
-        // the BEGIN_OP that calls this again with a non-NULL c.
+        // register alloc before BEGIN_OP, put it into pending_allocs bucket and
+        // return. Will be done by the BEGIN_OP that calls this again with a
+        // non-NULL c.
         pending_allocs[tid].ui.insert(blk);
         return b;
     }
