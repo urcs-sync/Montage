@@ -7,8 +7,8 @@
 // TODO: report recover errors/exceptions
 
 class Recoverable{
-public:
     pds::EpochSys* _esys = nullptr;
+public:
     // return num of blocks recovered.
     virtual int recover(bool simulated = false) = 0;
     Recoverable(GlobalTestConfig* gtc);
@@ -68,8 +68,8 @@ public:
     #include "pnew.hpp"
 
     template<typename T>
-    T* register_update_pblk(T* b){
-        return _esys->register_update_pblk(b);
+    void register_update_pblk(T* b){
+        _esys->register_update_pblk(b);
     }
     template<typename T>
     void pdelete(T* b){

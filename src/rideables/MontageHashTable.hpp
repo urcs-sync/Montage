@@ -27,31 +27,32 @@ public:
     }__attribute__((aligned(CACHELINE_SIZE)));
 
     struct ListNode{
+        MontageHashTable* ds;
         // Transient-to-persistent pointer
         Payload* payload = nullptr;
         // Transient-to-transient pointers
         ListNode* next = nullptr;
         ListNode(){}
-        ListNode(K key, V val){
-            payload = PNEW(Payload, key, val);
+        ListNode(MontageHashTable* ds_, K key, V val): ds(ds_){
+            payload = ds->pnew<Payload>(key, val);
         }
         ListNode(Payload* _payload) : payload(_payload) {} // for recovery
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
-            return (K)payload->get_unsafe_key();
+            return (K)payload->get_unsafe_key(ds);
         }
         V get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (V)payload->get_unsafe_val();
+            return (V)payload->get_unsafe_val(ds);
         }
         void set_val(V v){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_val(v);
+            payload = payload->set_val(ds, v);
         }
         ~ListNode(){
             if (payload){
-                PDELETE(payload);
+                ds->pdelete(payload);
             }
         }
     }__attribute__((aligned(CACHELINE_SIZE)));
@@ -74,7 +75,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND();
+        MontageOpHolderReadOnly(this);
             // try{
         ListNode* curr = buckets[idx].head.next;
         while(curr){
@@ -92,10 +93,10 @@ public:
 
     optional<V> put(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND(new_node->payload);
+        MontageOpHolder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -125,10 +126,10 @@ public:
 
     bool insert(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND(new_node->payload);
+        MontageOpHolder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -163,7 +164,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND();
+        MontageOpHolder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
