@@ -118,6 +118,10 @@ public:
     // API //
     /////////
 
+    bool check_epoch(){
+        return check_epoch(epochs[tid].ui);
+    }
+
     void begin_op(){
         assert(epochs[tid].ui == NULL_EPOCH); 
         epochs[tid].ui = esys->begin_transaction();
@@ -171,18 +175,12 @@ public:
 
     template<typename T>
     void pretire(T* b){
-        ASSERT_DERIVE(T, PBlk);
-        ASSERT_COPY(T);
-
         assert(eochs[tid].ui != NULL_EPOCH);
         retire_pblk(b, epochs[tid].ui);
     }
 
     template<typename T>
     void preclaim(T* b){
-        ASSERT_DERIVE(T, PBlk);
-        ASSERT_COPY(T);
-
         if (epochs[tid].ui == NULL_EPOCH){
             begin_op();
         }
@@ -192,9 +190,36 @@ public:
         }
     }
 
-    // pnew is in a separate file since there are a bunch of them.
-    // add more as needed.
-    #include "pnew.hpp"
+    template<typename T>
+    T* register_alloc_pblk(T* b){
+        return register_alloc_pblk(b, epochs[tid].ui);
+    }
+
+    template<typename T>
+    void register_update_pblk(T* b){
+        register_update_pblk(b, epochs[tid].ui);
+    }
+
+    template<typename T>
+    const T* openread_pblk(const T* b){
+        assert(epochs[tid].ui != NULL_EPOCH);
+        return openread_pblk(b, epochs[tid].ui);
+    }
+
+    template<typename T>
+    const T* openread_pblk_unsafe(const T* b){
+        if (epochs[tid].ui != NULL_EPOCH){
+            return openread_pblk_unsafe(b, epochs[tid].ui);
+        } else {
+            return b;
+        }
+    }
+
+    template<typename T>
+    T* openwrite_pblk(T* b){
+        assert(epochs[tid].ui != NULL_EPOCH);
+        return openwrite_pblk(b, epochs[tid].ui);
+    }
 
     void recover_mode(){
         sys_mode = RECOVER; // PDELETE -> nop
