@@ -202,7 +202,7 @@ class MontageGraph : public RGraph, public Recoverable{
             {
                 MontageOpHolder(this);
                 if (std::any_of(v->adjacency_list.begin(), v->adjacency_list.end(), 
-                            [=] (Relation *r) { return r->get_unsafe_dest() == v2; })) {
+                            [=] (Relation *r) { return r->get_unsafe_dest(this) == v2; })) {
                     retval = true;
                 }
             }
@@ -234,7 +234,7 @@ class MontageGraph : public RGraph, public Recoverable{
                 // Scan v1 for an edge containing v2 in its adjacency list...
                 Relation *rdel = nullptr;
                 for (Relation *r : v1->adjacency_list) {
-                    if (r->get_unsafe_dest() == v2->get_id()) {
+                    if (r->get_unsafe_dest(this) == v2->get_id()) {
                         rdel = r;
                         v1->adjacency_list.erase(r);
                         break;
@@ -331,7 +331,7 @@ class MontageGraph : public RGraph, public Recoverable{
                     // Should these be parallel?  I'm not sure..
                     BasePayload* b = reinterpret_cast<BasePayload*>(itr->second);
 
-                    switch (b->get_unsafe_tag()) {
+                    switch (b->get_unsafe_tag(this)) {
                         case 0:
                             {
                                 Vertex* v = reinterpret_cast<Vertex*>(itr->second);
@@ -346,7 +346,7 @@ class MontageGraph : public RGraph, public Recoverable{
                             }
                         default:
                             {
-                                std::cerr << "Found bad tag " << b->get_unsafe_tag() << std::endl;
+                                std::cerr << "Found bad tag " << b->get_unsafe_tag(this) << std::endl;
                             }
                     }
                 }
@@ -361,7 +361,7 @@ class MontageGraph : public RGraph, public Recoverable{
                 pds::init_thread(omp_get_thread_num());
                 #pragma omp for
                 for (size_t i = 0; i < vertexVector.size(); ++i) {
-                    int id = vertexVector[i]->get_unsafe_id();
+                    int id = vertexVector[i]->get_unsafe_id(this);
                     if (idxToVertex[id] != nullptr) {
                         std::cerr << "Somehow recovered vertex " << id << " twice!" << std::endl;
                         continue;
@@ -393,8 +393,8 @@ class MontageGraph : public RGraph, public Recoverable{
                 #pragma omp for
                 for (size_t i = 0; i < relationVector.size(); ++i) {
                     Relation *e = relationVector[i];
-                    int id1 = e->get_unsafe_src();
-                    int id2 = e->get_unsafe_dest();
+                    int id1 = e->get_unsafe_src(this);
+                    int id2 = e->get_unsafe_dest(this);
                     RelationWrapper item = { id1, id2, e };
                     if (id1 < 0 || (size_t) id1 >= numVertices || id2 < 0 ||  (size_t) id2 >= numVertices) {
                         std::cerr << "Found a relation with a bad edge: (" << id1 << "," << id2 << ")" << std::endl;
@@ -469,10 +469,10 @@ startOver:
                 v->lock();
                 uint64_t seq = v->seqNumber;
                 for (Relation *r : v->adjacency_list) {
-                    vertices.push_back(r->get_unsafe_dest());
+                    vertices.push_back(r->get_unsafe_dest(this));
                 }
                 for (Relation *r : v->dest_list) {
-                    vertices.push_back(r->get_unsafe_src());
+                    vertices.push_back(r->get_unsafe_src(this));
                 }
                 
                 vertices.push_back(id);
@@ -504,7 +504,7 @@ startOver:
                     std::vector<Relation*> toRemoveList;
 
                     for (Relation *r : _v->adjacency_list) {
-                        if (r->get_unsafe_src() == id) {
+                        if (r->get_unsafe_src(this) == id) {
                             toRemoveList.push_back(r);
                         }
                     }
@@ -515,7 +515,7 @@ startOver:
                     toRemoveList.clear();
 
                     for (Relation *r : _v->dest_list) {
-                        if (r->get_unsafe_dest() == id) {
+                        if (r->get_unsafe_dest(this) == id) {
                             toRemoveList.push_back(r);
                         }
                     }
@@ -548,7 +548,7 @@ startOver:
         void for_each_edge(int v, std::function<bool(int)> fn) {
             idxToVertex[v]->lock();
             for (Relation *r : idxToVertex[v]->adjacency_list) {
-                if (!fn(r->get_unsafe_dest())) {
+                if (!fn(r->get_unsafe_dest(this))) {
                     break;
                 }
             }

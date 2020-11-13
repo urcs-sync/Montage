@@ -145,15 +145,9 @@ public:\
 t TOKEN_CONCAT(get_, n)(Recoverable* ds) const{\
     return ds->openread_pblk(this)->TOKEN_CONCAT(m_, n);\
 }\
-t TOKEN_CONCAT(get_, n)() const{\
-    return pds::esys->openread_pblk(this)->TOKEN_CONCAT(m_, n);\
-}\
 /* get method open a pblk for read. Allows old-see-new reads. */\
 t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds) const{\
     return ds->openread_pblk_unsafe(this)->TOKEN_CONCAT(m_, n);\
-}\
-t TOKEN_CONCAT(get_unsafe_, n)() const{\
-    return pds::esys->openread_pblk_unsafe(this)->TOKEN_CONCAT(m_, n);\
 }\
 /* set method open a pblk for write. return a new copy when necessary */\
 template <class in_type>\
@@ -164,21 +158,9 @@ T* TOKEN_CONCAT(set_, n)(Recoverable* ds, const in_type& TOKEN_CONCAT(tmp_, n)){
     ds->register_update_pblk(ret);\
     return ret;\
 }\
-template <class in_type>\
-T* TOKEN_CONCAT(set_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
-    assert(pds::esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    auto ret = pds::esys->openwrite_pblk(this);\
-    ret->TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
-    pds::esys->register_update_pblk(ret);\
-    return ret;\
-}\
 /* set the field by the parameter. called only outside BEGIN_OP and END_OP */\
 template <class in_type>\
 void TOKEN_CONCAT(set_unsafe_, n)(Recoverable* ds, const in_type& TOKEN_CONCAT(tmp_, n)){\
-    TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
-}\
-template <class in_type>\
-void TOKEN_CONCAT(set_unsafe_, n)(const in_type& TOKEN_CONCAT(tmp_, n)){\
     TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
 }
 
@@ -194,15 +176,9 @@ protected:\
 t TOKEN_CONCAT(get_, n)(Recoverable* ds, int i) const{\
     return ds->openread_pblk(this)->TOKEN_CONCAT(m_, n)[i];\
 }\
-t TOKEN_CONCAT(get_, n)(int i) const{\
-    return pds::esys->openread_pblk(this)->TOKEN_CONCAT(m_, n)[i];\
-}\
 /* get method open a pblk for read. Allows old-see-new reads. */\
 t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds, int i) const{\
     return ds->openread_pblk_unsafe(this)->TOKEN_CONCAT(m_, n)[i];\
-}\
-t TOKEN_CONCAT(get_unsafe_, n)(int i) const{\
-    return pds::esys->openread_pblk_unsafe(this)->TOKEN_CONCAT(m_, n)[i];\
 }\
 /* set method open a pblk for write. return a new copy when necessary */\
 T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
@@ -211,15 +187,7 @@ T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
     ret->TOKEN_CONCAT(m_, n)[i] = TOKEN_CONCAT(tmp_, n);\
     ds->register_update_pblk(ret);\
     return ret;\
-}\
-T* TOKEN_CONCAT(set_, n)(int i, t TOKEN_CONCAT(tmp_, n)){\
-    assert(pds::esys->epochs[EpochSys::tid].ui != NULL_EPOCH);\
-    auto ret = pds::esys->openwrite_pblk(this);\
-    ret->TOKEN_CONCAT(m_, n)[i] = TOKEN_CONCAT(tmp_, n);\
-    pds::esys->register_update_pblk(ret);\
-    return ret;\
 }
-
 
 namespace pds{
 

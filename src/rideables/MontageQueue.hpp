@@ -43,7 +43,7 @@ private:
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload->set_unsafe_sn(s);
+            payload->set_unsafe_sn(ds, s);
         }
         T get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
