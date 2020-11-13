@@ -27,15 +27,17 @@ namespace pds{
 
     void sc_desc_t::try_complete(Recoverable* ds, uint64_t addr){
         nbptr_t _d = nbptr.load();
-        int ret = 0;
+        // int ret = 0;
         if(_d.val!=addr) return;
         if(in_progress(_d)){
             if(ds->check_epoch(cas_epoch)){
-                ret = 2;
-                ret |= commit(_d);
+                // ret = 2;
+                // ret |= commit(_d);
+                commit(_d);
             } else {
-                ret = 4;
-                ret |= abort(_d);
+                // ret = 4;
+                // ret |= abort(_d);
+                abort(_d);
             }
         }
         cleanup(_d);

@@ -29,15 +29,9 @@ public:
 
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         q->init_thread(gtc, ltc);
-        // pds::init_thread(ltc->tid);
     }
 
     void init(GlobalTestConfig* gtc){
-        // // init Persistent allocator
-        // Persistent::init();
-
-        // // init epoch system
-        // pds::init(gtc);
 
         getRideable(gtc);
         

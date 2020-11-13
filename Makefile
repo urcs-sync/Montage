@@ -118,7 +118,7 @@ ARCHIVEDIR:=./lib
 # -since we do pattern matching between this list and the
 # source files, the file path specified must be the same
 # type (absolute or relative)
-EXECUTABLES:= ./src/main.cpp
+EXECUTABLES:= ./src/main.cpp #./unit_test/dcss.cpp
 
 # A list of source files contained in the
 # source directory to exclude from the build

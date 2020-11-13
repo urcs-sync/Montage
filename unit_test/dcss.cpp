@@ -1,6 +1,7 @@
 #include "Persistent.hpp"
 #include "Recoverable.hpp"
 #include "TestConfig.hpp"
+#include "montage_global_api.hpp"
 #include <thread>
 #include <atomic>
 #include <vector>

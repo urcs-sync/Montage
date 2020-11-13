@@ -97,7 +97,6 @@ public:
         if(ltc->tid==0)
             doPrefill(gtc);
 #endif
-        // pds::init_thread(ltc->tid);
     }
 	void init(GlobalTestConfig* gtc){
 #ifdef PRONTO
@@ -115,11 +114,6 @@ public:
         assert(sigaction(SIGSEGV, &sa, NULL) == 0);
         assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
-        // // init Persistent allocator
-        // Persistent::init();
-
-        // // init epoch system
-        // pds::init(gtc);
 
         getRideable(gtc);
         
@@ -177,7 +171,6 @@ public:
 		}
 	}
 	void doPrefill(GlobalTestConfig* gtc){
-		// pds::init_thread(0);
 		if (this->prefill > 0){
             /* Wentao: 
 			 *	to avoid repeated k during prefilling, we instead 
@@ -261,7 +254,6 @@ inline std::string MapTest<std::string,std::string>::fromInt(uint64_t v){
 template<>
 inline void MapTest<std::string,std::string>::doPrefill(GlobalTestConfig* gtc){
 	// randomly prefill until specified amount of keys are successfully inserted
-	// pds::init_thread(0);
 	if (this->prefill > 0){
 		std::mt19937_64 gen_k(0);
 		// int stride = this->range/this->prefill;

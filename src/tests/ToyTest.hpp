@@ -17,7 +17,6 @@ class ToyTest : public Test{
         // if (!t){
         //     errexit("ToyTest must be run on Toy.");
         // }
-        // pds::init(gtc);
 
         Persistent::init();
     }
@@ -28,7 +27,6 @@ class ToyTest : public Test{
 	// called by all threads in parallel
 	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         t->init_thread(gtc, ltc);
-        // pds::init_thread(ltc->tid);
     }
 	// runs the test
 	// returns number of operations completed by that thread

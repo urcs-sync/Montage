@@ -34,8 +34,6 @@ public:
 
     void init(GlobalTestConfig *gtc) {
         std::cout << "initializing" << std::endl;
-        // Persistent::init();
-        // pds::init(gtc);
         uint64_t new_ops = total_ops / gtc->task_num;
         thd_ops = new uint64_t[gtc->task_num];
         for (auto i = 0; i<gtc->task_num; i++) {
@@ -51,7 +49,6 @@ public:
             errexit("TGraphConstructionTest must be run on RGraph type object.");
         }
 
-        // pds::init_thread(0); 
         /* set interval to inf so this won't be killed by timeout */
         gtc->interval = numeric_limits<double>::max();
         std::cout << "Finished init func" << std::endl;
@@ -81,7 +78,6 @@ public:
         return 0;
     }
     void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
-        // pds::init_thread(ltc->tid);
         g->init_thread(gtc, ltc);
         // Loop through the files in parallel
         int num_threads = gtc->task_num;

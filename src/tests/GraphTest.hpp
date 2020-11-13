@@ -47,8 +47,6 @@ class GraphTest : public Test {
             }
 
         void init(GlobalTestConfig *gtc) {
-            // Persistent::init();
-            // pds::init(gtc);
             uint64_t new_ops = total_ops / gtc->task_num;
             thd_ops = new uint64_t[gtc->task_num];
             for (int i = 0; i<gtc->task_num; i++) {
@@ -98,7 +96,6 @@ class GraphTest : public Test {
         }
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
-            // pds::init_thread(ltc->tid);
             g->init_thread(gtc, ltc);
             size_t x = max_verts;
             size_t numEdges = (x * x) * 0.5;
