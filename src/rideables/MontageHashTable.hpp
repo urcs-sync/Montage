@@ -205,10 +205,10 @@ public:
 
     int recover(bool simulated){
         if (simulated){
-            pds::recover_mode(); // PDELETE --> noop
+            recover_mode(); // PDELETE --> noop
             // clear transient structures.
             clear();
-            pds::online_mode(); // re-enable PDELETE.
+            online_mode(); // re-enable PDELETE.
         }
 
         int rec_cnt = 0;
@@ -217,7 +217,7 @@ public:
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
         auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, PBlk*>* recovered = pds::recover(rec_thd); 
+        std::unordered_map<uint64_t, PBlk*>* recovered = Recoverable::recover(rec_thd); 
         auto end = chrono::high_resolution_clock::now();
         auto dur = end - begin;
         auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
@@ -237,7 +237,7 @@ public:
         begin = chrono::high_resolution_clock::now();
         #pragma omp parallel num_threads(rec_thd)
         {
-            pds::init_thread(omp_get_thread_num());
+            Recoverable::init_thread(omp_get_thread_num());
             #pragma omp for
             for(size_t i = 0; i < payloadVector.size(); ++i){
                 //re-insert payload.

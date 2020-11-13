@@ -92,6 +92,186 @@ namespace pds{
         }
     };
 
+    ////////////////////////////////////////
+    // counted pointer-related structures //
+    ////////////////////////////////////////
+
+    /*
+    * Macro VISIBLE_READ determines which version of API will be used.
+    * Macro USE_TSX determines whether TSX (Intel HTM) will be used.
+    * 
+    * We highly recommend you to use default invisible read version,
+    * since it doesn't need you to handle EpochVerifyException and you
+    * can call just load rather than load_verify throughout your program
+    * 
+    * We provides following double-compare-single-swap (DCSS) API for
+    * nonblocking data structures to use: 
+    * 
+    *  atomic_nbptr_t<T=uint64_t>: atomic double word for storing pointers
+    *  that point to nodes, which link payloads in. It contains following
+    *  functions:
+    * 
+    *      store(T val): 
+    *          store 64-bit long data without sync; cnt doesn't increment
+    * 
+    *      store(nbptr_t d): store(d.val)
+    * 
+    *      nbptr_t load(): 
+    *          load nbptr without verifying epoch
+    * 
+    *      nbptr_t load_verify(): 
+    *          load nbptr and verify epoch, used as lin point; 
+    *          for invisible reads this won't verify epoch
+    * 
+    *      bool CAS(nbptr_t expected, T desired): 
+    *          CAS in desired value and increment cnt if expected 
+    *          matches current nbptr
+    * 
+    *      bool CAS_verify(nbptr_t expected, T desired): 
+    *          CAS in desired value and increment cnt if expected 
+    *          matches current nbptr and global epoch doesn't change
+    *          since BEGIN_OP
+    */
+
+    struct EpochVerifyException : public std::exception {
+        const char * what () const throw () {
+            return "Epoch in which operation wants to linearize has passed; retry required.";
+        }
+    };
+
+    struct sc_desc_t;
+
+    template <class T>
+    class atomic_nbptr_t;
+    class nbptr_t{
+        template <class T>
+        friend class atomic_nbptr_t;
+        inline bool is_desc() const {
+            return (cnt & 3UL) == 1UL;
+        }
+        inline sc_desc_t* get_desc() const {
+            assert(is_desc());
+            return reinterpret_cast<sc_desc_t*>(val);
+        }
+    public:
+        uint64_t val;
+        uint64_t cnt;
+        template <typename T=uint64_t>
+        inline T get_val() const {
+            static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
+            return reinterpret_cast<T>(val);
+        }
+        nbptr_t(uint64_t v, uint64_t c) : val(v), cnt(c) {};
+        nbptr_t() : nbptr_t(0, 0) {};
+
+        inline bool operator==(const nbptr_t & b) const{
+            return val==b.val && cnt==b.cnt;
+        }
+        inline bool operator!=(const nbptr_t & b) const{
+            return !operator==(b);
+        }
+    }__attribute__((aligned(16)));
+
+    template <class T = uint64_t>
+    class atomic_nbptr_t{
+        static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
+    public:
+        // for cnt in nbptr:
+        // desc: ....01
+        // real val: ....00
+        std::atomic<nbptr_t> nbptr;
+        nbptr_t load();
+        nbptr_t load_verify();
+        inline T load_val(){
+            return reinterpret_cast<T>(load().val);
+        }
+        bool CAS_verify(nbptr_t expected, const T& desired);
+        inline bool CAS_verify(nbptr_t expected, const nbptr_t& desired){
+            return CAS_verify(expected,desired.get_val<T>());
+        }
+        // CAS doesn't check epoch nor cnt
+        bool CAS(nbptr_t expected, const T& desired);
+        inline bool CAS(nbptr_t expected, const nbptr_t& desired){
+            return CAS(expected,desired.get_val<T>());
+        }
+        void store(const T& desired);
+        inline void store(const nbptr_t& desired){
+            store(desired.get_val<T>());
+        }
+        atomic_nbptr_t(const T& v) : nbptr(nbptr_t(reinterpret_cast<uint64_t>(v), 0)){};
+        atomic_nbptr_t() : atomic_nbptr_t(T()){};
+    };
+
+    struct sc_desc_t{
+    private:
+        // for cnt in nbptr:
+        // in progress: ....01
+        // committed: ....10 
+        // aborted: ....11
+        std::atomic<nbptr_t> nbptr;
+        const uint64_t old_val;
+        const uint64_t new_val;
+        const uint64_t cas_epoch;
+        inline bool abort(nbptr_t _d){
+            // bring cnt from ..01 to ..11
+            nbptr_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
+            nbptr_t desired(expected);
+            desired.cnt += 2;
+            return nbptr.compare_exchange_strong(expected, desired);
+        }
+        inline bool commit(nbptr_t _d){
+            // bring cnt from ..01 to ..10
+            nbptr_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
+            nbptr_t desired(expected);
+            desired.cnt += 1;
+            return nbptr.compare_exchange_strong(expected, desired);
+        }
+        inline bool committed(nbptr_t _d) const {
+            return (_d.cnt & 0x3UL) == 2UL;
+        }
+        inline bool in_progress(nbptr_t _d) const {
+            return (_d.cnt & 0x3UL) == 1UL;
+        }
+        inline bool match(nbptr_t old_d, nbptr_t new_d) const {
+            return ((old_d.cnt & ~0x3UL) == (new_d.cnt & ~0x3UL)) && 
+                (old_d.val == new_d.val);
+        }
+        void cleanup(nbptr_t old_d){
+            // must be called after desc is aborted or committed
+            nbptr_t new_d = nbptr.load();
+            if(!match(old_d,new_d)) return;
+            assert(!in_progress(new_d));
+            nbptr_t expected(reinterpret_cast<uint64_t>(this),(new_d.cnt & ~0x3UL) | 1UL);
+            if(committed(new_d)) {
+                // bring cnt from ..10 to ..00
+                reinterpret_cast<atomic_nbptr_t<>*>(
+                    new_d.val)->nbptr.compare_exchange_strong(
+                    expected, 
+                    nbptr_t(new_val,new_d.cnt + 2));
+            } else {
+                //aborted
+                // bring cnt from ..11 to ..00
+                reinterpret_cast<atomic_nbptr_t<>*>(
+                    new_d.val)->nbptr.compare_exchange_strong(
+                    expected, 
+                    nbptr_t(old_val,new_d.cnt + 1));
+            }
+        }
+    public:
+        inline bool committed() const {
+            return committed(nbptr.load());
+        }
+        inline bool in_progress() const {
+            return in_progress(nbptr.load());
+        }
+        // TODO: try_complete used to be inline. Try to make it inline again when refactoring is finished.
+        void try_complete(pds::EpochSys* esys, uint64_t addr);
+        
+        sc_desc_t( uint64_t c, uint64_t a, uint64_t o, 
+                    uint64_t n, uint64_t e) : 
+            nbptr(nbptr_t(a,c)), old_val(o), new_val(n), cas_epoch(e){};
+        sc_desc_t() : sc_desc_t(0,0,0,0,0){};
+    };
 }
 
 #endif

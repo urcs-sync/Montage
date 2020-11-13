@@ -11,7 +11,6 @@
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
 #include "persist_struct_api.hpp"
-#include "DCSS.hpp"
 
 using namespace pds;
 
