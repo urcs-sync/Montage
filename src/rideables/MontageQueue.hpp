@@ -30,13 +30,15 @@ public:
 
 private:
     struct Node{
+        MontageQueue* ds;
         Node* next;
         Payload* payload;
         T val; // for debug purpose
 
         Node(): next(nullptr), payload(nullptr){}; 
         // Node(): next(nullptr){}; 
-        Node(T v, uint64_t n=0): next(nullptr), payload(PNEW(Payload, v, n)), val(v){};
+        Node(MontageQueue* ds_, T v, uint64_t n=0): 
+            ds(ds_), next(nullptr), payload(ds_->pnew<Payload>(v, n)), val(v){};
         // Node(T v, uint64_t n): next(nullptr), val(v){};
 
         void set_sn(uint64_t s){
@@ -46,11 +48,11 @@ private:
         T get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
-            return (T)payload->get_unsafe_val();
+            return (T)payload->get_unsafe_val(ds);
             // return val;
         }
         ~Node(){
-            PDELETE(payload);
+            ds->pdelete(payload);
         }
     };
 
@@ -86,12 +88,12 @@ public:
 
 template<typename T>
 void MontageQueue<T>::enqueue(T val, int tid){
-    Node* new_node = new Node(val);
+    Node* new_node = new Node(this, val);
     std::lock_guard<std::mutex> lk(lock);
     // no read or write so impossible to have old see new exception
     new_node->set_sn(global_sn);
     global_sn++;
-    BEGIN_OP_AUTOEND(new_node->payload);
+    MontageOpHolder(this);
     if(tail == nullptr) {
         head = tail = new_node;
         return;
@@ -105,7 +107,7 @@ optional<T> MontageQueue<T>::dequeue(int tid){
     optional<T> res = {};
     // while(true){
     lock.lock();
-    BEGIN_OP_AUTOEND();
+    MontageOpHolder(this);
     // try {
     if(head == nullptr) {
         lock.unlock();
