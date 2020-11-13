@@ -217,7 +217,7 @@ public:
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
         auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, PBlk*>* recovered = Recoverable::recover(rec_thd); 
+        std::unordered_map<uint64_t, PBlk*>* recovered = recover_pblks(rec_thd); 
         auto end = chrono::high_resolution_clock::now();
         auto dur = end - begin;
         auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();

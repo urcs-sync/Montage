@@ -63,6 +63,7 @@ class MontageGraph : public RGraph, public Recoverable{
         };
         class tVertex {
             public:
+                MontageGraph* ds;
                 Vertex *payload = nullptr;
 
                 int id; // cached id
@@ -73,11 +74,11 @@ class MontageGraph : public RGraph, public Recoverable{
 
                 std::mutex lck;
 
-                tVertex(int id, int lbl) {
-                    payload = PNEW(Vertex, id, lbl);
+                tVertex(MontageGraph* ds_, int id, int lbl): ds(ds_) {
+                    payload = ds->pnew<Vertex>(id, lbl);
                     this->id = id;
                 }
-                tVertex(Vertex* p) {
+                tVertex(MontageGraph* ds_, Vertex* p): ds(ds_) {
                     // Use this method for recovery to avoid having to call PNEW when the block already exists.
                     payload = p;
                     this->id = p->get_unsafe_id();
@@ -85,7 +86,7 @@ class MontageGraph : public RGraph, public Recoverable{
 
                 ~tVertex() {
                     if (payload){
-                        PDELETE(payload);
+                        ds->pdelete(payload);
                     }
                 }
 
@@ -122,11 +123,11 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc) {
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
-                idxToVertex[i] = new tVertex(i, -1);
+                idxToVertex[i] = new tVertex(this, i, -1);
             }
         }
 
@@ -138,13 +139,13 @@ class MontageGraph : public RGraph, public Recoverable{
         
         // Thread-safe and does not leak edges
         void clear() {
-            // BEGIN_OP_AUTOEND();
+            // MontageOpHolder(this);
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i]->lock();
             }
             for (size_t i = 0; i < numVertices; i++) {
                 for (Relation *r : idxToVertex[i]->adjacency_list) {
-                    PDELETE(r);
+                    pdelete(r);
                 }
                 idxToVertex[i]->adjacency_list.clear();
                 idxToVertex[i]->dest_list.clear();
@@ -174,7 +175,7 @@ class MontageGraph : public RGraph, public Recoverable{
             }
             
             {
-                BEGIN_OP_AUTOEND();
+                MontageOpHolder(this);
                 Relation* r = PNEW(Relation,v1, v2, weight);
                 v1->adjacency_list.insert(r);
                 v2->dest_list.insert(r);
@@ -199,7 +200,7 @@ class MontageGraph : public RGraph, public Recoverable{
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
             v->lock();            
             {
-                BEGIN_OP_AUTOEND();
+                MontageOpHolder(this);
                 if (std::any_of(v->adjacency_list.begin(), v->adjacency_list.end(), 
                             [=] (Relation *r) { return r->get_unsafe_dest() == v2; })) {
                     retval = true;
@@ -229,7 +230,7 @@ class MontageGraph : public RGraph, public Recoverable{
             }
             
             {
-                BEGIN_OP_AUTOEND();
+                MontageOpHolder(this);
                 // Scan v1 for an edge containing v2 in its adjacency list...
                 Relation *rdel = nullptr;
                 for (Relation *r : v1->adjacency_list) {
@@ -242,7 +243,7 @@ class MontageGraph : public RGraph, public Recoverable{
             
                 if (rdel){
                     v2->dest_list.erase(rdel);
-                    PDELETE(rdel);
+                    pdelete(rdel);
                 }
             }
             
@@ -264,7 +265,7 @@ class MontageGraph : public RGraph, public Recoverable{
          * @param l The new label for the node
          */
         bool set_lbl(int id, int l) {
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             tVertex *v = idxToVertex[id]; 
             v->lock();
             v->set_lbl(l);
@@ -280,7 +281,7 @@ class MontageGraph : public RGraph, public Recoverable{
          * @param w the new weight value
          */
         bool set_weight(int src, int dest, int w) {
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             bool retval = false;
             /*
             tVertex *v = idxToVertex[src];
@@ -298,19 +299,19 @@ class MontageGraph : public RGraph, public Recoverable{
 
         int recover(bool simulated) {
             if (simulated) {
-                pds::recover_mode();
+                recover_mode();
                 delete idxToVertex;
                 idxToVertex = new tVertex*[numVertices];
                 #pragma omp parallel for
                 for (size_t i = 0; i < numVertices; i++) {
                     idxToVertex[i] = nullptr;
                 }
-                pds::online_mode();
+                online_mode();
             }
 
             int block_cnt = 0;
             auto begin = chrono::high_resolution_clock::now();
-            std::unordered_map<uint64_t, PBlk*>* recovered = pds::recover(); 
+            std::unordered_map<uint64_t, PBlk*>* recovered = recover_pblks();
             auto end = chrono::high_resolution_clock::now();
             auto dur = end - begin;
             auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
@@ -320,7 +321,7 @@ class MontageGraph : public RGraph, public Recoverable{
             std::vector<Relation*> relationVector;
             std::vector<Vertex*> vertexVector;
             {
-                BEGIN_OP_AUTOEND();
+                MontageOpHolder(this);
                 for (auto itr = recovered->begin(); itr != recovered->end(); ++itr) {
                     // iterate through all recovered blocks.  Sort the blocks into vectors containing the different
                     // payloads to be iterated over later.
@@ -365,7 +366,7 @@ class MontageGraph : public RGraph, public Recoverable{
                         std::cerr << "Somehow recovered vertex " << id << " twice!" << std::endl;
                         continue;
                     }
-                    tVertex* new_node = new tVertex(vertexVector[i]);
+                    tVertex* new_node = new tVertex(this, vertexVector[i]);
                     idxToVertex[id] = new_node;
                 }
             }
@@ -528,9 +529,9 @@ startOver:
                 v->adjacency_list.clear();
                 v->dest_list.clear();
                 {
-                    BEGIN_OP_AUTOEND()
+                    MontageOpHolder(this);
                     for (Relation *r : garbageList) {
-                        PDELETE(r);
+                        pdelete(r);
                     }
                 }
                 

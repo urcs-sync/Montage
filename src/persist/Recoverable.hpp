@@ -107,7 +107,7 @@ public:
     T* openwrite_pblk(T* b){
         return _esys->openwrite_pblk(b);
     }
-    std::unordered_map<uint64_t, pds::PBlk*>* recover(const int rec_thd=10){
+    std::unordered_map<uint64_t, pds::PBlk*>* recover_pblks(const int rec_thd=10){
         return _esys->recover(rec_thd);
     }
     void recover_mode(){
