@@ -4,7 +4,6 @@
 #include "TestConfig.hpp"
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 
 class ChurnTest : public Test{
 #ifdef PRONTO
@@ -108,12 +107,6 @@ void ChurnTest::init(GlobalTestConfig* gtc){
 	assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
 
-	// // init Persistent allocator
-	// Persistent::init();
-
-	// // init epoch system
-	// pds::init(gtc);
-
 	getRideable(gtc);
 	
 	if(gtc->verbose){
@@ -179,8 +172,6 @@ void ChurnTest::cleanup(GlobalTestConfig* gtc){
 	Savitar_core_finalize();
 	pthread_mutex_destroy(&snapshot_lock);
 #endif
-	// pds::finalize();
-	// Persistent::finalize();
 }
 
 #ifdef PRONTO

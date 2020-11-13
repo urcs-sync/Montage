@@ -10,7 +10,6 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
-#include "persist_struct_api.hpp"
 
 using namespace pds;
 

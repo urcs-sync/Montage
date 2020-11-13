@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <iterator>
 #include <unordered_set>
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 #include <omp.h>
 #include <cassert>
 
@@ -176,7 +176,7 @@ class MontageGraph : public RGraph, public Recoverable{
             
             {
                 MontageOpHolder(this);
-                Relation* r = PNEW(Relation,v1, v2, weight);
+                Relation* r = pnew<Relation>(v1, v2, weight);
                 v1->adjacency_list.insert(r);
                 v2->dest_list.insert(r);
             }
@@ -358,7 +358,7 @@ class MontageGraph : public RGraph, public Recoverable{
             begin = chrono::high_resolution_clock::now();
             #pragma omp parallel
             {
-                pds::init_thread(omp_get_thread_num());
+                Recoverable::init_thread(omp_get_thread_num());
                 #pragma omp for
                 for (size_t i = 0; i < vertexVector.size(); ++i) {
                     int id = vertexVector[i]->get_unsafe_id(this);
@@ -389,7 +389,7 @@ class MontageGraph : public RGraph, public Recoverable{
             #pragma omp parallel
             {
                 int tid = omp_get_thread_num();
-                pds::init_thread(tid);
+                Recoverable::init_thread(tid);
                 #pragma omp for
                 for (size_t i = 0; i < relationVector.size(); ++i) {
                     Relation *e = relationVector[i];

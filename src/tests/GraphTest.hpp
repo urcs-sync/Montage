@@ -6,21 +6,22 @@
 #include <random>
 #include <chrono>
 #include "RGraph.hpp"
+#include "Recoverable.hpp"
 #include <omp.h>
 
-void ErdosRenyi(RGraph *g, int numVertices, double p=0.5) {
-    size_t x = numVertices;
-    size_t numEdges = (x * x) * p;
-    #pragma omp parallel 
-    {
-        std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + omp_get_thread_num());
-        pds::init_thread(omp_get_thread_num());
-        #pragma omp for
-        for (size_t i = 0; i < numEdges; i++) {
-            g->add_edge(gen_p() % numVertices, gen_p() % numVertices, 1);
-        }
-    }
-}
+// void ErdosRenyi(RGraph *g, int numVertices, double p=0.5) {
+//     size_t x = numVertices;
+//     size_t numEdges = (x * x) * p;
+//     #pragma omp parallel 
+//     {
+//         std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + omp_get_thread_num());
+//         Recoverable::init_thread(omp_get_thread_num());
+//         #pragma omp for
+//         for (size_t i = 0; i < numEdges; i++) {
+//             g->add_edge(gen_p() % numVertices, gen_p() % numVertices, 1);
+//         }
+//     }
+// }
 
 class GraphTest : public Test {
     public:

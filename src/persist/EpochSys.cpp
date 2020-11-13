@@ -4,8 +4,6 @@
 #include <atomic>
 namespace pds{
 
-    EpochSys* esys = nullptr;
-    
     thread_local int EpochSys::tid = -1;
 
     void EpochSys::parse_env(){

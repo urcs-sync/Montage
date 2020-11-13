@@ -6,7 +6,6 @@
 
 #include "TestConfig.hpp"
 #include "RQueue.hpp"
-#include "persist_struct_api.hpp"
 #include "CustomTypes.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include <mutex>

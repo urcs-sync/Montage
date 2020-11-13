@@ -19,7 +19,6 @@
 #include <iterator>
 #include <unordered_set>
 #include "RCUTracker.hpp"
-#include "persist_struct_api.hpp"
 
 #define DLGRAPH_FLUSH(addr) asm volatile ("clflush (%0)" :: "r"(addr))
 #define DLGRAPH_FLUSHOPT(addr) asm volatile ("clflushopt (%0)" :: "r"(addr))
@@ -154,7 +153,6 @@ class DLGraph : public RGraph {
 
         // Thread-safe and does not leak edges
         void clear() {
-            // BEGIN_OP_AUTOEND();
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i]->lock();
             }

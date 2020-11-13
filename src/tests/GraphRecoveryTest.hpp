@@ -35,8 +35,6 @@ public:
 
     void init(GlobalTestConfig *gtc) {
         std::cout << "initializing" << std::endl;
-        // Persistent::init();
-        // pds::init(gtc);
         
         pthread_barrier_init(&pthread_barrier, NULL, gtc->task_num);
 
@@ -59,7 +57,6 @@ public:
             errexit("GraphRecoveryTest must be run on Recoverable type object.");
         }
 
-        // pds::init_thread(0); 
         /* set interval to inf so this won't be killed by timeout */
         gtc->interval = numeric_limits<double>::max();
         std::cout << "Finished init func" << std::endl;
@@ -102,7 +99,6 @@ public:
         pthread_barrier_wait(&pthread_barrier);
         auto begin = chrono::high_resolution_clock::now();
         g->init_thread(gtc, ltc);
-        // pds::init_thread(ltc->tid);
         // Loop through the files in parallel
         int num_threads = gtc->task_num;
         int tid = ltc->tid;
@@ -128,10 +124,10 @@ public:
         int tid = ltc->tid;
 
         if (tid == 0){
-            pds::flush();
+            rec->flush();
         }
         pthread_barrier_wait(&pthread_barrier);
-        pds::esys->simulate_crash();
+        rec->simulate_crash();
         if (tid == 0){
             std::cout<<"crashed."<<std::endl;
 

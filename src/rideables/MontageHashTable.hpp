@@ -3,7 +3,6 @@
 
 #include "TestConfig.hpp"
 #include "RMap.hpp"
-#include "persist_struct_api.hpp"
 #include "CustomTypes.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include "Recoverable.hpp"

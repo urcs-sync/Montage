@@ -6,7 +6,6 @@
 
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 #include "TestConfig.hpp"
 #include "HeapQueue.hpp"
 

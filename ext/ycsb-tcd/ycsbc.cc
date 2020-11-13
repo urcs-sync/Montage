@@ -23,7 +23,7 @@ using namespace std;
 
 #ifdef MONTAGE
 #include "TestConfig.hpp"
-#include "persist_struct_api.hpp"
+#include "montage_global_api.hpp"
 #endif /* MONTAGE */
 
 void UsageMessage(const char *command);

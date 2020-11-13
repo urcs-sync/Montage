@@ -3,7 +3,6 @@
 
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
-#include "pblk_naked.hpp"
 // TODO: report recover errors/exceptions
 
 class Recoverable{
@@ -51,9 +50,6 @@ public:
         MontageOpHolder(pds::EpochSys* _esys): esys_(_esys){
             esys_->begin_op();
         }
-        MontageOpHolder(): esys_(pds::esys){
-            esys_->begin_op();
-        }
         ~MontageOpHolder(){
             esys_->end_op();
         }
@@ -65,9 +61,6 @@ public:
             esys_->begin_op();
         }
         MontageOpHolderReadOnly(pds::EpochSys* _esys): esys_(_esys){
-            esys_->begin_op();
-        }
-        MontageOpHolderReadOnly(): esys_(pds::esys){
             esys_->begin_op();
         }
         ~MontageOpHolderReadOnly(){
@@ -118,6 +111,9 @@ public:
     }
     void flush(){
         _esys->flush();
+    }
+    void simulate_crash(){
+        _esys->simulate_crash();
     }
 
     pds::sc_desc_t* get_dcss_desc(){

@@ -17,7 +17,7 @@
 #include <iterator>
 #include <unordered_set>
 #include "RCUTracker.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 
 using namespace pds;
 

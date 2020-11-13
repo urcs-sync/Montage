@@ -3,7 +3,7 @@
 
 #include "TestConfig.hpp"
 #include "RMap.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 #include "CustomTypes.hpp"
 #include <mutex>
 #include <shared_mutex>
@@ -11,7 +11,7 @@
 using namespace pds;
 
 template<typename K, typename V>
-class UnbalancedTree : public RMap<K,V>{
+class UnbalancedTree : public RMap<K,V>, public Recoverable{
     const optional<V> NONE = {}; // to prevent compiler warnings. TODO: switch to std::optional<>.
 public:
     class Payload : public PBlk{
@@ -26,6 +26,7 @@ public:
     };
 
     struct TreeNode{
+        UnbalancedTree* ds;
         // Transient-to-persistent pointer
         Payload* payload = nullptr;
         // Transient-to-transient pointers
@@ -34,43 +35,49 @@ public:
         
         std::mutex lock;
 
-        TreeNode(K key, V val){
-            payload = PNEW(Payload, key, val);
+        TreeNode(UnbalancedTree* ds_, K key, V val): ds(ds_){
+            payload = ds->pnew<Payload>(key, val);
         }
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (K)payload->get_key();
+            return (K)payload->get_key(ds);
         }
         V get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (V)payload->get_val();
+            return (V)payload->get_val(ds);
         }
         int get_deleted(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (int)payload->get_deleted();
+            return (int)payload->get_deleted(ds);
         }
         void set_val(V v){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_val(v);
+            payload = payload->set_val(ds, v);
         }
         void set_deleted(int d){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_deleted(d);
+            payload = payload->set_deleted(ds, d);
         }
         ~TreeNode(){
-            PDELETE(payload);
+            ds->pdelete(payload);
         }
     };
 
     TreeNode* root = nullptr;
 
-    UnbalancedTree(GlobalTestConfig* gtc){
+    UnbalancedTree(GlobalTestConfig* gtc): Recoverable(gtc){
         root = nullptr;
     }
 
+    int recover(bool simulated){
+        errexit("recover of UnbalancedTree not implemented");
+        return 0;
+    }
+
+
     optional<V> get(K key, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             if (!root){
                 return NONE;
             } else {
@@ -111,7 +118,7 @@ public:
 
     optional<V> put(K key, V val, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             if (!root){
                 root = new TreeNode(key, val);
             } else {
@@ -157,7 +164,7 @@ public:
 
     bool insert(K key, V val, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             if (!root){
                 root = new TreeNode(key, val);
                 return true;
@@ -207,7 +214,7 @@ public:
 
     optional<V> remove(K key, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder(this);
             if (!root){
                 return NONE;
             } else {

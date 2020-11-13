@@ -4,7 +4,6 @@
 #include <cstring>
 #include <string>
 
-#include "persist_struct_api.hpp"
 #include "pptr.hpp"
 using namespace pds;
 

@@ -1,9 +1,9 @@
 #ifndef TOY_HPP
 #define TOY_HPP
 
-#include "TestConfig.hpp"
-#include "persist_struct_api.hpp"
 #include <mutex>
+#include "TestConfig.hpp"
+
 
 using namespace pds;
 
@@ -25,9 +25,9 @@ public:
         
     }
     void run(int tid){
-        Payload* p = PNEW(Payload, 1, 1);
-        BEGIN_OP(p, p);
-        END_OP;
+        // Payload* p = PNEW(Payload, 1, 1);
+        // BEGIN_OP(p, p);
+        // END_OP;
     }
 
     void run_parallel(int tid){

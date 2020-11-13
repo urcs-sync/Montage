@@ -10,7 +10,6 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
-#include "persist_struct_api.hpp"
 
 using namespace pds;
 
@@ -38,7 +37,7 @@ private:
         Payload* payload;// TODO: does it have to be atomic?
 
         Node(MontageNatarajanTree* ds_, K k, V val, Node* l=nullptr, Node* r=nullptr):
-            ds(ds_), level(finite),left(l),right(r),key(k),payload(PNEW(Payload, key, val)){ };
+            ds(ds_), level(finite),left(l),right(r),key(k),payload(ds_->pnew<Payload>(key, val)){ };
         Node(MontageNatarajanTree* ds_, Level lev, Node* l=nullptr, Node* r=nullptr):
             ds(ds_), level(lev),left(l),right(r),key(),payload(nullptr){
             assert(lev != finite && "use constructor with another signature for concrete nodes!");
