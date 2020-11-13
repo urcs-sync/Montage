@@ -9,6 +9,8 @@
 #include "Persistent.hpp"
 #include "common_macros.hpp"
 
+class Recoverable;
+
 namespace pds{
     struct OldSeeNewException : public std::exception {
         const char * what () const throw () {
@@ -180,12 +182,12 @@ namespace pds{
         // desc: ....01
         // real val: ....00
         std::atomic<nbptr_t> nbptr;
-        nbptr_t load();
-        nbptr_t load_verify();
-        inline T load_val(){
+        nbptr_t load(Recoverable* ds);
+        nbptr_t load_verify(Recoverable* ds);
+        inline T load_val(Recoverable* ds){
             return reinterpret_cast<T>(load().val);
         }
-        bool CAS_verify(nbptr_t expected, const T& desired);
+        bool CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired);
         inline bool CAS_verify(nbptr_t expected, const nbptr_t& desired){
             return CAS_verify(expected,desired.get_val<T>());
         }
@@ -265,7 +267,7 @@ namespace pds{
             return in_progress(nbptr.load());
         }
         // TODO: try_complete used to be inline. Try to make it inline again when refactoring is finished.
-        void try_complete(pds::EpochSys* esys, uint64_t addr);
+        void try_complete(Recoverable* ds, uint64_t addr);
         
         sc_desc_t( uint64_t c, uint64_t a, uint64_t o, 
                     uint64_t n, uint64_t e) : 

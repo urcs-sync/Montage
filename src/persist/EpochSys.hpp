@@ -58,23 +58,22 @@ public:
     
     std::mutex dedicated_epoch_advancer_lock;
 
-    /* public members for API */
-    // current epoch of each thread.
-    padded<uint64_t>* epochs = nullptr;
-    // local descriptors for DCSS
-    // TODO: maybe put this into a derived class for NB data structures?
-    padded<sc_desc_t>* local_descs = nullptr;
-    // containers for pending allocations
-    padded<std::unordered_set<PBlk*>>* pending_allocs = nullptr;
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
+
+    /* public members for API */ // TODO: put these into Recoverable
+    // current epoch of each thread.
+    padded<uint64_t>* epochs = nullptr;
+    // containers for pending allocations
+    padded<std::unordered_set<PBlk*>>* pending_allocs = nullptr;
+    
 
     EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
         epochs = new padded<uint64_t>[gtc->task_num];
         for(int i = 0; i < gtc->task_num; i++){
             epochs[i].ui = NULL_EPOCH;
         }
-        local_descs = new padded<sc_desc_t>[gtc->task_num];
+        
         pending_allocs = new padded<std::unordered_set<PBlk*>>[gtc->task_num];
         reset(); // TODO: change to recover() later on.
     }
@@ -96,7 +95,6 @@ public:
         delete to_be_persisted;
         delete to_be_freed;
         delete epochs;
-        delete local_descs;
     }
 
     void parse_env();
@@ -123,6 +121,8 @@ public:
     /////////
     // API //
     /////////
+
+    // TODO: put these into Recoverable.
 
     static void init_thread(int _tid){
         EpochSys::tid = _tid;

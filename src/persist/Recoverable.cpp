@@ -8,6 +8,7 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
     // init main thread
     pds::init_thread(0);
 
+    local_descs = new padded<pds::sc_desc_t>[gtc->task_num];
     // TODO: replace this with _esys initialization.
     _esys = pds::esys;
 }
@@ -25,12 +26,12 @@ void Recoverable::init_thread(int tid){
 
 namespace pds{
 
-    void sc_desc_t::try_complete(pds::EpochSys* esys, uint64_t addr){
+    void sc_desc_t::try_complete(Recoverable* ds, uint64_t addr){
         nbptr_t _d = nbptr.load();
         int ret = 0;
         if(_d.val!=addr) return;
         if(in_progress(_d)){
-            if(pds::esys->check_epoch(cas_epoch)){
+            if(ds->check_epoch(cas_epoch)){
                 ret = 2;
                 ret |= commit(_d);
             } else {

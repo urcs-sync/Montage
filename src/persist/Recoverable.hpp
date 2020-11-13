@@ -7,7 +7,15 @@
 // TODO: report recover errors/exceptions
 
 class Recoverable{
+    // TODO: get rid of these.
+    template<typename T> friend class pds::atomic_nbptr_t;
+    friend class pds::nbptr_t;
+
     pds::EpochSys* _esys = nullptr;
+
+    // local descriptors for DCSS
+    // TODO: maybe put this into a derived class for NB data structures?
+    padded<pds::sc_desc_t>* local_descs = nullptr;
 public:
     // return num of blocks recovered.
     virtual int recover(bool simulated = false) = 0;
@@ -18,6 +26,9 @@ public:
     void init_thread(int tid);
     bool check_epoch(){
         return _esys->check_epoch();
+    }
+    bool check_epoch(uint64_t c){
+        return _esys->check_epoch(c);
     }
     void begin_op(){
         _esys->begin_op();
@@ -107,6 +118,10 @@ public:
     }
     void flush(){
         _esys->flush();
+    }
+
+    pds::sc_desc_t* get_dcss_desc(){
+        return &local_descs[pds::EpochSys::tid].ui;
     }
 };
 
@@ -220,7 +235,7 @@ namespace pds{
     // implementation of load and cas for visible reads
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load(){
+    nbptr_t atomic_nbptr_t<T>::load(Recoverable* ds){
         nbptr_t r;
         while(true){
             r = nbptr.load();
@@ -231,12 +246,12 @@ namespace pds{
     }
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load_verify(){
-        assert(pds::esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+    nbptr_t atomic_nbptr_t<T>::load_verify(Recoverable* ds){
+        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         nbptr_t r;
         while(true){
             r = nbptr.load();
-            if(pds::esys->check_epoch(pds::esys->epochs[pds::EpochSys::tid].ui)){
+            if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
                 nbptr_t ret(r.val,r.cnt+1);
                 if(nbptr.compare_exchange_strong(r, ret)){
                     return r;
@@ -248,9 +263,9 @@ namespace pds{
     }
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
-        assert(pds::esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
-        if(pds::esys->check_epoch(pds::esys->epochs[pds::EpochSys::tid].ui)){
+    bool atomic_nbptr_t<T>::CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired){
+        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
             nbptr_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
             return nbptr.compare_exchange_strong(expected, new_r);
         } else {
@@ -268,32 +283,32 @@ namespace pds{
     /* implementation of load and cas for invisible reads */
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load(){
+    nbptr_t atomic_nbptr_t<T>::load(Recoverable* ds){
         nbptr_t r;
         do { 
             r = nbptr.load();
             if(r.is_desc()) {
                 sc_desc_t* D = r.get_desc();
-                D->try_complete(pds::esys, reinterpret_cast<uint64_t>(this));
+                D->try_complete(ds, reinterpret_cast<uint64_t>(this));
             }
         } while(r.is_desc());
         return r;
     }
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load_verify(){
+    nbptr_t atomic_nbptr_t<T>::load_verify(Recoverable* ds){
         // invisible read doesn't need to verify epoch even if it's a
         // linearization point
         // this saves users from catching EpochVerifyException
-        return load();
+        return load(ds);
     }
 
     // extern std::atomic<size_t> abort_cnt;
     // extern std::atomic<size_t> total_cnt;
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS_verify(nbptr_t expected, const T& desired){
-        assert(pds::esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+    bool atomic_nbptr_t<T>::CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired){
+        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         // total_cnt.fetch_add(1);
 #ifdef USE_TSX
         unsigned status = _xbegin();
@@ -302,7 +317,7 @@ namespace pds{
             if(!r.is_desc()){
                 if( r.cnt!=expected.cnt ||
                     r.val!=expected.val ||
-                    !pds::esys->check_epoch(pds::esys->epochs[pds::EpochSys::tid].ui)){
+                    !ds->check_epoch()){
                     _xend();
                     return false;
                 } else {
@@ -314,7 +329,7 @@ namespace pds{
             } else {
                 // we only help complete descriptor, but not retry
                 _xend();
-                r.get_desc()->try_complete(pds::esys, reinterpret_cast<uint64_t>(this));
+                r.get_desc()->try_complete(ds, reinterpret_cast<uint64_t>(this));
                 return false;
             }
             // execution won't reach here; program should have returned
@@ -326,7 +341,7 @@ namespace pds{
         nbptr_t r = nbptr.load();
         if(r.is_desc()){
             sc_desc_t* D = r.get_desc();
-            D->try_complete(pds::esys, reinterpret_cast<uint64_t>(this));
+            D->try_complete(ds, reinterpret_cast<uint64_t>(this));
             return false;
         } else {
             if( r.cnt!=expected.cnt || 
@@ -337,17 +352,17 @@ namespace pds{
         // now r.cnt must be ..00, and r.cnt+1 is ..01, which means "nbptr
         // contains a descriptor" and "a descriptor is in progress"
         assert((r.cnt & 3UL) == 0UL);
-        new (&pds::esys->local_descs[pds::EpochSys::tid].ui) sc_desc_t(r.cnt+1, 
+        new (ds->get_dcss_desc()) sc_desc_t(r.cnt+1, 
                                     reinterpret_cast<uint64_t>(this), 
                                     expected.val, 
                                     reinterpret_cast<uint64_t>(desired), 
-                                    pds::esys->epochs[pds::EpochSys::tid].ui);
-        nbptr_t new_r(reinterpret_cast<uint64_t>(&pds::esys->local_descs[pds::EpochSys::tid].ui), r.cnt+1);
+                                    ds->_esys->epochs[pds::EpochSys::tid].ui);
+        nbptr_t new_r(reinterpret_cast<uint64_t>(ds->get_dcss_desc()), r.cnt+1);
         if(!nbptr.compare_exchange_strong(r,new_r)){
             return false;
         }
-        pds::esys->local_descs[pds::EpochSys::tid].ui.try_complete(pds::esys, reinterpret_cast<uint64_t>(this));
-        if(pds::esys->local_descs[pds::EpochSys::tid].ui.committed()) return true;
+        ds->get_dcss_desc()->try_complete(ds, reinterpret_cast<uint64_t>(this));
+        if(ds->get_dcss_desc()->committed()) return true;
         else return false;
     }
 

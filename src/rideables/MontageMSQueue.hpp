@@ -29,20 +29,23 @@ public:
 
 private:
     struct Node{
+        MontageMSQueue* ds;
         atomic_nbptr_t<Node*> next;
         Payload* payload;
 
         Node(): next(nullptr), payload(nullptr){}; 
-        Node(T v): next(nullptr), payload(PNEW(Payload, v)){
+        Node(MontageMSQueue* ds_, T v): ds(ds_), next(nullptr), payload(ds_->pnew<Payload>(v)){
             assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);
         };
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload->set_unsafe_sn(s);
+            payload->set_unsafe_sn(ds,s);
         }
-        ~Node(){ 
-            PRECLAIM(payload);
+        ~Node(){
+            if (payload){
+                ds->preclaim(payload);
+            }
         }
     };
 
@@ -95,20 +98,18 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
             if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
                 new_node->set_sn(s);
-                BEGIN_OP();
-                new_node->payload->set_epoch(esys->epochs[EpochSys::tid].ui);
+                begin_op();
                 /* set_sn must happen before PDELETE of payload since it's 
                  * before linearization point.
                  * Also, this must set sn in place since we still remain in
                  * the same epoch.
                  */
                 // new_node->set_sn(s);
-                if((cur_tail->next).CAS_verify(next, new_node)){
-                    esys->register_alloc_pblk(new_node->payload, esys->epochs[EpochSys::tid].ui);
-                    END_OP;
+                if((cur_tail->next).CAS_verify(this, next, new_node)){
+                    end_op();
                     break;
                 }
-                ABORT_OP;
+                abort_op();
             } else {
                 tail.compare_exchange_strong(cur_tail, next.get_val<Node*>()); // try to swing tail to next node
             }
@@ -136,17 +137,17 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
                 }
                 tail.compare_exchange_strong(cur_tail, next); // tail is falling behind; try to update
             } else {
-                BEGIN_OP();
+                begin_op();
                 Payload* payload = next->payload;// get payload for PDELETE
                 if(head.CAS_verify(cur_head, next)){
                     res = (T)payload->get_val();// old see new is impossible
-                    PRETIRE(payload); // semantically we are removing next from queue
-                    END_OP;
+                    pretire(payload); // semantically we are removing next from queue
+                    end_op();
                     cur_head.get_val<Node*>()->payload = payload; // let payload have same lifetime as dummy node
                     tracker.retire(cur_head.get_val<Node*>(), tid);
                     break;
                 }
-                ABORT_OP;
+                abort_op();
             }
         }
     }
