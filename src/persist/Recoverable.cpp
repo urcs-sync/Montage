@@ -16,5 +16,9 @@ Recoverable::~Recoverable(){
     Persistent::finalize();
 }
 void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){
-    pds::init_thread(ltc->tid);
+    _esys->init_thread(ltc->tid);
+}
+
+void Recoverable::init_thread(int tid){
+    _esys->init_thread(tid);
 }

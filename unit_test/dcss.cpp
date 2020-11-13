@@ -1,6 +1,5 @@
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
-#include "DCSS.hpp"
+#include "Recoverable.hpp"
 #include "TestConfig.hpp"
 #include <thread>
 #include <atomic>

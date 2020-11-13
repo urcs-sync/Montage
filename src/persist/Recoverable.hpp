@@ -15,6 +15,7 @@ public:
     ~Recoverable();
 
     void init_thread(GlobalTestConfig*, LocalTestConfig* ltc);
+    void init_thread(int tid);
     bool check_epoch(){
         return _esys->check_epoch();
     }
