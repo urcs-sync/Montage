@@ -56,12 +56,12 @@ private:
             assert(payload!=nullptr && "payload shouldn't be null");
             ds->pretire(payload);
         }
-        V get_val(MontageNatarajanTree* ds){
+        V get_val(){
             // call it within BEGIN_OP and END_OP
             assert(payload!=nullptr && "payload shouldn't be null");
             return (V)payload->get_val(ds);
         }
-        V get_unsafe_val(MontageNatarajanTree* ds){
+        V get_unsafe_val(){
             return (V)payload->get_unsafe_val(ds);
         }
         //not thread-safe
@@ -300,7 +300,7 @@ optional<V> MontageNatarajanTree<K,V>::get(K key, int tid){
     leaf=getPtr(seekRecord->leaf);
     if(nodeEqual(key,leaf)){
         MontageOpHolder(this);
-        res = leaf->get_unsafe_val(this);//never old see new as we find node before BEGIN_OP
+        res = leaf->get_unsafe_val();//never old see new as we find node before BEGIN_OP
     }
 
     tracker.end_op(tid);
@@ -370,7 +370,7 @@ optional<V> MontageNatarajanTree<K,V>::put(K key, V val, int tid){
             else
                 childAddr=&(parent->right);
             begin_op();
-            res=leaf->get_val(this);
+            res=leaf->get_val();
             if(childAddr->compare_exchange_strong(leaf,newLeaf)){
                 leaf->rm_payload();
                 end_op();
@@ -484,7 +484,7 @@ optional<V> MontageNatarajanTree<K,V>::remove(K key, int tid){
 
             Node* tmpExpected=leaf;
             begin_op();
-            res=leaf->get_val(this);
+            res=leaf->get_val();
             if(childAddr->compare_exchange_strong(tmpExpected,
                 mixPtrFlgTg(tmpExpected,true,false))){
                 /* 

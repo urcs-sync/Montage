@@ -81,7 +81,7 @@ class MontageGraph : public RGraph, public Recoverable{
                 tVertex(MontageGraph* ds_, Vertex* p): ds(ds_) {
                     // Use this method for recovery to avoid having to call PNEW when the block already exists.
                     payload = p;
-                    this->id = p->get_unsafe_id();
+                    this->id = p->get_unsafe_id(ds);
                 }
 
                 ~tVertex() {
@@ -91,10 +91,10 @@ class MontageGraph : public RGraph, public Recoverable{
                 }
 
                 void set_lbl(int l) {
-                    payload = payload->set_lbl(l);
+                    payload = payload->set_lbl(ds, l);
                 }
                 int get_lbl() {
-                    return payload->get_lbl();
+                    return payload->get_lbl(ds);
                 }
 
                 // Immutable
