@@ -109,29 +109,29 @@ namespace pds{
     * We provides following double-compare-single-swap (DCSS) API for
     * nonblocking data structures to use: 
     * 
-    *  atomic_nbptr_t<T=uint64_t>: atomic double word for storing pointers
+    *  atomic_lin_var<T=uint64_t>: atomic double word for storing pointers
     *  that point to nodes, which link payloads in. It contains following
     *  functions:
     * 
     *      store(T val): 
     *          store 64-bit long data without sync; cnt doesn't increment
     * 
-    *      store(nbptr_t d): store(d.val)
+    *      store(lin_var d): store(d.val)
     * 
-    *      nbptr_t load(): 
-    *          load nbptr without verifying epoch
+    *      lin_var load(): 
+    *          load var without verifying epoch
     * 
-    *      nbptr_t load_verify(): 
-    *          load nbptr and verify epoch, used as lin point; 
+    *      lin_var load_verify(): 
+    *          load var and verify epoch, used as lin point; 
     *          for invisible reads this won't verify epoch
     * 
-    *      bool CAS(nbptr_t expected, T desired): 
+    *      bool CAS(lin_var expected, T desired): 
     *          CAS in desired value and increment cnt if expected 
-    *          matches current nbptr
+    *          matches current var
     * 
-    *      bool CAS_verify(nbptr_t expected, T desired): 
+    *      bool CAS_verify(lin_var expected, T desired): 
     *          CAS in desired value and increment cnt if expected 
-    *          matches current nbptr and global epoch doesn't change
+    *          matches current var and global epoch doesn't change
     *          since BEGIN_OP
     */
 
@@ -144,10 +144,10 @@ namespace pds{
     struct sc_desc_t;
 
     template <class T>
-    class atomic_nbptr_t;
-    class nbptr_t{
+    class atomic_lin_var;
+    class lin_var{
         template <class T>
-        friend class atomic_nbptr_t;
+        friend class atomic_lin_var;
         inline bool is_desc() const {
             return (cnt & 3UL) == 1UL;
         }
@@ -163,115 +163,115 @@ namespace pds{
             static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
             return reinterpret_cast<T>(val);
         }
-        nbptr_t(uint64_t v, uint64_t c) : val(v), cnt(c) {};
-        nbptr_t() : nbptr_t(0, 0) {};
+        lin_var(uint64_t v, uint64_t c) : val(v), cnt(c) {};
+        lin_var() : lin_var(0, 0) {};
 
-        inline bool operator==(const nbptr_t & b) const{
+        inline bool operator==(const lin_var & b) const{
             return val==b.val && cnt==b.cnt;
         }
-        inline bool operator!=(const nbptr_t & b) const{
+        inline bool operator!=(const lin_var & b) const{
             return !operator==(b);
         }
     }__attribute__((aligned(16)));
 
     template <class T = uint64_t>
-    class atomic_nbptr_t{
+    class atomic_lin_var{
         static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
     public:
-        // for cnt in nbptr:
+        // for cnt in var:
         // desc: ....01
         // real val: ....00
-        std::atomic<nbptr_t> nbptr;
-        nbptr_t load(Recoverable* ds);
-        nbptr_t load_verify(Recoverable* ds);
+        std::atomic<lin_var> var;
+        lin_var load(Recoverable* ds);
+        lin_var load_verify(Recoverable* ds);
         inline T load_val(Recoverable* ds){
             return reinterpret_cast<T>(load().val);
         }
-        bool CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired);
-        inline bool CAS_verify(nbptr_t expected, const nbptr_t& desired){
+        bool CAS_verify(Recoverable* ds, lin_var expected, const T& desired);
+        inline bool CAS_verify(lin_var expected, const lin_var& desired){
             return CAS_verify(expected,desired.get_val<T>());
         }
         // CAS doesn't check epoch nor cnt
-        bool CAS(nbptr_t expected, const T& desired);
-        inline bool CAS(nbptr_t expected, const nbptr_t& desired){
+        bool CAS(lin_var expected, const T& desired);
+        inline bool CAS(lin_var expected, const lin_var& desired){
             return CAS(expected,desired.get_val<T>());
         }
         void store(const T& desired);
-        inline void store(const nbptr_t& desired){
+        inline void store(const lin_var& desired){
             store(desired.get_val<T>());
         }
-        atomic_nbptr_t(const T& v) : nbptr(nbptr_t(reinterpret_cast<uint64_t>(v), 0)){};
-        atomic_nbptr_t() : atomic_nbptr_t(T()){};
+        atomic_lin_var(const T& v) : var(lin_var(reinterpret_cast<uint64_t>(v), 0)){};
+        atomic_lin_var() : atomic_lin_var(T()){};
     };
 
     struct sc_desc_t{
     private:
-        // for cnt in nbptr:
+        // for cnt in var:
         // in progress: ....01
         // committed: ....10 
         // aborted: ....11
-        std::atomic<nbptr_t> nbptr;
+        std::atomic<lin_var> var;
         const uint64_t old_val;
         const uint64_t new_val;
         const uint64_t cas_epoch;
-        inline bool abort(nbptr_t _d){
+        inline bool abort(lin_var _d){
             // bring cnt from ..01 to ..11
-            nbptr_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
-            nbptr_t desired(expected);
+            lin_var expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
+            lin_var desired(expected);
             desired.cnt += 2;
-            return nbptr.compare_exchange_strong(expected, desired);
+            return var.compare_exchange_strong(expected, desired);
         }
-        inline bool commit(nbptr_t _d){
+        inline bool commit(lin_var _d){
             // bring cnt from ..01 to ..10
-            nbptr_t expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
-            nbptr_t desired(expected);
+            lin_var expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
+            lin_var desired(expected);
             desired.cnt += 1;
-            return nbptr.compare_exchange_strong(expected, desired);
+            return var.compare_exchange_strong(expected, desired);
         }
-        inline bool committed(nbptr_t _d) const {
+        inline bool committed(lin_var _d) const {
             return (_d.cnt & 0x3UL) == 2UL;
         }
-        inline bool in_progress(nbptr_t _d) const {
+        inline bool in_progress(lin_var _d) const {
             return (_d.cnt & 0x3UL) == 1UL;
         }
-        inline bool match(nbptr_t old_d, nbptr_t new_d) const {
+        inline bool match(lin_var old_d, lin_var new_d) const {
             return ((old_d.cnt & ~0x3UL) == (new_d.cnt & ~0x3UL)) && 
                 (old_d.val == new_d.val);
         }
-        void cleanup(nbptr_t old_d){
+        void cleanup(lin_var old_d){
             // must be called after desc is aborted or committed
-            nbptr_t new_d = nbptr.load();
+            lin_var new_d = var.load();
             if(!match(old_d,new_d)) return;
             assert(!in_progress(new_d));
-            nbptr_t expected(reinterpret_cast<uint64_t>(this),(new_d.cnt & ~0x3UL) | 1UL);
+            lin_var expected(reinterpret_cast<uint64_t>(this),(new_d.cnt & ~0x3UL) | 1UL);
             if(committed(new_d)) {
                 // bring cnt from ..10 to ..00
-                reinterpret_cast<atomic_nbptr_t<>*>(
-                    new_d.val)->nbptr.compare_exchange_strong(
+                reinterpret_cast<atomic_lin_var<>*>(
+                    new_d.val)->var.compare_exchange_strong(
                     expected, 
-                    nbptr_t(new_val,new_d.cnt + 2));
+                    lin_var(new_val,new_d.cnt + 2));
             } else {
                 //aborted
                 // bring cnt from ..11 to ..00
-                reinterpret_cast<atomic_nbptr_t<>*>(
-                    new_d.val)->nbptr.compare_exchange_strong(
+                reinterpret_cast<atomic_lin_var<>*>(
+                    new_d.val)->var.compare_exchange_strong(
                     expected, 
-                    nbptr_t(old_val,new_d.cnt + 1));
+                    lin_var(old_val,new_d.cnt + 1));
             }
         }
     public:
         inline bool committed() const {
-            return committed(nbptr.load());
+            return committed(var.load());
         }
         inline bool in_progress() const {
-            return in_progress(nbptr.load());
+            return in_progress(var.load());
         }
         // TODO: try_complete used to be inline. Try to make it inline again when refactoring is finished.
         void try_complete(Recoverable* ds, uint64_t addr);
         
         sc_desc_t( uint64_t c, uint64_t a, uint64_t o, 
                     uint64_t n, uint64_t e) : 
-            nbptr(nbptr_t(a,c)), old_val(o), new_val(n), cas_epoch(e){};
+            var(lin_var(a,c)), old_val(o), new_val(n), cas_epoch(e){};
         sc_desc_t() : sc_desc_t(0,0,0,0,0){};
     };
 }

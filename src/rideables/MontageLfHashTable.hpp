@@ -34,7 +34,7 @@ private:
     struct Node;
 
     struct MarkPtr{
-        atomic_nbptr_t<Node*> ptr;
+        atomic_lin_var<Node*> ptr;
         MarkPtr(Node* n):ptr(n){};
         MarkPtr():ptr(nullptr){};
     };
@@ -67,21 +67,21 @@ private:
     std::hash<K> hash_fn;
     const int idxSize=1000000;//number of buckets for hash table
     padded<MarkPtr>* buckets=new padded<MarkPtr>[idxSize]{};
-    bool findNode(MarkPtr* &prev, nbptr_t &curr, nbptr_t &next, K key, int tid);
+    bool findNode(MarkPtr* &prev, lin_var &curr, lin_var &next, K key, int tid);
 
     RCUTracker<Node> tracker;
 
     const uint64_t MARK_MASK = ~0x1;
-    inline nbptr_t getPtr(const nbptr_t& d){
-        return nbptr_t(d.val & MARK_MASK, d.cnt);
+    inline lin_var getPtr(const lin_var& d){
+        return lin_var(d.val & MARK_MASK, d.cnt);
     }
-    inline bool getMark(const nbptr_t& d){
+    inline bool getMark(const lin_var& d){
         return (bool)(d.val & 1);
     }
-    inline nbptr_t mixPtrMark(const nbptr_t& d, bool mk){
-        return nbptr_t(d.val | mk, d.cnt);
+    inline lin_var mixPtrMark(const lin_var& d, bool mk){
+        return lin_var(d.val | mk, d.cnt);
     }
-    inline Node* setMark(const nbptr_t& d){
+    inline Node* setMark(const lin_var& d){
         return reinterpret_cast<Node*>(d.val | 1);
     }
 public:
@@ -118,8 +118,8 @@ template <class K, class V>
 optional<V> MontageLfHashTable<K,V>::get(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    nbptr_t curr;
-    nbptr_t next;
+    lin_var curr;
+    lin_var next;
 
     tracker.start_op(tid);
     // hold epoch from advancing so that the node we find won't be deleted
@@ -137,8 +137,8 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
     optional<V> res={};
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    nbptr_t curr;
-    nbptr_t next;
+    lin_var curr;
+    lin_var next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
@@ -184,8 +184,8 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
     bool res=false;
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    nbptr_t curr;
-    nbptr_t next;
+    lin_var curr;
+    lin_var next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
@@ -216,8 +216,8 @@ template <class K, class V>
 optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    nbptr_t curr;
-    nbptr_t next;
+    lin_var curr;
+    lin_var next;
 
     tracker.start_op(tid);
     while(true) {
@@ -250,8 +250,8 @@ optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
     optional<V> res={};
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    nbptr_t curr;
-    nbptr_t next;
+    lin_var curr;
+    lin_var next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
@@ -285,7 +285,7 @@ optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
 }
 
 template <class K, class V> 
-bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, nbptr_t &curr, nbptr_t &next, K key, int tid){
+bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, lin_var &curr, lin_var &next, K key, int tid){
     while(true){
         size_t idx=hash_fn(key)%idxSize;
         bool cmark=false;

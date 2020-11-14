@@ -7,8 +7,8 @@
 
 class Recoverable{
     // TODO: get rid of these.
-    template<typename T> friend class pds::atomic_nbptr_t;
-    friend class pds::nbptr_t;
+    template<typename T> friend class pds::atomic_lin_var;
+    friend class pds::lin_var;
 
     pds::EpochSys* _esys = nullptr;
 
@@ -188,36 +188,36 @@ T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
 namespace pds{
 
     template<typename T>
-    void atomic_nbptr_t<T>::store(const T& desired){
+    void atomic_lin_var<T>::store(const T& desired){
         // this function must be used only when there's no data race
-        nbptr_t r = nbptr.load();
-        nbptr_t new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
-        nbptr.store(new_r);
+        lin_var r = var.load();
+        lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
+        var.store(new_r);
     }
 
 #ifdef VISIBLE_READ
     // implementation of load and cas for visible reads
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load(Recoverable* ds){
-        nbptr_t r;
+    lin_var atomic_lin_var<T>::load(Recoverable* ds){
+        lin_var r;
         while(true){
-            r = nbptr.load();
-            nbptr_t ret(r.val,r.cnt+1);
-            if(nbptr.compare_exchange_strong(r, ret))
+            r = var.load();
+            lin_var ret(r.val,r.cnt+1);
+            if(var.compare_exchange_strong(r, ret))
                 return ret;
         }
     }
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load_verify(Recoverable* ds){
+    lin_var atomic_lin_var<T>::load_verify(Recoverable* ds){
         assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
-        nbptr_t r;
+        lin_var r;
         while(true){
-            r = nbptr.load();
+            r = var.load();
             if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
-                nbptr_t ret(r.val,r.cnt+1);
-                if(nbptr.compare_exchange_strong(r, ret)){
+                lin_var ret(r.val,r.cnt+1);
+                if(var.compare_exchange_strong(r, ret)){
                     return r;
                 }
             } else {
@@ -227,30 +227,30 @@ namespace pds{
     }
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired){
+    bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
         assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
-            nbptr_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
-            return nbptr.compare_exchange_strong(expected, new_r);
+            lin_var new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
+            return var.compare_exchange_strong(expected, new_r);
         } else {
             return false;
         }
     }
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS(nbptr_t expected, const T& desired){
-        nbptr_t new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
-        return nbptr.compare_exchange_strong(expected, new_r);
+    bool atomic_lin_var<T>::CAS(lin_var expected, const T& desired){
+        lin_var new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
+        return var.compare_exchange_strong(expected, new_r);
     }
 
 #else /* !VISIBLE_READ */
     /* implementation of load and cas for invisible reads */
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load(Recoverable* ds){
-        nbptr_t r;
+    lin_var atomic_lin_var<T>::load(Recoverable* ds){
+        lin_var r;
         do { 
-            r = nbptr.load();
+            r = var.load();
             if(r.is_desc()) {
                 sc_desc_t* D = r.get_desc();
                 D->try_complete(ds, reinterpret_cast<uint64_t>(this));
@@ -260,7 +260,7 @@ namespace pds{
     }
 
     template<typename T>
-    nbptr_t atomic_nbptr_t<T>::load_verify(Recoverable* ds){
+    lin_var atomic_lin_var<T>::load_verify(Recoverable* ds){
         // invisible read doesn't need to verify epoch even if it's a
         // linearization point
         // this saves users from catching EpochVerifyException
@@ -271,13 +271,13 @@ namespace pds{
     // extern std::atomic<size_t> total_cnt;
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS_verify(Recoverable* ds, nbptr_t expected, const T& desired){
+    bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
         assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         // total_cnt.fetch_add(1);
 #ifdef USE_TSX
         unsigned status = _xbegin();
         if (status == _XBEGIN_STARTED) {
-            nbptr_t r = nbptr.load();
+            lin_var r = var.load();
             if(!r.is_desc()){
                 if( r.cnt!=expected.cnt ||
                     r.val!=expected.val ||
@@ -285,8 +285,8 @@ namespace pds{
                     _xend();
                     return false;
                 } else {
-                    nbptr_t new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
-                    nbptr.store(new_r);
+                    lin_var new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
+                    var.store(new_r);
                     _xend();
                     return true;
                 }
@@ -302,7 +302,7 @@ namespace pds{
 #endif
         // txn fails; fall back routine
         // abort_cnt.fetch_add(1);
-        nbptr_t r = nbptr.load();
+        lin_var r = var.load();
         if(r.is_desc()){
             sc_desc_t* D = r.get_desc();
             D->try_complete(ds, reinterpret_cast<uint64_t>(this));
@@ -313,7 +313,7 @@ namespace pds{
                 return false;
             }
         }
-        // now r.cnt must be ..00, and r.cnt+1 is ..01, which means "nbptr
+        // now r.cnt must be ..00, and r.cnt+1 is ..01, which means "var
         // contains a descriptor" and "a descriptor is in progress"
         assert((r.cnt & 3UL) == 0UL);
         new (ds->get_dcss_desc()) sc_desc_t(r.cnt+1, 
@@ -321,8 +321,8 @@ namespace pds{
                                     expected.val, 
                                     reinterpret_cast<uint64_t>(desired), 
                                     ds->_esys->epochs[pds::EpochSys::tid].ui);
-        nbptr_t new_r(reinterpret_cast<uint64_t>(ds->get_dcss_desc()), r.cnt+1);
-        if(!nbptr.compare_exchange_strong(r,new_r)){
+        lin_var new_r(reinterpret_cast<uint64_t>(ds->get_dcss_desc()), r.cnt+1);
+        if(!var.compare_exchange_strong(r,new_r)){
             return false;
         }
         ds->get_dcss_desc()->try_complete(ds, reinterpret_cast<uint64_t>(this));
@@ -331,11 +331,11 @@ namespace pds{
     }
 
     template<typename T>
-    bool atomic_nbptr_t<T>::CAS(nbptr_t expected, const T& desired){
+    bool atomic_lin_var<T>::CAS(lin_var expected, const T& desired){
         // CAS doesn't check epoch; just cas ptr to desired, with cnt+=4
         assert(!expected.is_desc());
-        nbptr_t new_r(reinterpret_cast<uint64_t>(desired), expected.cnt + 4);
-        if(!nbptr.compare_exchange_strong(expected,new_r)){
+        lin_var new_r(reinterpret_cast<uint64_t>(desired), expected.cnt + 4);
+        if(!var.compare_exchange_strong(expected,new_r)){
             return false;
         }
         return true;

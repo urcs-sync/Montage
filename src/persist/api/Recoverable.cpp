@@ -26,7 +26,7 @@ void Recoverable::init_thread(int tid){
 namespace pds{
 
     void sc_desc_t::try_complete(Recoverable* ds, uint64_t addr){
-        nbptr_t _d = nbptr.load();
+        lin_var _d = var.load();
         // int ret = 0;
         if(_d.val!=addr) return;
         if(in_progress(_d)){
