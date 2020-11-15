@@ -67,11 +67,15 @@ public:
             esys_->end_readonly_op();
         }
     };
-
-    // pnew is in a separate file since there are a bunch of them.
-    // add more as needed.
-    #include "pnew.hpp"
-
+    // TODO: replace `new` operator of T with
+    // per-heap allocation and placement new.
+    template <typename T, typename... Types> 
+    T* pnew(Types... args) 
+    { 
+        T* ret = new T(args...);
+        _esys->register_alloc_pblk(ret);
+        return ret;
+    }
     template<typename T>
     void register_update_pblk(T* b){
         _esys->register_update_pblk(b);
