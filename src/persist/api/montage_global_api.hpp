@@ -8,8 +8,6 @@
 
 #include <typeinfo>
 
-// This api is inspired by object-based RSTM's api.
-
 namespace pds{
 
     extern EpochSys* global_esys;

@@ -191,10 +191,6 @@ namespace pds{
 }
 
 class Recoverable{
-    // TODO: get rid of these.
-    template<typename T> friend class pds::atomic_lin_var;
-    friend class pds::lin_var;
-
     pds::EpochSys* _esys = nullptr;
 
     // local descriptors for DCSS
@@ -308,6 +304,9 @@ public:
     pds::sc_desc_t* get_dcss_desc(){
         return &local_descs[pds::EpochSys::tid].ui;
     }
+    uint64_t get_local_epoch(){
+        return _esys->epochs[pds::EpochSys::tid].ui;
+    }
 };
 
 /////////////////////////////
@@ -337,7 +336,7 @@ t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds) const{\
 /* set method open a pblk for write. return a new copy when necessary */\
 template <class in_type>\
 T* TOKEN_CONCAT(set_, n)(Recoverable* ds, const in_type& TOKEN_CONCAT(tmp_, n)){\
-    assert(ds->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+    assert(ds->get_local_epoch() != NULL_EPOCH);\
     auto ret = ds->openwrite_pblk(this);\
     ret->TOKEN_CONCAT(m_, n) = TOKEN_CONCAT(tmp_, n);\
     ds->register_update_pblk(ret);\
@@ -367,7 +366,7 @@ t TOKEN_CONCAT(get_unsafe_, n)(Recoverable* ds, int i) const{\
 }\
 /* set method open a pblk for write. return a new copy when necessary */\
 T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
-    assert(ds->epochs[EpochSys::tid].ui != NULL_EPOCH);\
+    assert(ds->get_local_epoch() != NULL_EPOCH);\
     auto ret = ds->openwrite_pblk(this);\
     ret->TOKEN_CONCAT(m_, n)[i] = TOKEN_CONCAT(tmp_, n);\
     ds->register_update_pblk(ret);\
@@ -400,11 +399,11 @@ namespace pds{
 
     template<typename T>
     lin_var atomic_lin_var<T>::load_verify(Recoverable* ds){
-        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        assert(ds->get_local_epoch() != NULL_EPOCH);
         lin_var r;
         while(true){
             r = var.load();
-            if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
+            if(ds->_esys->check_epoch()){
                 lin_var ret(r.val,r.cnt+1);
                 if(var.compare_exchange_strong(r, ret)){
                     return r;
@@ -417,8 +416,8 @@ namespace pds{
 
     template<typename T>
     bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
-        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
-        if(ds->_esys->check_epoch(ds->_esys->epochs[pds::EpochSys::tid].ui)){
+        assert(ds->get_local_epoch() != NULL_EPOCH);
+        if(ds->_esys->check_epoch()){
             lin_var new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
             return var.compare_exchange_strong(expected, new_r);
         } else {
@@ -461,7 +460,7 @@ namespace pds{
 
     template<typename T>
     bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
-        assert(ds->_esys->epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        assert(ds->get_local_epoch() != NULL_EPOCH);
         // total_cnt.fetch_add(1);
 #ifdef USE_TSX
         unsigned status = _xbegin();
@@ -509,7 +508,7 @@ namespace pds{
                                     reinterpret_cast<uint64_t>(this), 
                                     expected.val, 
                                     reinterpret_cast<uint64_t>(desired), 
-                                    ds->_esys->epochs[pds::EpochSys::tid].ui);
+                                    ds->get_local_epoch());
         lin_var new_r(reinterpret_cast<uint64_t>(ds->get_dcss_desc()), r.cnt+1);
         if(!var.compare_exchange_strong(r,new_r)){
             return false;
