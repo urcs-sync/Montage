@@ -86,7 +86,7 @@ public:
     }
 
     void cleanup(GlobalTestConfig* gtc){
-        Persistent::finalize();
+        delete g;
     }
     void getRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();

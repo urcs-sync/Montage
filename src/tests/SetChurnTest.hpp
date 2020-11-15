@@ -63,6 +63,10 @@ public:
 			s->remove(k,tid);
 		}
 	}
+	void cleanup(GlobalTestConfig* gtc){
+		ChurnTest::cleanup(gtc);
+		delete s;
+	}
 
 };
 

@@ -213,6 +213,9 @@ class ToyTest : public Test{
         return ops;
 
     }
+    void cleanup(GlobalTestConfig* gtc){
+        delete t;
+    }
 };
 
 

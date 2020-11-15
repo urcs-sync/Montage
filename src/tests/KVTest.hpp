@@ -90,7 +90,7 @@ public:
         return ops;
     }
     void cleanup(GlobalTestConfig* gtc){
-        Persistent::finalize();
+        delete m;
         for(int i=0;i<gtc->task_num;i++){
             delete traces[i];
         }
