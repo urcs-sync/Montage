@@ -224,6 +224,7 @@ public:
             assert((*b)->get_epoch() == NULL_EPOCH);
             _esys->register_alloc_pblk(*b, epochs[pds::EpochSys::tid].ui);
         }
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
     }
     void end_op(){
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
@@ -315,7 +316,7 @@ public:
             begin_op();
         }
         _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
-        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             end_op();
         }
     }
