@@ -19,8 +19,6 @@
 #include <unordered_set>
 #include "RCUTracker.hpp"
 
-using namespace pds;
-
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */

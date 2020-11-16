@@ -24,7 +24,6 @@
 #define DLGRAPH_FLUSHOPT(addr) asm volatile ("clflushopt (%0)" :: "r"(addr))
 #define DLGRAPH_SFENCE() asm volatile ("sfence" ::: "memory")
 
-using namespace pds;
 
 template <size_t numVertices = 1024>
 class DLGraph : public RGraph {

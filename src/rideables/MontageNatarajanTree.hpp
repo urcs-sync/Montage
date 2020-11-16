@@ -11,18 +11,16 @@
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
 
-using namespace pds;
-
 template <class K, class V>
 class MontageNatarajanTree : public RMap<K,V>, public Recoverable{
 public:
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
+        Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
     };
 private:
@@ -563,12 +561,13 @@ optional<V> MontageNatarajanTree<K,V>::replace(K key, V val, int tid){
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageNatarajanTree<std::string, std::string>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageNatarajanTree<std::string, std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(std::string k, std::string v) : m_key(this, k), m_val(this, v){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_key(this, oth.m_key), m_val(this, oth.m_val){}
     void persist(){}
 };
 

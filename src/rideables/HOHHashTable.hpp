@@ -8,19 +8,17 @@
 #include "ConcurrentPrimitives.hpp"
 #include <mutex>
 
-using namespace pds;
-
 template<typename K, typename V, size_t idxSize=1000000>
 class HOHHashTable : public RMap<K,V>, public Recoverable{
 public:
 
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
     };
 
@@ -202,7 +200,7 @@ class HOHHashTableFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class HOHHashTable<std::string, std::string, 1000000>::Payload : public PBlk{
+class HOHHashTable<std::string, std::string, 1000000>::Payload : public pds::PBlk{
     GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
     GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
 

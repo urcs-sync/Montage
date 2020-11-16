@@ -9,19 +9,17 @@
 #include <mutex>
 #include <omp.h>
 
-using namespace pds;
-
 template<typename K, typename V, size_t idxSize=1000000>
 class MontageHashTable : public RMap<K,V>, public Recoverable{
 public:
 
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
     }__attribute__((aligned(CACHELINE_SIZE)));
 
@@ -216,7 +214,7 @@ public:
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
         auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, PBlk*>* recovered = recover_pblks(rec_thd); 
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd); 
         auto end = chrono::high_resolution_clock::now();
         auto dur = end - begin;
         auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
@@ -283,12 +281,13 @@ class MontageHashTableFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageHashTable<std::string, std::string, 1000000>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageHashTable<std::string, std::string, 1000000>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(const std::string& k, const std::string& v) : m_key(this, k), m_val(this, v){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_key(this, oth.m_key), m_val(this, oth.m_val){}
     void persist(){}
 };
 

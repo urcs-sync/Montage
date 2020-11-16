@@ -11,25 +11,23 @@
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
 
-using namespace pds;
-
 template<typename T>
 class MontageMSQueue : public RQueue<T>, Recoverable{
 public:
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
-        Payload(): PBlk(){}
-        Payload(T v): PBlk(), m_val(v), m_sn(0){}
-        // Payload(const Payload& oth): PBlk(oth), m_sn(0), m_val(oth.m_val){}
+        Payload(): pds::PBlk(){}
+        Payload(T v): pds::PBlk(), m_val(v), m_sn(0){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_sn(0), m_val(oth.m_val){}
         void persist(){}
     };
 
 private:
     struct Node{
         MontageMSQueue* ds;
-        atomic_lin_var<Node*> next;
+        pds::atomic_lin_var<Node*> next;
         Payload* payload;
 
         Node(): next(nullptr), payload(nullptr){}; 
@@ -53,7 +51,7 @@ public:
 
 private:
     // dequeue pops node from head
-    atomic_lin_var<Node*> head;
+    pds::atomic_lin_var<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
     RCUTracker<Node> tracker;
@@ -92,7 +90,7 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        lin_var next = cur_tail->next.load();
+        pds::lin_var next = cur_tail->next.load();
         if(cur_tail == tail.load()){
             if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
@@ -123,7 +121,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        lin_var cur_head = head.load();
+        pds::lin_var cur_head = head.load();
         Node* cur_tail = tail.load();
         Node* next = cur_head.get_val<Node*>()->next.load_val();
 
@@ -165,12 +163,13 @@ class MontageMSQueueFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageMSQueue<std::string>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageMSQueue<std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload); 
 
 public:
     Payload(std::string v) : m_val(this, v), m_sn(0){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_val(this, oth.m_val), m_sn(oth.m_sn){}
     void persist(){}
 };
 

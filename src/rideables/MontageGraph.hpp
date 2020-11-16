@@ -21,8 +21,6 @@
 #include <omp.h>
 #include <cassert>
 
-using namespace pds;
-
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
@@ -32,12 +30,12 @@ class MontageGraph : public RGraph, public Recoverable{
     public:
 
         class tVertex;
-        class BasePayload : public PBlk {
+        class BasePayload : public pds::PBlk {
         protected:
             GENERATE_FIELD(int, tag, BasePayload);
         public:
             BasePayload(){}
-            BasePayload(const BasePayload& oth): PBlk(oth){}
+            BasePayload(const BasePayload& oth): pds::PBlk(oth){}
             void persist();
 
         };
@@ -311,7 +309,7 @@ class MontageGraph : public RGraph, public Recoverable{
 
             int block_cnt = 0;
             auto begin = chrono::high_resolution_clock::now();
-            std::unordered_map<uint64_t, PBlk*>* recovered = recover_pblks();
+            std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks();
             auto end = chrono::high_resolution_clock::now();
             auto dur = end - begin;
             auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();

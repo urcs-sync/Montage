@@ -10,8 +10,6 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 
-using namespace pds;
-
 template<typename T>
 class MSQueue : public RQueue<T>{
 private:

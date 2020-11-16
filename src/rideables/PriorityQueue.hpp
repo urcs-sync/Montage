@@ -12,18 +12,18 @@
 #include "Recoverable.hpp"
 #include "HeapQueue.hpp"
 
-using namespace pds;
 //Wentao: TODO to fix later
 template<typename K, typename V>
 class PriorityQueue : public HeapQueue<K,V>, public Recoverable{
 public: 
-  class Payload : public PBlk{
+  class Payload : public pds::PBlk{
     GENERATE_FIELD(K, key, Payload);
     GENERATE_FIELD(V, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload);
   public:
     Payload(){}
     Payload(K k, V v):m_key(k),  m_val(v), m_sn(0){}
+    Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val), m_sn(oth.m_sn){}
     void persist(){}
   };
 
@@ -123,13 +123,14 @@ class PriorityQueueFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template<>
-class PriorityQueue<std::string, std::string>::Payload : public PBlk{
-  GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-  GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class PriorityQueue<std::string, std::string>::Payload : public pds::PBlk{
+  GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+  GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
   GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:
   Payload(std::string k, std::string v):m_key(this, k),  m_val(this, v), m_sn(0){}
+  Payload(const Payload& oth): pds::PBlk(oth), m_key(this, oth.m_key),  m_val(this, oth.m_val), m_sn(oth.m_sn){}
   void persist(){}
 };
 

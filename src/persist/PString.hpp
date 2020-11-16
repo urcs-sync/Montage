@@ -5,7 +5,8 @@
 #include <string>
 
 #include "pptr.hpp"
-using namespace pds;
+
+namespace pds{
 
 // extern __thread int pds::_tid;
 
@@ -157,14 +158,16 @@ public:
     }
 };
 
+} // namespace pds
+
 namespace std {
-  template <size_t cap> struct hash<TrivialPString<cap>> {
+  template <size_t cap> struct hash<pds::TrivialPString<cap>> {
 #ifndef MNEMOSYNE
     static hash<string_view> str_hash;
 #else
     static hash<string> str_hash;
 #endif
-    size_t operator()(const TrivialPString<cap> & x) const {
+    size_t operator()(const pds::TrivialPString<cap> & x) const {
       return str_hash(x.std_str());
     }
   };

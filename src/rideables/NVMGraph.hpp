@@ -19,8 +19,6 @@
 #include "RCUTracker.hpp"
 #include "Recoverable.hpp"
 
-using namespace pds;
-
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
@@ -37,7 +35,7 @@ class NVMGraph : public RGraph {
             public:
             Vertex(){}
             Vertex(int id, int lbl): id(id), lbl(lbl){}
-            Vertex(const Vertex& oth): PBlk(oth), id(oth.id), lbl(oth.lbl) {}
+            Vertex(const Vertex& oth): id(oth.id), lbl(oth.lbl) {}
             bool operator==(const Vertex& oth) const { return id==oth.id;}
             void set_lbl(int lbl) { this->lbl = lbl; }
             int get_lbl() { return this->lbl; }
@@ -54,7 +52,7 @@ class NVMGraph : public RGraph {
             Relation(){}
             Relation(Vertex* src, Vertex* dest, int weight): weight(weight), src(src->id), dest(dest->id){}
             Relation(tVertex *src, tVertex *dest, int weight): weight(weight), src(src->get_id()), dest(dest->get_id()){}
-            Relation(const Relation& oth): PBlk(oth), weight(oth.weight), src(oth.src), dest(oth.dest){}
+            Relation(const Relation& oth): weight(oth.weight), src(oth.src), dest(oth.dest){}
             void set_weight(int weight) { this->weight = weight; }
             int get_weight() { return this->weight; }
             int get_src() { return this->src; }

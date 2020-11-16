@@ -13,12 +13,11 @@
 #include "Recoverable.hpp"
 #include <mutex>
 
-using namespace pds;
 
 template<typename T>
 class MontageQueue : public RQueue<T>, public Recoverable{
 public:
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
@@ -139,12 +138,13 @@ class MontageQueueFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageQueue<std::string>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageQueue<std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:
     Payload(std::string v, uint64_t n) : m_val(this, v), m_sn(n){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_val(this, oth.m_val), m_sn(oth.m_sn){}
     void persist(){}
 };
 

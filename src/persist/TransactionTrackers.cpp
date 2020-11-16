@@ -1,7 +1,7 @@
 #include "TransactionTrackers.hpp"
 #include "EpochSys.hpp"
 
-namespace pds{
+using namespace pds;
 
 bool PerEpochTransactionTracker::consistent_set(uint64_t target, uint64_t c){
     assert(EpochSys::tid != -1);
@@ -159,5 +159,3 @@ void FenceEndTransactionTracker::set_unregister(paddedAtomic<bool>* indicators){
 }
 FenceEndTransactionTracker::FenceEndTransactionTracker(atomic<uint64_t>* ge, int task_num):
     NoFenceTransactionTracker(ge, task_num){}
-
-}
