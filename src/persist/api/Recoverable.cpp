@@ -8,7 +8,7 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
     for(int i = 0; i < gtc->task_num; i++){
         epochs[i].ui = NULL_EPOCH;
     }
-    pending_allocs = new padded<std::unordered_set<PBlk*>>[gtc->task_num];
+    pending_allocs = new padded<std::unordered_set<pds::PBlk*>>[gtc->task_num];
     local_descs = new padded<pds::sc_desc_t>[gtc->task_num];
     // init main thread
     pds::EpochSys::init_thread(0);
@@ -23,11 +23,11 @@ Recoverable::~Recoverable(){
     Persistent::finalize();
 }
 void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){
-    EpochSys::init_thread(ltc->tid);
+    pds::EpochSys::init_thread(ltc->tid);
 }
 
 void Recoverable::init_thread(int tid){
-    EpochSys::init_thread(tid);
+    pds::EpochSys::init_thread(tid);
 }
 
 namespace pds{

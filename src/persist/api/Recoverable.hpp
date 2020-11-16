@@ -204,7 +204,7 @@ public:
     // return num of blocks recovered.
     virtual int recover(bool simulated = false) = 0;
     Recoverable(GlobalTestConfig* gtc);
-    ~Recoverable();
+    virtual ~Recoverable();
 
     void init_thread(GlobalTestConfig*, LocalTestConfig* ltc);
     void init_thread(int tid);
@@ -270,7 +270,7 @@ public:
     {
         T* ret = new T(args...);
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
-            _esys->pending_allocs[EpochSys::tid].ui.insert(ret);
+            pending_allocs[pds::EpochSys::tid].ui.insert(ret);
         } else {
             _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
         }
@@ -285,11 +285,11 @@ public:
         ASSERT_DERIVE(T, pds::PBlk);
         ASSERT_COPY(T);
 
-        if (sys_mode == pds::ONLINE){
+        if (_esys->sys_mode == pds::ONLINE){
             if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
                 _esys->free_pblk(b, epochs[pds::EpochSys::tid].ui);
             } else {
-                if (b->epoch == NULL_EPOCH){
+                if (((pds::PBlk*)b)->get_epoch() == NULL_EPOCH){
                     assert(pending_allocs[pds::EpochSys::tid].ui.find(b) != pending_allocs[pds::EpochSys::tid].ui.end());
                     pending_allocs[pds::EpochSys::tid].ui.erase(b);
                 }

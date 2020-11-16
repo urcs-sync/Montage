@@ -21,6 +21,8 @@
 #include "ToBeFreedContainers.hpp"
 #include "EpochAdvancers.hpp"
 
+class Recoverable;
+
 namespace pds{
 
 struct OldSeeNewException : public std::exception {
@@ -32,7 +34,6 @@ struct OldSeeNewException : public std::exception {
 enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
 
 class EpochSys;
-class Recoverable;
 
 /////////////////////////////
 // PBlk-related structures //
@@ -67,6 +68,9 @@ public:
     void set_epoch(uint64_t e){
         // only for testing
         epoch=e;
+    }
+    uint64_t get_epoch(){
+        return epoch;
     }
     // id gets inited by EpochSys instance.
     PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
@@ -214,6 +218,9 @@ public:
     void validate_access(const PBlk* b, uint64_t c);
 
     // register the allocation of a PBlk during a transaction.
+    // called for new blocks at both pnew (holding them in
+    // pending_allocs) and begin_op (registering them with the
+    // acquired epoch).
     template<typename T>
     T* register_alloc_pblk(T* b, uint64_t c);
 
@@ -275,7 +282,7 @@ public:
     /////////////
     
     // recover all PBlk decendants. return an iterator.
-    std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd);
+    std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd = 2);
 };
 
 

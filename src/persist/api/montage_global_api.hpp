@@ -18,6 +18,12 @@ namespace pds{
                 delete recovered_pblks;
             }
         }
+        int recover(bool simulated){
+            // TODO: handle simulated situation here?
+            recovered_pblks = recover_pblks();
+            // TODO: return number of blocks here?
+            return 0;
+        }
         std::unordered_map<uint64_t, PBlk*>* get_recovered(){
             return recovered_pblks;
         }
@@ -46,7 +52,7 @@ namespace pds{
         global_recoverable = nullptr; // for debugging.
     }
 
-    #define CHECK_EPOCH() ({\
+    #define CHECK_CURR_OP_EPOCH() ({\
         global_recoverable->check_epoch();})
 
     #define CHECK_EPOCH(c) ({\
@@ -91,9 +97,9 @@ namespace pds{
     // Hs: This is for "owned" PBlk's, currently not used in code base.
     // may be useful for "data" blocks like dynamically-sized
     // persistent String payload.
-    // #define PDELETE_DATA(b) ({\
-    //     if (global_recoverable->sys_mode == ONLINE) {\
-    //         delete(b);\
+    // #define PDELETE_DATA(b) ({
+    //     if (global_recoverable->sys_mode == ONLINE) {
+    //         delete(b);
     //     }})
 
     inline std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd=10){
