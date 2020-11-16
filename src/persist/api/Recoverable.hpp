@@ -221,7 +221,7 @@ public:
         // TODO: put pending_allocs-related stuff into operations?
         for (auto b = pending_allocs[pds::EpochSys::tid].ui.begin(); 
             b != pending_allocs[pds::EpochSys::tid].ui.end(); b++){
-            assert((*b)->epoch == NULL_EPOCH);
+            assert((*b)->get_epoch() == NULL_EPOCH);
             _esys->register_alloc_pblk(*b, epochs[pds::EpochSys::tid].ui);
         }
     }
@@ -306,7 +306,7 @@ public:
     }
     template<typename T>
     void pretire(T* b){
-        assert(eochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         _esys->retire_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
     template<typename T>

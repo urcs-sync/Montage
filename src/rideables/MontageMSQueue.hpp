@@ -34,7 +34,7 @@ private:
 
         Node(): next(nullptr), payload(nullptr){}; 
         Node(MontageMSQueue* ds_, T v): ds(ds_), next(nullptr), payload(ds_->pnew<Payload>(v)){
-            assert(esys->epochs[EpochSys::tid].ui == NULL_EPOCH);
+            // assert(ds->epochs[EpochSys::tid].ui == NULL_EPOCH);
         };
 
         void set_sn(uint64_t s){

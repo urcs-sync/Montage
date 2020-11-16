@@ -45,7 +45,9 @@ private:
         MarkPtr next;
         Payload* payload;// TODO: does it have to be atomic?
         Node(MontageLfHashTable* ds_, K k, V v, Node* n):
-            ds(ds_),key(k),next(n),payload(ds_->pnew<Payload>(k,v)){};
+            ds(ds_),key(k),next(n),payload(ds_->pnew<Payload>(k,v)){
+            // assert(ds->epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
+            };
         ~Node(){
             ds->preclaim(payload);
         }
@@ -258,7 +260,7 @@ optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
     while(true){
         if(findNode(prev,curr,next,key,tid)){
             tmpNode->next.ptr.store(curr);
-            abort_op();
+            begin_op();
             res=curr.get_val<Node*>()->get_val();
             if(prev->ptr.CAS_verify(this,curr,tmpNode)){
                 curr.get_val<Node*>()->rm_payload();
