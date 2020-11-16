@@ -225,6 +225,9 @@ public:
     T* register_alloc_pblk(T* b, uint64_t c);
 
     template<typename T>
+    T* reset_alloc_pblk(T* b);
+
+    template<typename T>
     PBlkArray<T>* alloc_pblk_array(size_t s, uint64_t c);
 
     template<typename T>
@@ -298,9 +301,7 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     PBlk* blk = b;
     assert(c != NULL_EPOCH);
     blk->epoch = c;
-    // Wentao: It's possible that payload is registered multiple times
-    assert(blk->blktype == INIT || blk->blktype == OWNED || 
-           blk->blktype == ALLOC); 
+    assert(blk->blktype == INIT || blk->blktype == OWNED); 
     if (blk->blktype == INIT){
         blk->blktype = ALLOC;
     }
@@ -315,6 +316,22 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     }
     return b;
 }
+
+template<typename T>
+T* EpochSys::reset_alloc_pblk(T* b){
+    ASSERT_DERIVE(T, PBlk);
+    ASSERT_COPY(T);
+    PBlk* blk = b;
+    blk->epoch = NULL_EPOCH;
+    assert(blk->blktype == ALLOC); 
+    blk->blktype = INIT;
+    PBlk* data = blk->get_data();
+    if (data){
+        reset_alloc_pblk(data);
+    }
+    return b;
+}
+
 
 template<typename T>
 PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
