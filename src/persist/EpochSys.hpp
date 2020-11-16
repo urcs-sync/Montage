@@ -214,6 +214,9 @@ public:
     void validate_access(const PBlk* b, uint64_t c);
 
     // register the allocation of a PBlk during a transaction.
+    // called for new blocks at both pnew (holding them in
+    // pending_allocs) and begin_op (registering them with the
+    // acquired epoch).
     template<typename T>
     T* register_alloc_pblk(T* b, uint64_t c);
 
