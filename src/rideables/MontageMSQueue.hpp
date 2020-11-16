@@ -85,7 +85,7 @@ public:
 
 template<typename T>
 void MontageMSQueue<T>::enqueue(T v, int tid){
-    Node* new_node = new Node(v);
+    Node* new_node = new Node(this,v);
     Node* cur_tail = nullptr;
     tracker.start_op(tid);
     while(true){
@@ -139,7 +139,7 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
                 begin_op();
                 Payload* payload = next->payload;// get payload for PDELETE
                 if(head.CAS_verify(this, cur_head, next)){
-                    res = (T)payload->get_val();// old see new is impossible
+                    res = (T)payload->get_val(this);// old see new is impossible
                     pretire(payload); // semantically we are removing next from queue
                     end_op();
                     cur_head.get_val<Node*>()->payload = payload; // let payload have same lifetime as dummy node
