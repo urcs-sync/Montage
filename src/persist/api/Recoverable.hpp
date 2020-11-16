@@ -99,11 +99,11 @@ namespace pds{
         lin_var load(Recoverable* ds);
         lin_var load_verify(Recoverable* ds);
         inline T load_val(Recoverable* ds){
-            return reinterpret_cast<T>(load().val);
+            return reinterpret_cast<T>(load(ds).val);
         }
         bool CAS_verify(Recoverable* ds, lin_var expected, const T& desired);
-        inline bool CAS_verify(lin_var expected, const lin_var& desired){
-            return CAS_verify(expected,desired.get_val<T>());
+        inline bool CAS_verify(Recoverable* ds, lin_var expected, const lin_var& desired){
+            return CAS_verify(ds, expected,desired.get_val<T>());
         }
         // CAS doesn't check epoch nor cnt
         bool CAS(lin_var expected, const T& desired);
@@ -226,6 +226,7 @@ public:
         }
     }
     void end_op(){
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
@@ -233,6 +234,7 @@ public:
         pending_allocs[pds::EpochSys::tid].ui.clear();
     }
     void end_readonly_op(){
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             _esys->end_readonly_transaction(epochs[pds::EpochSys::tid].ui);
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
