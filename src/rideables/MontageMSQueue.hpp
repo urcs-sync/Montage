@@ -83,14 +83,14 @@ public:
 
 template<typename T>
 void MontageMSQueue<T>::enqueue(T v, int tid){
-    Node* new_node = new Node(v);
+    Node* new_node = new Node(this,v);
     Node* cur_tail = nullptr;
     tracker.start_op(tid);
     while(true){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        pds::lin_var next = cur_tail->next.load();
+        pds::lin_var next = cur_tail->next.load(this);
         if(cur_tail == tail.load()){
             if(next.get_val<Node*>() == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
@@ -121,11 +121,11 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        pds::lin_var cur_head = head.load();
+        pds::lin_var cur_head = head.load(this);
         Node* cur_tail = tail.load();
-        Node* next = cur_head.get_val<Node*>()->next.load_val();
+        Node* next = cur_head.get_val<Node*>()->next.load_val(this);
 
-        if(cur_head == head.load()){
+        if(cur_head == head.load(this)){
             if(cur_head.get_val<Node*>() == cur_tail){
                 // queue is empty
                 if(next == nullptr) {
@@ -136,8 +136,8 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
             } else {
                 begin_op();
                 Payload* payload = next->payload;// get payload for PDELETE
-                if(head.CAS_verify(cur_head, next)){
-                    res = (T)payload->get_val();// old see new is impossible
+                if(head.CAS_verify(this, cur_head, next)){
+                    res = (T)payload->get_val(this);// old see new is impossible
                     pretire(payload); // semantically we are removing next from queue
                     end_op();
                     cur_head.get_val<Node*>()->payload = payload; // let payload have same lifetime as dummy node

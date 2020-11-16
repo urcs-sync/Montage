@@ -140,11 +140,16 @@ class DLGraph : public RGraph {
         };
 
         DLGraph(GlobalTestConfig* gtc) {
+            Persistent::init();
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i] = new tVertex(i, -1);
             }
+        }
+
+        ~DLGraph(){
+            Persistent::finalize();
         }
 
         
