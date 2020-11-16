@@ -50,6 +50,7 @@ private:
 
 public:
     FriedmanQueue(int task_num): tracker(task_num, 100, 1000, true){
+        Persistent::init();
         head = (atomic_pptr<Node>*)RP_malloc(sizeof(atomic_pptr<Node>));
         new (head) atomic_pptr<Node>();
         tail = (atomic_pptr<Node>*)RP_malloc(sizeof(atomic_pptr<Node>));
@@ -69,7 +70,9 @@ public:
         }
     }
 
-    ~FriedmanQueue(){};
+    ~FriedmanQueue(){
+        Persistent::finalize();
+    };
 
     void enqueue(std::string value, int tid);
     optional<std::string> dequeue(int tid);

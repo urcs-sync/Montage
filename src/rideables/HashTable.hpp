@@ -206,9 +206,13 @@ public:
     Bucket* buckets;
 
     NVMHashTable(GlobalTestConfig* gtc){ 
+        Persistent::init();
         buckets = (Bucket*)RP_malloc(sizeof(Bucket)*idxSize);
         new (buckets) Bucket [idxSize] ();
     };
+    ~NVMHashTable(){
+        Persistent::finalize();
+    }
 
 
     optional<std::string> get(std::string key, int tid){

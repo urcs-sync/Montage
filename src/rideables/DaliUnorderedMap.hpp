@@ -221,6 +221,7 @@ private:
 public:
     DaliUnorderedMap(GlobalTestConfig* gtc):
             task_num(gtc->task_num){
+        Persistent::init();
         buckets = (Bucket*)RP_malloc(sizeof(Bucket)*idxSize);
         new (buckets) Bucket [idxSize] ();
         flist = new FList<int64_t>();
@@ -259,6 +260,7 @@ public:
     ~DaliUnorderedMap(){
         std::cout<<"current epoch: "<<epoch->load()<<std::endl;
         delete retired;
+        Persistent::finalize();
     };
 
     optional<V> get(K key, int tid);

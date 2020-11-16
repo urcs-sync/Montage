@@ -201,11 +201,16 @@ public:
 
 
     SOFTHashTable(GlobalTestConfig* gtc) : tracker(gtc->task_num, 100, 1000, true){
+        Persistent::init();
         for(size_t i=0;i<idxSize;i++){
             heads[i] = new Node("", "", nullptr, false);
             heads[i]->next.store(new Node(std::string(1,(char)127), "", nullptr, false), std::memory_order_release);
         }
-    };
+    }
+
+    ~SOFTHashTable(){
+        Persistent::finalize();
+    }
 
   private:
     std::hash<K> hash_fn;

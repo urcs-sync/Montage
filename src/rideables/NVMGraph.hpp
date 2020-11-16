@@ -106,11 +106,16 @@ class NVMGraph : public RGraph {
         };
 
         NVMGraph(GlobalTestConfig* gtc) {
+            Persistent::init();
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i] = new tVertex(i, -1);
             }
+        }
+
+        ~NVMGraph(){
+            Persistent::finalize();
         }
 
         tVertex** idxToVertex; // Transient set of transient vertices to index map
