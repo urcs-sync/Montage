@@ -240,6 +240,17 @@ public:
     }
     void abort_op(){
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        // TODO: any room for optimization here?
+        for (auto b = pending_allocs[tid].ui.begin(); 
+            b != pending_allocs[tid].ui.end(); b++){
+            // reset epochs registered in pending blocks
+            (*b)->epoch = NULL_EPOCH;
+            // TODO: is get_data() still in use?
+            PBlk* data = (*b)->get_data();
+            if (data){
+                data->epoch = NULL_EPOCH;
+            }
+        }
         _esys->abort_transaction(epochs[pds::EpochSys::tid].ui);
         epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
     }
