@@ -32,7 +32,7 @@ struct OldSeeNewException : public std::exception {
 enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
 
 class EpochSys;
-
+class Recoverable;
 
 /////////////////////////////
 // PBlk-related structures //
@@ -40,6 +40,7 @@ class EpochSys;
 
 class PBlk : public Persistent{
     friend class EpochSys;
+    friend class Recoverable;
 protected:
     // Wentao: the first word should NOT be any persistent value for
     // epoch-system-level recovery (i.e., epoch), as Ralloc repurposes the first
@@ -142,20 +143,7 @@ public:
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
 
-    /* public members for API */ // TODO: put these into Recoverable
-    // current epoch of each thread.
-    padded<uint64_t>* epochs = nullptr;
-    // containers for pending allocations
-    padded<std::unordered_set<PBlk*>>* pending_allocs = nullptr;
-    
-
     EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
-        epochs = new padded<uint64_t>[gtc->task_num];
-        for(int i = 0; i < gtc->task_num; i++){
-            epochs[i].ui = NULL_EPOCH;
-        }
-        
-        pending_allocs = new padded<std::unordered_set<PBlk*>>[gtc->task_num];
         reset(); // TODO: change to recover() later on.
     }
 
@@ -175,7 +163,6 @@ public:
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
-        delete epochs;
     }
 
     void parse_env();
@@ -199,130 +186,13 @@ public:
         Persistent::simulate_crash(tid);
     }
 
-    /////////
-    // API //
-    /////////
-
-    // TODO: put these into Recoverable.
+    ////////////////
+    // Operations //
+    ////////////////
 
     static void init_thread(int _tid){
         EpochSys::tid = _tid;
     }
-
-    bool check_epoch(){
-        return check_epoch(epochs[tid].ui);
-    }
-
-    void begin_op(){
-        assert(epochs[tid].ui == NULL_EPOCH); 
-        epochs[tid].ui = begin_transaction();
-        // TODO: any room for optimization here?
-        // TODO: put pending_allocs-related stuff into operations?
-        for (auto b = pending_allocs[tid].ui.begin(); 
-            b != pending_allocs[tid].ui.end(); b++){
-            register_alloc_pblk(*b, epochs[tid].ui);
-        }
-    }
-
-    void end_op(){
-        if (epochs[tid].ui != NULL_EPOCH){
-            end_transaction(epochs[tid].ui);
-            epochs[tid].ui = NULL_EPOCH;
-        }
-        pending_allocs[tid].ui.clear();
-    }
-
-    void end_readonly_op(){
-        if (epochs[tid].ui != NULL_EPOCH){
-            end_readonly_transaction(epochs[tid].ui);
-            epochs[tid].ui = NULL_EPOCH;
-        }
-        assert(pending_allocs[tid].ui.empty());
-    }
-
-    void abort_op(){
-        assert(epochs[tid].ui != NULL_EPOCH);
-        abort_transaction(epochs[tid].ui);
-        epochs[tid].ui = NULL_EPOCH;
-    }
-
-    template<typename T>
-    void pdelete(T* b){
-        ASSERT_DERIVE(T, PBlk);
-        ASSERT_COPY(T);
-
-        if (sys_mode == ONLINE){
-            if (epochs[tid].ui != NULL_EPOCH){
-                free_pblk(b, epochs[tid].ui);
-            } else {
-                if (b->epoch == NULL_EPOCH){
-                    assert(pending_allocs[tid].ui.find(b) != pending_allocs[tid].ui.end());
-                    pending_allocs[tid].ui.erase(b);
-                }
-                delete b;
-            }
-        }
-    }
-
-    template<typename T>
-    void pretire(T* b){
-        assert(eochs[tid].ui != NULL_EPOCH);
-        retire_pblk(b, epochs[tid].ui);
-    }
-
-    template<typename T>
-    void preclaim(T* b){
-        if (epochs[tid].ui == NULL_EPOCH){
-            begin_op();
-        }
-        reclaim_pblk(b, epochs[tid].ui);
-        if (epochs[tid].ui == NULL_EPOCH){
-            end_op();
-        }
-    }
-
-    template<typename T>
-    T* register_alloc_pblk(T* b){
-        return register_alloc_pblk(b, epochs[tid].ui);
-    }
-
-    template<typename T>
-    void register_update_pblk(T* b){
-        register_update_pblk(b, epochs[tid].ui);
-    }
-
-    template<typename T>
-    const T* openread_pblk(const T* b){
-        assert(epochs[tid].ui != NULL_EPOCH);
-        return openread_pblk(b, epochs[tid].ui);
-    }
-
-    template<typename T>
-    const T* openread_pblk_unsafe(const T* b){
-        if (epochs[tid].ui != NULL_EPOCH){
-            return openread_pblk_unsafe(b, epochs[tid].ui);
-        } else {
-            return b;
-        }
-    }
-
-    template<typename T>
-    T* openwrite_pblk(T* b){
-        assert(epochs[tid].ui != NULL_EPOCH);
-        return openwrite_pblk(b, epochs[tid].ui);
-    }
-
-    void recover_mode(){
-        sys_mode = RECOVER; // PDELETE -> nop
-    }
-
-    void online_mode(){
-        sys_mode = ONLINE;
-    }
-
-    ////////////////
-    // Operations //
-    ////////////////
 
     // check if global is the same as c.
     bool check_epoch(uint64_t c);
@@ -419,13 +289,7 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     ASSERT_COPY(T);
         
     PBlk* blk = b;
-    if (c == NULL_EPOCH){
-        // register alloc before BEGIN_OP, put it into pending_allocs bucket and
-        // return. Will be done by the BEGIN_OP that calls this again with a
-        // non-NULL c.
-        pending_allocs[tid].ui.insert(blk);
-        return b;
-    }
+    assert(c != NULL_EPOCH);
     blk->epoch = c;
     // Wentao: It's possible that payload is registered multiple times
     assert(blk->blktype == INIT || blk->blktype == OWNED || 

@@ -192,7 +192,11 @@ namespace pds{
 
 class Recoverable{
     pds::EpochSys* _esys = nullptr;
-
+    
+    // current epoch of each thread.
+    padded<uint64_t>* epochs = nullptr;
+    // containers for pending allocations
+    padded<std::unordered_set<pds::PBlk*>>* pending_allocs = nullptr;
     // local descriptors for DCSS
     // TODO: maybe put this into a derived class for NB data structures?
     padded<pds::sc_desc_t>* local_descs = nullptr;
@@ -205,94 +209,135 @@ public:
     void init_thread(GlobalTestConfig*, LocalTestConfig* ltc);
     void init_thread(int tid);
     bool check_epoch(){
-        return _esys->check_epoch();
+        return _esys->check_epoch(epochs[pds::EpochSys::tid].ui);
     }
     bool check_epoch(uint64_t c){
         return _esys->check_epoch(c);
     }
     void begin_op(){
-        _esys->begin_op();
+        assert(epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
+        epochs[pds::EpochSys::tid].ui = _esys->begin_transaction();
+        // TODO: any room for optimization here?
+        // TODO: put pending_allocs-related stuff into operations?
+        for (auto b = pending_allocs[pds::EpochSys::tid].ui.begin(); 
+            b != pending_allocs[pds::EpochSys::tid].ui.end(); b++){
+            _esys->register_alloc_pblk(*b, epochs[pds::EpochSys::tid].ui);
+        }
     }
     void end_op(){
-        _esys->end_op();
+        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+            _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
+            epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
+        }
+        pending_allocs[pds::EpochSys::tid].ui.clear();
     }
     void end_readonly_op(){
-        _esys->end_readonly_op();
+        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+            _esys->end_readonly_transaction(epochs[pds::EpochSys::tid].ui);
+            epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
+        }
+        assert(pending_allocs[pds::EpochSys::tid].ui.empty());
     }
     void abort_op(){
-        _esys->abort_op();
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        _esys->abort_transaction(epochs[pds::EpochSys::tid].ui);
+        epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
     }
     class MontageOpHolder{
-        pds::EpochSys* esys_;
+        Recoverable* ds = nullptr;
     public:
-        MontageOpHolder(Recoverable* ds): esys_(ds->_esys){
-            esys_->begin_op();
-        }
-        MontageOpHolder(pds::EpochSys* _esys): esys_(_esys){
-            esys_->begin_op();
+        MontageOpHolder(Recoverable* ds_): ds(ds_){
+            ds->begin_op();
         }
         ~MontageOpHolder(){
-            esys_->end_op();
+            ds->end_op();
         }
     };
     class MontageOpHolderReadOnly{
-        pds::EpochSys* esys_;
+        Recoverable* ds = nullptr;
     public:
-        MontageOpHolderReadOnly(Recoverable* ds): esys_(ds->_esys){
-            esys_->begin_op();
-        }
-        MontageOpHolderReadOnly(pds::EpochSys* _esys): esys_(_esys){
-            esys_->begin_op();
+        MontageOpHolderReadOnly(Recoverable* ds_): ds(ds_){
+            ds->begin_op();
         }
         ~MontageOpHolderReadOnly(){
-            esys_->end_readonly_op();
+            ds->end_readonly_op();
         }
     };
     // TODO: replace `new` operator of T with
     // per-heap allocation and placement new.
     template <typename T, typename... Types> 
     T* pnew(Types... args) 
-    { 
+    {
         T* ret = new T(args...);
-        _esys->register_alloc_pblk(ret);
+        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            _esys->pending_allocs[EpochSys::tid].ui.insert(ret);
+        } else {
+            _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
+        }
         return ret;
     }
     template<typename T>
     void register_update_pblk(T* b){
-        _esys->register_update_pblk(b);
+        _esys->register_update_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
     template<typename T>
     void pdelete(T* b){
-        _esys->pdelete(b);
+        ASSERT_DERIVE(T, pds::PBlk);
+        ASSERT_COPY(T);
+
+        if (sys_mode == pds::ONLINE){
+            if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+                _esys->free_pblk(b, epochs[pds::EpochSys::tid].ui);
+            } else {
+                if (b->epoch == NULL_EPOCH){
+                    assert(pending_allocs[pds::EpochSys::tid].ui.find(b) != pending_allocs[pds::EpochSys::tid].ui.end());
+                    pending_allocs[pds::EpochSys::tid].ui.erase(b);
+                }
+                delete b;
+            }
+        }
     }
     template<typename T>
     void pretire(T* b){
-        _esys->pretire(b);
+        assert(eochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        _esys->retire_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
     template<typename T>
     void preclaim(T* b){
-        _esys->pdelete(b);
+        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            begin_op();
+        }
+        _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
+        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            end_op();
+        }
     }
     template<typename T>
     const T* openread_pblk(const T* b){
-        return _esys->openread_pblk(b);
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        return _esys->openread_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
     template<typename T>
     const T* openread_pblk_unsafe(const T* b){
-        return _esys->openread_pblk_unsafe(b);
+        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+            return _esys->openread_pblk_unsafe(b, epochs[pds::EpochSys::tid].ui);
+        } else {
+            return b;
+        }
     }
     template<typename T>
     T* openwrite_pblk(T* b){
-        return _esys->openwrite_pblk(b);
+        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        return _esys->openwrite_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
     std::unordered_map<uint64_t, pds::PBlk*>* recover_pblks(const int rec_thd=10){
         return _esys->recover(rec_thd);
     }
     void recover_mode(){
-        _esys->recover_mode();
+        _esys->sys_mode = pds::RECOVER; // PDELETE -> nop
     }
     void online_mode(){
-        _esys->online_mode();
+        _esys->sys_mode = pds::ONLINE;
     }
     void flush(){
         _esys->flush();
@@ -305,7 +350,7 @@ public:
         return &local_descs[pds::EpochSys::tid].ui;
     }
     uint64_t get_local_epoch(){
-        return _esys->epochs[pds::EpochSys::tid].ui;
+        return epochs[pds::EpochSys::tid].ui;
     }
 };
 

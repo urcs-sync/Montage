@@ -9,8 +9,22 @@
 #include <typeinfo>
 
 namespace pds{
+    class GlobalRecoverable: public Recoverable{
+        std::unordered_map<uint64_t, PBlk*>* recovered_pblks = nullptr;
+    public:
+        GlobalRecoverable(GlobalTestConfig* gtc): Recoverable(gtc){}
+        ~GlobalRecoverable(){
+            if (recovered_pblks){
+                delete recovered_pblks;
+            }
+        }
+        std::unordered_map<uint64_t, PBlk*>* get_recovered(){
+            return recovered_pblks;
+        }
+    };
 
-    extern EpochSys* global_esys;
+    extern GlobalRecoverable* global_recoverable;
+    
 
     inline void init(GlobalTestConfig* gtc){
         // here we assume that pds::init is called before pds::init_thread, hence the assertion.
@@ -19,80 +33,84 @@ namespace pds{
         if (EpochSys::tid == -1){
             EpochSys::tid = 0;
         }
-        global_esys = new EpochSys(gtc);
+        global_recoverable = new GlobalRecoverable(gtc);
     }
 
     inline void init_thread(int id) {
         EpochSys::tid = id;
-        // global_esys->init_thread(id);
+        // esys_global->init_thread(id);
     }
 
     inline void finalize(){
-        delete global_esys;
-        global_esys = nullptr; // for debugging.
+        delete global_recoverable;
+        global_recoverable = nullptr; // for debugging.
     }
 
     #define CHECK_EPOCH() ({\
-        global_esys->check_epoch();})
+        global_recoverable->check_epoch();})
+
+    #define CHECK_EPOCH(c) ({\
+        global_recoverable->check_epoch(c);})
 
     // TODO: get rid of arguments in rideables.
     #define BEGIN_OP( ... ) ({ \
-        global_esys->begin_op();})
+        global_recoverable->begin_op();})
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_OP ({\
-        global_esys->end_op(); })
+        global_recoverable->end_op();})
 
     // end current operation by reducing transaction count of our epoch.
     // if our operation is already aborted, do nothing.
     #define END_READONLY_OP ({\
-        global_esys->end_readonly_op(); })
+        global_recoverable->end_readonly_op();})
 
-    // end current epoch and not move towards next epoch in global_esys.
+    // end current epoch and not move towards next epoch in global_recoverable.
     #define ABORT_OP ({ \
-        global_esys->abort_op(); })
+        global_recoverable->abort_op();})
 
     #define BEGIN_OP_AUTOEND( ... ) \
-        Recoverable::MontageOpHolder __holder;
+        Recoverable::MontageOpHolder __holder(global_recoverable);
 
     #define BEGIN_READONLY_OP_AUTOEND( ... ) \
-        Recoverable::MontageOpHolderReadOnly __holder;
+        Recoverable::MontageOpHolderReadOnly __holder_readonly(global_recoverable);
     
     #define PNEW(t, ...) ({\
-        global_esys->register_alloc_pblk(new t(__VA_ARGS__));})
+        global_recoverable->pnew<t>(__VA_ARGS__));})
 
     #define PDELETE(b) ({\
-        global_esys->pdelete(b);})
+        global_recoverable->pdelete(b);})
 
     #define PRETIRE(b) ({\
-        global_esys->pretire(b);})
+        global_recoverable->pretire(b);})
 
     #define PRECLAIM(b) ({\
-        global_esys->preclaim(b);})
+        global_recoverable->preclaim(b);})
 
     // Hs: This is for "owned" PBlk's, currently not used in code base.
     // may be useful for "data" blocks like dynamically-sized
     // persistent String payload.
-    #define PDELETE_DATA(b) ({\
-        if (global_esys->sys_mode == ONLINE) {\
-            delete(b);\
-        }})
+    // #define PDELETE_DATA(b) ({\
+    //     if (global_recoverable->sys_mode == ONLINE) {\
+    //         delete(b);\
+    //     }})
 
     inline std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd=10){
-        return global_esys->recover(rec_thd);
+        global_recoverable->recover(rec_thd);
+        return global_recoverable->get_recovered();
     }
 
     inline void flush(){
-        global_esys->flush();
+        global_recoverable->flush();
     }
 
     inline void recover_mode(){
-        global_esys->recover_mode();
+        global_recoverable->recover_mode();
     }
 
     inline void online_mode(){
-        global_esys->online_mode();
+        global_recoverable->online_mode();
     }
 }
 
