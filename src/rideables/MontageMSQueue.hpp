@@ -26,14 +26,15 @@ public:
 
 private:
     struct Node{
-        MontageMSQueue* ds;
+        MontageMSQueue* ds = nullptr;
         pds::atomic_lin_var<Node*> next;
         Payload* payload;
 
-        Node(): next(nullptr), payload(nullptr){}; 
+        Node(): next(nullptr), payload(nullptr){}
+        Node(MontageMSQueue* ds_): ds(ds_), next(nullptr), payload(nullptr){}
         Node(MontageMSQueue* ds_, T v): ds(ds_), next(nullptr), payload(ds_->pnew<Payload>(v)){
             // assert(ds->epochs[EpochSys::tid].ui == NULL_EPOCH);
-        };
+        }
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
@@ -61,7 +62,7 @@ public:
         Recoverable(gtc), global_sn(0), head(nullptr), tail(nullptr), 
         tracker(gtc->task_num, 100, 1000, true){
 
-        Node* dummy = new Node();
+        Node* dummy = new Node(this);
         head.store(dummy);
         tail.store(dummy);
     }

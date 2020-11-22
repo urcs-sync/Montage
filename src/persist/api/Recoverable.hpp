@@ -314,11 +314,13 @@ public:
     }
     template<typename T>
     void preclaim(T* b){
+        bool not_in_operation = false;
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            not_in_operation = true;
             begin_op();
         }
         _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
-        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+        if (not_in_operation){
             end_op();
         }
     }
