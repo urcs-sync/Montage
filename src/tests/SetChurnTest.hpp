@@ -28,7 +28,6 @@ public:
 		}
 	}
 	void doPrefill(GlobalTestConfig* gtc){
-		pds::init_thread(0);
 		// prefill deterministically:
 		if (this->prefill > 0){
 			/* Wentao: 
@@ -63,6 +62,10 @@ public:
 		else{ // op<=prop_removes
 			s->remove(k,tid);
 		}
+	}
+	void cleanup(GlobalTestConfig* gtc){
+		ChurnTest::cleanup(gtc);
+		delete s;
 	}
 
 };

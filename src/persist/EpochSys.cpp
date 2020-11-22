@@ -1,20 +1,10 @@
 #include "EpochSys.hpp"
-#include "DCSS.hpp"
 
 #include <omp.h>
 #include <atomic>
 namespace pds{
 
-    __thread int _tid = -1;
-    EpochSys* esys = nullptr;
-    padded<uint64_t>* epochs = nullptr;
-    SysMode sys_mode = ONLINE;
-    // std::atomic<size_t> abort_cnt(0);
-    // std::atomic<size_t> total_cnt(0);
-
-    UIDGenerator PBlk::uid_generator;
-    
-    padded<sc_desc_t>* local_descs = nullptr;
+    thread_local int EpochSys::tid = -1;
 
     void EpochSys::parse_env(){
         if (to_be_persisted){
@@ -136,8 +126,8 @@ namespace pds{
         do{
             ret = global_epoch->load(std::memory_order_seq_cst);
         } while(!trans_tracker->consistent_register_active(ret, ret));
-        //to_be_freed->free_on_new_epoch(ret);
         to_be_freed->free_on_new_epoch(ret);
+        
         return ret;
     }
 

@@ -3,67 +3,69 @@
 
 #include "TestConfig.hpp"
 #include "RMap.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 #include "CustomTypes.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include <mutex>
 
-using namespace pds;
-
 template<typename K, typename V, size_t idxSize=1000000>
-class HOHHashTable : public RMap<K,V>{
+class HOHHashTable : public RMap<K,V>, public Recoverable{
 public:
 
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
     };
 
     struct ListNode{
+        HOHHashTable* ds;
         // Transient-to-persistent pointer
         Payload* payload = nullptr;
         // Transient-to-transient pointers
         ListNode* next = nullptr;
         std::mutex lock;
         ListNode(){}
-        ListNode(K key, V val){
-            payload = PNEW(Payload, key, val);
+        ListNode(HOHHashTable* ds_, K key, V val): ds(ds_){
+            payload = ds->pnew<Payload>(key, val);
         }
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (K)payload->get_key();
+            return (K)payload->get_key(ds);
         }
         V get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (V)payload->get_val();
+            return (V)payload->get_val(ds);
         }
         void set_val(V v){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_val(v);
+            payload = payload->set_val(ds, v);
         }
         ~ListNode(){
-            PDELETE(payload);
+            ds->pdelete(payload);
         }
     };
     std::hash<K> hash_fn;
     padded<ListNode>* buckets[idxSize];
 
-    HOHHashTable(GlobalTestConfig* gtc){ 
+    HOHHashTable(GlobalTestConfig* gtc): Recoverable(gtc){ 
         for(size_t i = 0; i < idxSize; i++){
             buckets[i] = new padded<ListNode>();
         }
     }
 
+    int recover(bool simulated){
+        errexit("recover of HOHHashTable not implemented");
+    }
 
     optional<V> get(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -84,9 +86,9 @@ public:
 
     optional<V> put(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         while(true){
-            BEGIN_OP_AUTOEND(new_node->payload);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -119,9 +121,9 @@ public:
 
     bool insert(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         while(true){
-            BEGIN_OP_AUTOEND(new_node->payload);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -158,7 +160,7 @@ public:
     optional<V> remove(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -198,7 +200,7 @@ class HOHHashTableFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class HOHHashTable<std::string, std::string, 1000000>::Payload : public PBlk{
+class HOHHashTable<std::string, std::string, 1000000>::Payload : public pds::PBlk{
     GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
     GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
 

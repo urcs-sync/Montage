@@ -97,8 +97,12 @@ private:
         return mixPtrMark(mptr,true);
     }
 public:
-    PLockfreeHashTable(int task_num) : tracker(task_num, 100, 1000, true) {};
-    ~PLockfreeHashTable(){};
+    PLockfreeHashTable(int task_num) : tracker(task_num, 100, 1000, true) {
+        Persistent::init();
+    };
+    ~PLockfreeHashTable(){
+        Persistent::finalize();
+    };
 
     optional<std::string> get(std::string key, int tid);
     optional<std::string> put(std::string key, std::string val, int tid);

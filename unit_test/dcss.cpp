@@ -1,7 +1,7 @@
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
-#include "DCSS.hpp"
+#include "Recoverable.hpp"
 #include "TestConfig.hpp"
+#include "montage_global_api.hpp"
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -14,7 +14,7 @@ namespace dcas{
     const int THREAD_NUM = 1;
     const int CNT_UPPER = 100000;
 
-    atomic_nbptr_t<uint64_t> d;
+    atomic_lin_var<uint64_t> d;
     atomic<uint64_t> real;
     pthread_barrier_t pthread_barrier;
     void barrier()

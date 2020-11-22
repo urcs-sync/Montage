@@ -9,45 +9,47 @@
 #include "ConcurrentPrimitives.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 #include "HeapQueue.hpp"
 
-using namespace pds;
 //Wentao: TODO to fix later
 template<typename K, typename V>
-class PriorityQueue : public HeapQueue<K,V>{
+class PriorityQueue : public HeapQueue<K,V>, public Recoverable{
 public: 
-  class Payload : public PBlk{
+  class Payload : public pds::PBlk{
     GENERATE_FIELD(K, key, Payload);
     GENERATE_FIELD(V, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload);
   public:
     Payload(){}
     Payload(K k, V v):m_key(k),  m_val(v), m_sn(0){}
+    Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val), m_sn(oth.m_sn){}
     void persist(){}
   };
 
 private:
   struct Node{
+    PriorityQueue* ds;
     K key;
     Node* next;
     Payload* payload;
 
     Node():key(0), next(nullptr), payload(nullptr){};
-    Node(K k, V val): key(k), next(nullptr), payload(PNEW(Payload, k, val)){};
+    Node(PriorityQueue* ds_, K k, V val):
+      ds(ds_), key(k), next(nullptr), payload(ds->pnew<Payload>(k, val)){};
 
     V get_val(){
       assert(payload != nullptr && "payload shouldn't be null");
-      return (V)payload->get_val();
+      return (V)payload->get_val(ds);
     }
 
     void set_sn(uint64_t s){
       assert(payload != nullptr && "payload shouldn't be null");
-      payload->set_sn(s);
+      payload->set_sn(ds,s);
     }
 
     ~Node(){
-      PDELETE(payload);
+      ds->pdelete(payload);
     }
   };
 
@@ -70,7 +72,7 @@ public:
 
 template<typename K, typename V>
 void PriorityQueue<K,V>::enqueue(K key, V val, int tid){
-  Node* new_node = new Node(key, val);
+  Node* new_node = new Node(this, key, val);
   std::unique_lock<std::mutex> lock(mtx);
   if(head->next == nullptr){
     head->next = new_node;
@@ -88,9 +90,9 @@ void PriorityQueue<K,V>::enqueue(K key, V val, int tid){
     }
   }
   uint64_t s = global_sn.fetch_add(1);
-  BEGIN_OP(new_node->payload);
+  begin_op();
   new_node->set_sn(s);
-  END_OP;
+  end_op();
 }
 
 template<typename K, typename V>
@@ -102,10 +104,10 @@ optional<V> PriorityQueue<K,V>::dequeue(int tid){
   }else{
     Node* target = head->next;
     head->next = target->next;
-    BEGIN_OP();
+    begin_op();
     res = (V)target->payload->get_val();
     delete(target);
-    END_OP;
+    end_op();
   }
   return res;
 }
@@ -121,13 +123,14 @@ class PriorityQueueFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template<>
-class PriorityQueue<std::string, std::string>::Payload : public PBlk{
-  GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-  GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class PriorityQueue<std::string, std::string>::Payload : public pds::PBlk{
+  GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+  GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
   GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:
   Payload(std::string k, std::string v):m_key(this, k),  m_val(this, v), m_sn(0){}
+  Payload(const Payload& oth): pds::PBlk(oth), m_key(this, oth.m_key),  m_val(this, oth.m_val), m_sn(oth.m_sn){}
   void persist(){}
 };
 

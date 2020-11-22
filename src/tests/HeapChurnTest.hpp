@@ -6,7 +6,6 @@
 
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 #include "TestConfig.hpp"
 #include "HeapQueue.hpp"
 
@@ -29,15 +28,10 @@ public:
     inline V fromInt(uint64_t v);
 
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        pds::init_thread(ltc->tid);
+        q->init_thread(gtc, ltc);
     }
 
     void init(GlobalTestConfig* gtc){
-        // init Persistent allocator
-        Persistent::init();
-
-        // init epoch system
-        pds::init(gtc);
 
         getRideable(gtc);
         
@@ -92,7 +86,7 @@ public:
     }
 
     void cleanup(GlobalTestConfig* gtc){
-        Persistent::finalize();
+        delete g;
     }
     void getRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();

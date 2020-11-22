@@ -8,8 +8,6 @@
 #include "ConcurrentPrimitives.hpp"
 #include <mutex>
 
-using namespace pds;
-
 template<typename T>
 class DRAMQueue : public RQueue<T>{
 private:

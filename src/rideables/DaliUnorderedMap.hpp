@@ -221,6 +221,7 @@ private:
 public:
     DaliUnorderedMap(GlobalTestConfig* gtc):
             task_num(gtc->task_num){
+        Persistent::init();
         buckets = (Bucket*)RP_malloc(sizeof(Bucket)*idxSize);
         new (buckets) Bucket [idxSize] ();
         flist = new FList<int64_t>();
@@ -259,6 +260,7 @@ public:
     ~DaliUnorderedMap(){
         std::cout<<"current epoch: "<<epoch->load()<<std::endl;
         delete retired;
+        Persistent::finalize();
     };
 
     optional<V> get(K key, int tid);
@@ -591,8 +593,8 @@ optional<V> DaliUnorderedMap<K,V,idxSize>::replace(K key, V val, int tid) {
 template <>
 struct DaliUnorderedMap<std::string,std::string,1000000>::Node{
     // TODO: This should be pptr<char> rather than basic_string
-    TrivialPString<TESTS_KEY_SIZE> key;
-    TrivialPString<TESTS_VAL_SIZE> val;
+    pds::TrivialPString<TESTS_KEY_SIZE> key;
+    pds::TrivialPString<TESTS_VAL_SIZE> val;
     pptr<Node> next;
     Node(std::string k, optional<std::string> v, Node* n):key(k),val(v.has_value()?v.value():""),next(n){
         key.flush();

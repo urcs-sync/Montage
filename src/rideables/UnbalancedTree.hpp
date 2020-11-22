@@ -3,29 +3,29 @@
 
 #include "TestConfig.hpp"
 #include "RMap.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
 #include "CustomTypes.hpp"
 #include <mutex>
 #include <shared_mutex>
 
-using namespace pds;
 
 template<typename K, typename V>
-class UnbalancedTree : public RMap<K,V>{
+class UnbalancedTree : public RMap<K,V>, public Recoverable{
     const optional<V> NONE = {}; // to prevent compiler warnings. TODO: switch to std::optional<>.
 public:
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
         GENERATE_FIELD(int, deleted, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y), m_deleted(false){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val), m_deleted(oth.m_deleted){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val), m_deleted(oth.m_deleted){}
         void persist(){}
     };
 
     struct TreeNode{
+        UnbalancedTree* ds;
         // Transient-to-persistent pointer
         Payload* payload = nullptr;
         // Transient-to-transient pointers
@@ -34,50 +34,56 @@ public:
         
         std::mutex lock;
 
-        TreeNode(K key, V val){
-            payload = PNEW(Payload, key, val);
+        TreeNode(UnbalancedTree* ds_, K key, V val): ds(ds_){
+            payload = ds->pnew<Payload>(key, val);
         }
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (K)payload->get_key();
+            return (K)payload->get_key(ds);
         }
         V get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (V)payload->get_val();
+            return (V)payload->get_val(ds);
         }
         int get_deleted(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (int)payload->get_deleted();
+            return (int)payload->get_deleted(ds);
         }
         void set_val(V v){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_val(v);
+            payload = payload->set_val(ds, v);
         }
         void set_deleted(int d){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_deleted(d);
+            payload = payload->set_deleted(ds, d);
         }
         ~TreeNode(){
-            PDELETE(payload);
+            ds->pdelete(payload);
         }
     };
 
     TreeNode* root = nullptr;
 
-    UnbalancedTree(GlobalTestConfig* gtc){
+    UnbalancedTree(GlobalTestConfig* gtc): Recoverable(gtc){
         root = nullptr;
     }
 
+    int recover(bool simulated){
+        errexit("recover of UnbalancedTree not implemented");
+        return 0;
+    }
+
+
     optional<V> get(K key, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             if (!root){
                 return NONE;
             } else {
                 try{
                     HOHLockHolder lock_holder;
                     return do_get(&lock_holder, root, key);
-                } catch(OldSeeNewException& e){
+                } catch(pds::OldSeeNewException& e){
                     continue;
                 }
             }
@@ -111,14 +117,14 @@ public:
 
     optional<V> put(K key, V val, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             if (!root){
                 root = new TreeNode(key, val);
             } else {
                 try{
                     HOHLockHolder lock_holder;
                     return do_put(&lock_holder, root, key, val);
-                } catch (OldSeeNewException& e){
+                } catch (pds::OldSeeNewException& e){
                     continue;
                 }
             }
@@ -157,7 +163,7 @@ public:
 
     bool insert(K key, V val, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             if (!root){
                 root = new TreeNode(key, val);
                 return true;
@@ -165,7 +171,7 @@ public:
                 try{
                     HOHLockHolder lock_holder;
                     return do_insert(&lock_holder, root, key, val);
-                } catch (OldSeeNewException& e){
+                } catch (pds::OldSeeNewException& e){
                     continue;
                 }
             }
@@ -207,14 +213,14 @@ public:
 
     optional<V> remove(K key, int tid){
         while(true){
-            BEGIN_OP_AUTOEND();
+            MontageOpHolder _holder(this);
             if (!root){
                 return NONE;
             } else {
                 try{
                     HOHLockHolder lock_holder;
                     return do_remove(&lock_holder, root, key);
-                } catch (OldSeeNewException& e){
+                } catch (pds::OldSeeNewException& e){
                     continue;
                 }
             }
@@ -319,13 +325,14 @@ class UnbalancedTreeFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class UnbalancedTree<std::string, std::string>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class UnbalancedTree<std::string, std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
     GENERATE_FIELD(int, deleted, Payload);
 
 public:
     Payload(std::string k, std::string v) : m_key(this, k), m_val(this, v), m_deleted(false){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_key(this, oth.m_key), m_val(this, oth.m_val), m_deleted(oth.m_deleted){}
     void persist(){}
 };
 #endif

@@ -9,7 +9,6 @@
 #include "TestConfig.hpp"
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 #include "Recoverable.hpp"
 
 template <class K, class V>
@@ -33,7 +32,7 @@ public:
 
 template <class K, class V>
 void RecoverVerifyTest<K,V>::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-    pds::init_thread(ltc->tid);
+    m->init_thread(gtc, ltc);
 }
 
 template <class K, class V>
@@ -41,11 +40,9 @@ void RecoverVerifyTest<K,V>::init(GlobalTestConfig* gtc){
     if (gtc->task_num != 1){
         errexit("RecoverVerifyTest only runs on single thread.");
     }
-    // init Persistent allocator
-    Persistent::init();
+    // // init Persistent allocator
 
-    // init epoch system
-    pds::init(gtc);
+    // // init epoch system
 
     Rideable* ptr = gtc->allocRideable();
     m = dynamic_cast<RMap<K,V>*>(ptr);
@@ -112,9 +109,9 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
     auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
 
     std::cout<<"insert finished. Spent "<< dur_ms << "ms" <<std::endl;
-    pds::flush();
+    rec->flush();
     std::cout<<"epochsys flushed."<<std::endl;
-    pds::esys->simulate_crash();
+    rec->simulate_crash();
     std::cout<<"crashed."<<std::endl;
     int rec_cnt = rec->recover(true);
     std::cout<<"recover returned."<<std::endl;
@@ -137,8 +134,7 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
 
 template <class K, class V>
 void RecoverVerifyTest<K,V>::cleanup(GlobalTestConfig* gtc){
-    pds::finalize();
-    Persistent::finalize();
+    delete m;
 }
 
 #endif

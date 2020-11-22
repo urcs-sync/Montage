@@ -193,13 +193,18 @@ public:
 
 
     NVMSOFTHashTable(GlobalTestConfig* gtc) : tracker(gtc->task_num, 100, 1000, true){
+        Persistent::init();
         for(size_t i=0;i<idxSize;i++){
             PNode *phead = new PNode("", "");
             heads[i] = new Node(phead, false);
             PNode *ptail = new PNode(std::string(1,(char)127), "");
             heads[i]->next.store(new Node(ptail, false), std::memory_order_release);
         }
-    };
+    }
+
+    ~NVMSOFTHashTable(){
+        Persistent::finalize();
+    }
 
   private:
     std::hash<K> hash_fn;

@@ -6,21 +6,22 @@
 #include <random>
 #include <chrono>
 #include "RGraph.hpp"
+#include "Recoverable.hpp"
 #include <omp.h>
 
-void ErdosRenyi(RGraph *g, int numVertices, double p=0.5) {
-    size_t x = numVertices;
-    size_t numEdges = (x * x) * p;
-    #pragma omp parallel 
-    {
-        std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + omp_get_thread_num());
-        pds::init_thread(omp_get_thread_num());
-        #pragma omp for
-        for (size_t i = 0; i < numEdges; i++) {
-            g->add_edge(gen_p() % numVertices, gen_p() % numVertices, 1);
-        }
-    }
-}
+// void ErdosRenyi(RGraph *g, int numVertices, double p=0.5) {
+//     size_t x = numVertices;
+//     size_t numEdges = (x * x) * p;
+//     #pragma omp parallel 
+//     {
+//         std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + omp_get_thread_num());
+//         Recoverable::init_thread(omp_get_thread_num());
+//         #pragma omp for
+//         for (size_t i = 0; i < numEdges; i++) {
+//             g->add_edge(gen_p() % numVertices, gen_p() % numVertices, 1);
+//         }
+//     }
+// }
 
 class GraphTest : public Test {
     public:
@@ -46,8 +47,6 @@ class GraphTest : public Test {
             }
 
         void init(GlobalTestConfig *gtc) {
-            Persistent::init();
-            pds::init(gtc);
             uint64_t new_ops = total_ops / gtc->task_num;
             thd_ops = new uint64_t[gtc->task_num];
             for (int i = 0; i<gtc->task_num; i++) {
@@ -93,12 +92,11 @@ class GraphTest : public Test {
         }
 
         void cleanup(GlobalTestConfig *gtc) {
-            pds::finalize();
-            Persistent::finalize();
+            delete g;
         }
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
-            pds::init_thread(ltc->tid);
+            g->init_thread(gtc, ltc);
             size_t x = max_verts;
             size_t numEdges = (x * x) * 0.5;
             std::random_device rd;

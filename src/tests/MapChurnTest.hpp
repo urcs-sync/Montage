@@ -46,6 +46,11 @@ public:
 		ChurnTest::init(gtc);
 	}
 
+	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+		m->init_thread(gtc, ltc);
+		ChurnTest::parInit(gtc, ltc);
+	}
+
 	void getRideable(GlobalTestConfig* gtc){
 		Rideable* ptr = gtc->allocRideable();
 		m = dynamic_cast<RMap<K, V>*>(ptr);
@@ -54,7 +59,6 @@ public:
 		}
 	}
 	void doPrefill(GlobalTestConfig* gtc){
-		pds::init_thread(0);
 		if (this->prefill > 0){
 			/* Wentao: 
 			 *	to avoid repeated k during prefilling, we instead 
@@ -91,7 +95,10 @@ public:
 			m->remove(k,tid);
 		}
 	}
-
+	void cleanup(GlobalTestConfig* gtc){
+		ChurnTest::cleanup(gtc);
+		delete m;
+	}
 };
 
 template <class K, class V>
@@ -108,7 +115,6 @@ inline std::string MapChurnTest<std::string,std::string>::fromInt(uint64_t v){
 template<>
 inline void MapChurnTest<std::string,std::string>::doPrefill(GlobalTestConfig* gtc){
 	// randomly prefill until specified amount of keys are successfully inserted
-	pds::init_thread(0);
 	if (this->prefill > 0){
 		std::mt19937_64 gen_k(0);
 		// int stride = this->range/this->prefill;

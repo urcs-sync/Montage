@@ -19,13 +19,11 @@
 #include <iterator>
 #include <unordered_set>
 #include "RCUTracker.hpp"
-#include "persist_struct_api.hpp"
 
 #define DLGRAPH_FLUSH(addr) asm volatile ("clflush (%0)" :: "r"(addr))
 #define DLGRAPH_FLUSHOPT(addr) asm volatile ("clflushopt (%0)" :: "r"(addr))
 #define DLGRAPH_SFENCE() asm volatile ("sfence" ::: "memory")
 
-using namespace pds;
 
 template <size_t numVertices = 1024>
 class DLGraph : public RGraph {
@@ -142,6 +140,7 @@ class DLGraph : public RGraph {
         };
 
         DLGraph(GlobalTestConfig* gtc) {
+            Persistent::init();
             idxToVertex = new tVertex*[numVertices];
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
@@ -149,12 +148,15 @@ class DLGraph : public RGraph {
             }
         }
 
+        ~DLGraph(){
+            Persistent::finalize();
+        }
+
         
         tVertex** idxToVertex; // Transient set of transient vertices to index map
 
         // Thread-safe and does not leak edges
         void clear() {
-            // BEGIN_OP_AUTOEND();
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i]->lock();
             }

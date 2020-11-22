@@ -43,6 +43,9 @@ public:
 		// pm_close();
 		RP_close();
 	}
+	static size_t get_malloc_size(void* ptr){
+		return RP_malloc_size(ptr);
+	}
 	// n: number of iterators it's going to return
 	static std::vector<InuseRecovery::iterator> recover(int n){
 		char* heap_prefix = (char*) malloc(L_cuserid+6);

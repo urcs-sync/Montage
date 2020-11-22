@@ -7,7 +7,6 @@
 
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 #include "TestConfig.hpp"
 #include "RQueue.hpp"
 
@@ -65,11 +64,11 @@ public:
     }
 
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        q->init_thread(gtc, ltc);
 #ifdef PRONTO
         if(ltc->tid==0)
             doPrefill(gtc);
 #endif
-        pds::init_thread(ltc->tid);
     }
 
     void init(GlobalTestConfig* gtc){
@@ -88,11 +87,6 @@ public:
         assert(sigaction(SIGSEGV, &sa, NULL) == 0);
         assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
-        // init Persistent allocator
-        Persistent::init();
-
-        // init epoch system
-        pds::init(gtc);
 
 		if(gtc->checkEnv("ValueSize")){
             val_size = atoi((gtc->getEnv("ValueSize")).c_str());
@@ -166,8 +160,7 @@ public:
         Savitar_core_finalize();
         pthread_mutex_destroy(&snapshot_lock);
 #endif
-        pds::finalize();
-        Persistent::finalize();
+        delete q;
     }
     void getRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();
@@ -177,7 +170,6 @@ public:
         } 
     }
     void doPrefill(GlobalTestConfig* gtc){
-        pds::init_thread(0);
         if (this->prefill > 0){
             int i = 0;
             while(i<this->prefill){

@@ -398,7 +398,7 @@ extern unsigned stats_id;
  * Structure for storing items within memcached.
  */
 #ifdef MONTAGE
-#include "persist_struct_api.hpp"
+#include "montage_global_api.hpp"
 
 using namespace pds;
 struct item : public PBlk{

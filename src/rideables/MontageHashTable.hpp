@@ -3,54 +3,54 @@
 
 #include "TestConfig.hpp"
 #include "RMap.hpp"
-#include "persist_struct_api.hpp"
 #include "CustomTypes.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include "Recoverable.hpp"
 #include <mutex>
 #include <omp.h>
 
-using namespace pds;
-
 template<typename K, typename V, size_t idxSize=1000000>
 class MontageHashTable : public RMap<K,V>, public Recoverable{
 public:
 
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
         GENERATE_FIELD(V, val, Payload);
     public:
         Payload(){}
         Payload(K x, V y): m_key(x), m_val(y){}
-        // Payload(const Payload& oth): PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
+        Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
     }__attribute__((aligned(CACHELINE_SIZE)));
 
     struct ListNode{
+        MontageHashTable* ds;
         // Transient-to-persistent pointer
         Payload* payload = nullptr;
         // Transient-to-transient pointers
         ListNode* next = nullptr;
         ListNode(){}
-        ListNode(K key, V val){
-            payload = PNEW(Payload, key, val);
+        ListNode(MontageHashTable* ds_, K key, V val): ds(ds_){
+            payload = ds->pnew<Payload>(key, val);
         }
         ListNode(Payload* _payload) : payload(_payload) {} // for recovery
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
-            return (K)payload->get_unsafe_key();
+            return (K)payload->get_unsafe_key(ds);
         }
         V get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
-            return (V)payload->get_unsafe_val();
+            return (V)payload->get_unsafe_val(ds);
         }
         void set_val(V v){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload = payload->set_val(v);
+            payload = payload->set_val(ds, v);
         }
         ~ListNode(){
-            PDELETE(payload);
+            if (payload){
+                ds->pdelete(payload);
+            }
         }
     }__attribute__((aligned(CACHELINE_SIZE)));
     struct Bucket{
@@ -62,14 +62,17 @@ public:
     std::hash<K> hash_fn;
     Bucket buckets[idxSize];
     GlobalTestConfig* gtc;
-    MontageHashTable(GlobalTestConfig* gtc_):gtc(gtc_){ };
+    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){};
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Recoverable::init_thread(gtc, ltc);
+    }
 
     optional<V> get(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND();
+        MontageOpHolderReadOnly(this);
             // try{
         ListNode* curr = buckets[idx].head.next;
         while(curr){
@@ -87,10 +90,10 @@ public:
 
     optional<V> put(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND(new_node->payload);
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -120,10 +123,10 @@ public:
 
     bool insert(K key, V val, int tid){
         size_t idx=hash_fn(key)%idxSize;
-        ListNode* new_node = new ListNode(key, val);
+        ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND(new_node->payload);
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -158,7 +161,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        BEGIN_OP_AUTOEND();
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -199,10 +202,10 @@ public:
 
     int recover(bool simulated){
         if (simulated){
-            pds::recover_mode(); // PDELETE --> noop
+            recover_mode(); // PDELETE --> noop
             // clear transient structures.
             clear();
-            pds::online_mode(); // re-enable PDELETE.
+            online_mode(); // re-enable PDELETE.
         }
 
         int rec_cnt = 0;
@@ -211,7 +214,7 @@ public:
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
         auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, PBlk*>* recovered = pds::recover(rec_thd); 
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd); 
         auto end = chrono::high_resolution_clock::now();
         auto dur = end - begin;
         auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
@@ -231,7 +234,7 @@ public:
         begin = chrono::high_resolution_clock::now();
         #pragma omp parallel num_threads(rec_thd)
         {
-            pds::init_thread(omp_get_thread_num());
+            Recoverable::init_thread(omp_get_thread_num());
             #pragma omp for
             for(size_t i = 0; i < payloadVector.size(); ++i){
                 //re-insert payload.
@@ -278,12 +281,13 @@ class MontageHashTableFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageHashTable<std::string, std::string, 1000000>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageHashTable<std::string, std::string, 1000000>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(const std::string& k, const std::string& v) : m_key(this, k), m_val(this, v){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_key(this, oth.m_key), m_val(this, oth.m_val){}
     void persist(){}
 };
 

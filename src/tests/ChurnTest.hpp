@@ -4,7 +4,6 @@
 #include "TestConfig.hpp"
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
-#include "persist_struct_api.hpp"
 
 class ChurnTest : public Test{
 #ifdef PRONTO
@@ -54,11 +53,11 @@ public:
 	ChurnTest(int p_gets, int p_puts, int p_inserts, int p_removes, int range):
 		ChurnTest(p_gets, p_puts, p_inserts, p_removes, range,0){}
 	void init(GlobalTestConfig* gtc);
-	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
 	int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
-	void cleanup(GlobalTestConfig* gtc);
 	pthread_barrier_t barrier;
 
+	virtual void cleanup(GlobalTestConfig* gtc);
+	virtual void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
 	virtual void getRideable(GlobalTestConfig* gtc) = 0;
 	virtual void doPrefill(GlobalTestConfig* gtc) = 0;
 	virtual void operation(uint64_t key, int op, int tid) = 0;
@@ -89,7 +88,6 @@ void ChurnTest::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 	if(ltc->tid==0)
 		doPrefill(gtc);
 #endif
-	pds::init_thread(ltc->tid);
 }
 
 void ChurnTest::init(GlobalTestConfig* gtc){
@@ -108,12 +106,6 @@ void ChurnTest::init(GlobalTestConfig* gtc){
 	assert(sigaction(SIGSEGV, &sa, NULL) == 0);
 	assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
-
-	// init Persistent allocator
-	Persistent::init();
-
-	// init epoch system
-	pds::init(gtc);
 
 	getRideable(gtc);
 	
@@ -180,8 +172,6 @@ void ChurnTest::cleanup(GlobalTestConfig* gtc){
 	Savitar_core_finalize();
 	pthread_mutex_destroy(&snapshot_lock);
 #endif
-	pds::finalize();
-	Persistent::finalize();
 }
 
 #ifdef PRONTO

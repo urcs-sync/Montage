@@ -13,79 +13,49 @@
 #include "HarnessUtils.hpp"
 #include "Persistent.hpp"
 #include "persist_utils.hpp"
-// #include "EpochSysVerifyTest.hpp"
 
-class EpochSysVerifyTest;
+#include "common_macros.hpp"
+#include "TransactionTrackers.hpp"
+#include "PerThreadContainers.hpp"
+#include "ToBePersistedContainers.hpp"
+#include "ToBeFreedContainers.hpp"
+#include "EpochAdvancers.hpp"
+
+class Recoverable;
 
 namespace pds{
 
-#define ASSERT_DERIVE(der, base)\
-    static_assert(std::is_convertible<der*, base*>::value,\
-        #der " must inherit " #base " as public");
-
-#define ASSERT_COPY(t)\
-    static_assert(std::is_copy_constructible<t>::value,\
-        "type" #t "requires copying");
-
-#define INIT_EPOCH 3
-#define NULL_EPOCH 0
-
-extern __thread int _tid;
-
-enum SysMode {ONLINE, RECOVER};
-
-extern SysMode sys_mode;
-
 struct OldSeeNewException : public std::exception {
-   const char * what () const throw () {
-      return "OldSeeNewException not handled.";
-   }
-};
-
-class UIDGenerator{
-    padded<uint64_t>* curr_ids;
-public:
-    void init(uint64_t task_num){
-        uint64_t buf = task_num-1;
-        int shift = 64;
-        uint64_t max = 1;
-        for (; buf != 0; buf >>= 1){
-            shift--;
-            max <<= 1;
-        }
-        curr_ids = new padded<uint64_t>[max];
-        for (uint64_t i = 0; i < max; i++){
-            curr_ids[i].ui = i << shift;
-        }
-    }
-    uint64_t get_id(int tid){
-        return curr_ids[tid].ui++;
+    const char * what () const throw () {
+        return "OldSeeNewException not handled.";
     }
 };
-
-class EpochSys;
 
 enum PBlkType {INIT, ALLOC, UPDATE, DELETE, RECLAIMED, EPOCH, OWNED};
 
-// class PBlk{
+class EpochSys;
+
+/////////////////////////////
+// PBlk-related structures //
+/////////////////////////////
+
 class PBlk : public Persistent{
     friend class EpochSys;
-    friend class EpochSysVerifyTest;
-    static UIDGenerator uid_generator;
+    friend class Recoverable;
 protected:
     // Wentao: the first word should NOT be any persistent value for
     // epoch-system-level recovery (i.e., epoch), as Ralloc repurposes the first
     // word for block free list, which may interfere with the recovery.
-    // Currently we use (transient) payload as the first word. If we decide to
+    // Currently we use (transient) "reserved" as the first word. If we decide to
     // remove this field, we need to either prepend another dummy word, or
     // change the block free list in Ralloc.
 
-    // only used in transient headers.
-    PBlk* payload;
+    // transient.
+    void* _reserved;
 
     uint64_t epoch = NULL_EPOCH;
     PBlkType blktype = INIT;
-    uint64_t owner_id = 0;
+    uint64_t owner_id = 0; // TODO: make consider abandon this field and use id all the time.
     uint64_t id = 0;
     pptr<PBlk> retire = nullptr;
     // bool persisted = false; // For debug purposes. Might not be needed at the end. 
@@ -99,15 +69,14 @@ public:
         // only for testing
         epoch=e;
     }
-    static void init(int task_num){
-        uid_generator.init(task_num);
+    uint64_t get_epoch(){
+        return epoch;
     }
-    // PBlk(uint64_t e): epoch(e), persisted(false){}
-    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), id(uid_generator.get_id(_tid)), retire(nullptr){}
-    // PBlk(bool is_data): blktype(is_data?DATA:INIT), id(uid_generator.get_id(tid)) {}
-    PBlk(const PBlk* owner): 
-        blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id), 
-        id(uid_generator.get_id(_tid)) {}
+    // id gets inited by EpochSys instance.
+    PBlk(): epoch(NULL_EPOCH), blktype(INIT), owner_id(0), retire(nullptr){}
+    // id gets inited by EpochSys instance.
+    PBlk(const PBlk* owner):
+        blktype(OWNED), owner_id(owner->blktype==OWNED? owner->owner_id : owner->id) {}
     PBlk(const PBlk& oth): blktype(oth.blktype==OWNED? OWNED:INIT), owner_id(oth.owner_id), id(oth.id) {}
     inline uint64_t get_id() {return id;}
     virtual pptr<PBlk> get_data() {return nullptr;}
@@ -132,161 +101,32 @@ public:
     T* content; //transient ptr
     inline size_t get_size()const{return size;}
 };
-// class PArray : public PBlk{
-//     T* content;
-//     // TODO: set constructor private. use EpochSys::alloc_array
-//     // to get memory from Ralloc and in-place new PArray in the front, and
-//     // in-place new all T objects in the array (with exception for 1-word T's). 
-// };
 
-#include "TransactionTrackers.hpp"
-#include "PerThreadContainers.hpp"
-#include "ToBePersistedContainers.hpp"
-#include "ToBeFreedContainers.hpp"
+struct Epoch : public PBlk{
+    std::atomic<uint64_t> global_epoch;
+    void persist(){}
+    Epoch(){
+        global_epoch.store(NULL_EPOCH, std::memory_order_relaxed);
+    }
+};
+
+//////////////////
+// Epoch System //
+//////////////////
+
+enum SysMode {ONLINE, RECOVER};
+
+struct sc_desc_t;
 
 class EpochSys{
-    
-    /////////////////////
-    // Epoch Advancers //
-    /////////////////////
-
-    class EpochAdvancer{
-    public:
-        virtual void set_epoch_freq(int epoch_freq) = 0;
-        virtual void set_help_freq(int help_freq) = 0;
-        virtual void on_end_transaction(EpochSys* esys, uint64_t c) = 0;
-        virtual ~EpochAdvancer(){}
-    };
-
-    class SingleThreadEpochAdvancer : public EpochAdvancer{
-        // uint64_t trans_cnt;
-        padded<uint64_t>* trans_cnts;
-        uint64_t epoch_threshold = 0x1ULL << 19;
-        uint64_t help_threshold = 0x1ULL << 6;
-    public:
-        SingleThreadEpochAdvancer(GlobalTestConfig* gtc){
-            trans_cnts = new padded<uint64_t>[gtc->task_num];
-            for (int i = 0; i < gtc->task_num; i++){
-                trans_cnts[i].ui = 0;
-            }
-        }
-        void set_epoch_freq(int epoch_power){
-            epoch_threshold = 0x1ULL << epoch_power;
-        }
-        void set_help_freq(int help_power){
-            help_threshold = 0x1ULL << help_power;
-        }
-        void on_end_transaction(EpochSys* esys, uint64_t c){
-            assert(_tid != -1);
-            trans_cnts[_tid].ui++;
-            if (_tid == 0){
-                // only a single thread can advance epochs.
-                if (trans_cnts[_tid].ui % epoch_threshold == 0){
-                    esys->advance_epoch(c);
-                } 
-                // else if (trans_cnts[_tid].ui % help_threshold == 0){
-                //     esys->help_local();
-                // }
-            }
-            // else {
-            //     if (trans_cnts[_tid].ui % help_threshold == 0){
-            //         esys->help_local();
-            //     }
-            // }
-        }
-    };
-
-    class GlobalCounterEpochAdvancer : public EpochAdvancer{
-        std::atomic<uint64_t> trans_cnt;
-        uint64_t epoch_threshold = 0x1ULL << 14;
-        uint64_t help_threshold = 0x1ULL;
-    public:
-        // GlobalCounterEpochAdvancer();
-        void set_epoch_freq(int epoch_power){
-            epoch_threshold = 0x1ULL << epoch_power;
-        }
-        void set_help_freq(int help_power){
-            help_threshold = 0x1ULL << help_power;
-        }
-        void on_end_transaction(EpochSys* esys, uint64_t c){
-            uint64_t curr_cnt = trans_cnt.fetch_add(1, std::memory_order_acq_rel);
-            if (curr_cnt % epoch_threshold == 0){
-                esys->advance_epoch(c);
-            } else if (curr_cnt % help_threshold == 0){
-                esys->help_local();
-            }
-        }
-    };
-
-    class DedicatedEpochAdvancer : public EpochAdvancer{
-        EpochSys* esys;
-        std::thread advancer_thread;
-        std::atomic<bool> started;
-        uint64_t epoch_length = 100*1000;
-        void advancer(){
-            while(!started.load()){}
-            while(started.load()){
-                esys->advance_epoch_dedicated();
-                std::this_thread::sleep_for(std::chrono::microseconds(epoch_length));
-            }
-            // std::cout<<"advancer_thread terminating..."<<std::endl;
-        }
-    public:
-        DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):esys(es){
-            if (gtc->checkEnv("EpochLength")){
-                epoch_length = stoi(gtc->getEnv("EpochLength"));
-            } else {
-                epoch_length = 100*1000;
-            }
-            if (gtc->checkEnv("EpochLengthUnit")){
-                std::string env_unit = gtc->getEnv("EpochLengthUnit");
-                if (env_unit == "Second"){
-                    epoch_length *= 1000000;
-                } else if (env_unit == "Millisecond"){
-                    epoch_length *= 1000;
-                } else if (env_unit == "Microsecond"){
-                    // do nothing.
-                } else {
-                    errexit("time unit not supported.");
-                }
-            }
-
-            started.store(false);
-            advancer_thread = std::move(std::thread(&DedicatedEpochAdvancer::advancer, this));
-            started.store(true);
-        }
-        ~DedicatedEpochAdvancer(){
-            // std::cout<<"terminating advancer_thread"<<std::endl;
-            started.store(false);
-            if (advancer_thread.joinable()){
-                advancer_thread.join();
-            }
-            // std::cout<<"terminated advancer_thread"<<std::endl;
-        }
-        void set_epoch_freq(int epoch_interval){
-        }
-        void set_help_freq(int help_interval){
-        }
-        void on_end_transaction(EpochSys* esys, uint64_t c){
-            // do nothing here.
-        }
-    };
-
-    class NoEpochAdvancer : public EpochAdvancer{
-        // an epoch advancer that does absolutely nothing.
-    public:
-        // GlobalCounterEpochAdvancer();
-        void set_epoch_freq(int epoch_power){}
-        void set_help_freq(int help_power){}
-        void on_end_transaction(EpochSys* esys, uint64_t c){}
-    };
-
-    friend class EpochSysVerifyTest;
-    
 private:
     // persistent fields:
     Epoch* epoch_container = nullptr;
     std::atomic<uint64_t>* global_epoch = nullptr;
+
+    // semi-persistent fields:
+    // TODO: set a periodic-updated persistent boundary to recover to.
+    UIDGenerator uid_generator;
 
     // transient fields:
     TransactionTracker* trans_tracker = nullptr;
@@ -296,15 +136,18 @@ private:
 
     GlobalTestConfig* gtc = nullptr;
     int task_num;
-    // static __thread int tid;
-
-    bool consistent_increment(std::atomic<uint64_t>& counter, const uint64_t c);
 
 public:
 
+    /* static */
+    static thread_local int tid;
+    
     std::mutex dedicated_epoch_advancer_lock;
 
-    EpochSys(GlobalTestConfig* _gtc) : gtc(_gtc) {
+    // system mode that toggles on/off PDELETE for recovery purpose.
+    SysMode sys_mode = ONLINE;
+
+    EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
         reset(); // TODO: change to recover() later on.
     }
 
@@ -328,7 +171,6 @@ public:
 
     void parse_env();
 
-    // reset the epoch system. Maybe put it in the constructor later on.
     void reset(){
         task_num = gtc->task_num;
         if (!epoch_container){
@@ -338,23 +180,23 @@ public:
         }
         global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         parse_env();
-
-        // if (uid_generator){
-        //     delete uid_generator;
-        // }
-        // uid_generator = new UIDGenerator(gtc->task_num);
     }
 
     void simulate_crash(){
-        if(pds::_tid==0){
+        if(tid==0){
             delete epoch_advancer;
             epoch_advancer = nullptr;
         }
-        Persistent::simulate_crash(pds::_tid);
+        Persistent::simulate_crash(tid);
     }
+
     ////////////////
     // Operations //
     ////////////////
+
+    static void init_thread(int _tid){
+        EpochSys::tid = _tid;
+    }
 
     // check if global is the same as c.
     bool check_epoch(uint64_t c);
@@ -376,8 +218,14 @@ public:
     void validate_access(const PBlk* b, uint64_t c);
 
     // register the allocation of a PBlk during a transaction.
+    // called for new blocks at both pnew (holding them in
+    // pending_allocs) and begin_op (registering them with the
+    // acquired epoch).
     template<typename T>
     T* register_alloc_pblk(T* b, uint64_t c);
+
+    template<typename T>
+    T* reset_alloc_pblk(T* b);
 
     template<typename T>
     PBlkArray<T>* alloc_pblk_array(size_t s, uint64_t c);
@@ -437,7 +285,7 @@ public:
     /////////////
     
     // recover all PBlk decendants. return an iterator.
-    std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd);
+    std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd = 2);
 };
 
 
@@ -449,21 +297,18 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     //             "requires copying");
     ASSERT_DERIVE(T, PBlk);
     ASSERT_COPY(T);
-
-    if (c == NULL_EPOCH){
-        // register alloc before BEGIN_OP, return. Will be done by
-        // the BEGIN_OP that calls this again with a non-NULL c.
-        return b;
-    }
+        
     PBlk* blk = b;
+    assert(c != NULL_EPOCH);
     blk->epoch = c;
-    // Wentao: It's possible that payload is registered multiple times
-    assert(blk->blktype == INIT || blk->blktype == OWNED || 
-           blk->blktype == ALLOC); 
+    assert(blk->blktype == INIT || blk->blktype == OWNED); 
     if (blk->blktype == INIT){
         blk->blktype = ALLOC;
     }
-    // to_be_persisted[c%4].push(blk);
+    if (blk->id == 0){
+        blk->id = uid_generator.get_id(tid);
+    }
+
     to_be_persisted->register_persist(blk, c);
     PBlk* data = blk->get_data();
     if (data){
@@ -471,6 +316,22 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
     }
     return b;
 }
+
+template<typename T>
+T* EpochSys::reset_alloc_pblk(T* b){
+    ASSERT_DERIVE(T, PBlk);
+    ASSERT_COPY(T);
+    PBlk* blk = b;
+    blk->epoch = NULL_EPOCH;
+    assert(blk->blktype == ALLOC); 
+    blk->blktype = INIT;
+    PBlk* data = blk->get_data();
+    if (data){
+        reset_alloc_pblk(data);
+    }
+    return b;
+}
+
 
 template<typename T>
 PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
@@ -484,7 +345,7 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
         new (p) T();
         p++;
     }
-    ret->epoch = c;
+    register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
     // to_be_persisted->register_persist(ret, c);
@@ -502,7 +363,7 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(PBlk* owner, size_t s, uint64_t c){
         new (p) T();
         p++;
     }
-    ret->epoch = c;
+    register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
     // to_be_persisted->register_persist(ret, c);
@@ -668,6 +529,9 @@ T* EpochSys::openwrite_pblk(T* b, uint64_t c){
     // done by the API module.
     return b;
 }
+
+
+
 
 }
 

@@ -9,15 +9,15 @@
 #include "RQueue.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
-#include "persist_struct_api.hpp"
+#include "Recoverable.hpp"
+#include "Recoverable.hpp"
 #include <mutex>
 
-using namespace pds;
 
 template<typename T>
-class MontageQueue : public RQueue<T>{
+class MontageQueue : public RQueue<T>, public Recoverable{
 public:
-    class Payload : public PBlk{
+    class Payload : public pds::PBlk{
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
@@ -29,27 +29,29 @@ public:
 
 private:
     struct Node{
+        MontageQueue* ds;
         Node* next;
         Payload* payload;
         T val; // for debug purpose
 
         Node(): next(nullptr), payload(nullptr){}; 
         // Node(): next(nullptr){}; 
-        Node(T v, uint64_t n=0): next(nullptr), payload(PNEW(Payload, v, n)), val(v){};
+        Node(MontageQueue* ds_, T v, uint64_t n=0): 
+            ds(ds_), next(nullptr), payload(ds_->pnew<Payload>(v, n)), val(v){};
         // Node(T v, uint64_t n): next(nullptr), val(v){};
 
         void set_sn(uint64_t s){
             assert(payload!=nullptr && "payload shouldn't be null");
-            payload->set_unsafe_sn(s);
+            payload->set_unsafe_sn(ds, s);
         }
         T get_val(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
-            return (T)payload->get_unsafe_val();
+            return (T)payload->get_unsafe_val(ds);
             // return val;
         }
         ~Node(){
-            PDELETE(payload);
+            ds->pdelete(payload);
         }
     };
 
@@ -64,11 +66,20 @@ private:
     std::mutex lock;
 
 public:
-    MontageQueue(int task_num): 
-        global_sn(0), head(nullptr), tail(nullptr){
+    MontageQueue(GlobalTestConfig* gtc): 
+        Recoverable(gtc), global_sn(0), head(nullptr), tail(nullptr){
     }
 
     ~MontageQueue(){};
+
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageQueue not implemented.");
+        return 0;
+    }
 
     void enqueue(T val, int tid);
     optional<T> dequeue(int tid);
@@ -76,12 +87,12 @@ public:
 
 template<typename T>
 void MontageQueue<T>::enqueue(T val, int tid){
-    Node* new_node = new Node(val);
+    Node* new_node = new Node(this, val);
     std::lock_guard<std::mutex> lk(lock);
     // no read or write so impossible to have old see new exception
     new_node->set_sn(global_sn);
     global_sn++;
-    BEGIN_OP_AUTOEND(new_node->payload);
+    MontageOpHolder _holder(this);
     if(tail == nullptr) {
         head = tail = new_node;
         return;
@@ -95,7 +106,7 @@ optional<T> MontageQueue<T>::dequeue(int tid){
     optional<T> res = {};
     // while(true){
     lock.lock();
-    BEGIN_OP_AUTOEND();
+    MontageOpHolder _holder(this);
     // try {
     if(head == nullptr) {
         lock.unlock();
@@ -119,7 +130,7 @@ optional<T> MontageQueue<T>::dequeue(int tid){
 template <class T> 
 class MontageQueueFactory : public RideableFactory{
     Rideable* build(GlobalTestConfig* gtc){
-        return new MontageQueue<T>(gtc->task_num);
+        return new MontageQueue<T>(gtc);
     }
 };
 
@@ -127,12 +138,13 @@ class MontageQueueFactory : public RideableFactory{
 #include <string>
 #include "PString.hpp"
 template <>
-class MontageQueue<std::string>::Payload : public PBlk{
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+class MontageQueue<std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:
     Payload(std::string v, uint64_t n) : m_val(this, v), m_sn(n){}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_val(this, oth.m_val), m_sn(oth.m_sn){}
     void persist(){}
 };
 

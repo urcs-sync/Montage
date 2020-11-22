@@ -10,9 +10,11 @@
 
 
 class GlobalTestConfig;
+class LocalTestConfig;
 
 class Rideable{
 public:
+	virtual void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){};
 	virtual ~Rideable(){};
 };
 

@@ -8,8 +8,6 @@
 #include "ConcurrentPrimitives.hpp"
 #include <mutex>
 
-using namespace pds;
-
 template<typename K, typename V, size_t idxSize=1000000>
 class DRAMHashTable : public RMap<K,V>{
 public:
@@ -206,9 +204,13 @@ public:
     Bucket* buckets;
 
     NVMHashTable(GlobalTestConfig* gtc){ 
+        Persistent::init();
         buckets = (Bucket*)RP_malloc(sizeof(Bucket)*idxSize);
         new (buckets) Bucket [idxSize] ();
     };
+    ~NVMHashTable(){
+        Persistent::finalize();
+    }
 
 
     optional<std::string> get(std::string key, int tid){
