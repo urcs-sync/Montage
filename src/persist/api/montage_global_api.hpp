@@ -31,7 +31,6 @@ namespace pds{
 
     extern GlobalRecoverable* global_recoverable;
     
-
     inline void init(GlobalTestConfig* gtc){
         // here we assume that pds::init is called before pds::init_thread, hence the assertion.
         // if this assertion triggers, note that the order may be reversed. Evaluation needed.
@@ -93,6 +92,18 @@ namespace pds{
 
     #define PRECLAIM(b) ({\
         global_recoverable->preclaim(b);})
+    
+    #define POPEN_READ(b) ({\
+        global_recoverable->openread_pblk(b);})
+    
+    #define POPEN_UNSAFE_READ(b) ({\
+        global_recoverable->openread_pblk_usnafe(b);})
+    
+    #define POPEN_WRITE(b) ({\
+        global_recoverable->openwrite_pblk(b);})
+    
+    #define REGISTER_PUPDATE(b) ({\
+        global_recoverable->register_update_pblk(b);})
 
     // Hs: This is for "owned" PBlk's, currently not used in code base.
     // may be useful for "data" blocks like dynamically-sized
