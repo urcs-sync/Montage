@@ -65,18 +65,18 @@
  */
 
 class BaseMeta;
-namespace ralloc{
-    /* manager to map, remap, and unmap the heap */
-    // regions manager
-    extern Regions* _rgs;//initialized when ralloc constructs
-    // flag indicating Ralloc is initialized or not.
-    extern bool initialized;
-    // pointer to the instance of BaseMeta
-    extern BaseMeta* base_md;
-    // function to flush thread-local cache, used in TCaches::~TCaches and
-    // BaseMeta::writeback()
-    extern void public_flush_cache();
-};
+// namespace ralloc{
+//     /* manager to map, remap, and unmap the heap */
+//     // regions manager
+//     extern Regions* _rgs;//initialized when ralloc constructs
+//     // flag indicating Ralloc is initialized or not.
+//     extern bool initialized;
+//     // pointer to the instance of BaseMeta
+//     extern BaseMeta* base_md;
+//     // function to flush thread-local cache, used in TCaches::~TCaches and
+//     // BaseMeta::writeback()
+//     // extern void public_flush_cache();
+// };
 
 /* 
  * class CrossPtr<T, idx>
@@ -430,8 +430,8 @@ public:
          */
         std::cout<<"Warning: BaseMeta is being destructed!\n";
     }
-    void* do_malloc(size_t size);
-    void do_free(void* ptr);
+    void* do_malloc(size_t size, int tid);
+    void do_free(void* ptr, int tid);
     // this func can be called only once during restart
     bool is_dirty();
     // set_dirty must be called AFTER is_dirty
@@ -487,7 +487,6 @@ public:
         return ret;
     }
     void writeback(){
-        // Give back tcached blocks
         // Should be called during normal exit
 
         // Wentao: cache flush is done in caches' destructor (~TCaches)

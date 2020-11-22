@@ -683,7 +683,7 @@ inline void* BaseMeta::alloc_large_block(size_t sz){
     return large_sb_alloc(sz);
 }
 
-void* BaseMeta::do_malloc(size_t size){
+void* BaseMeta::do_malloc(size_t size, uint64_t instance_idx){
     if (UNLIKELY(size > MAX_SZ)) {
         // large block allocation
         size_t sbs = round_up(size, SBSIZE);//round size up to multiple of SBSIZE
@@ -712,14 +712,14 @@ void* BaseMeta::do_malloc(size_t size){
     // size class calculation
     size_t sc_idx = get_sizeclass(size);
 
-    TCacheBin* cache = &t_caches.t_cache[sc_idx];
+    TCacheBin* cache = &t_caches.t_cache[instance_idx][sc_idx];
     // fill cache if needed
     if (UNLIKELY(cache->get_block_num() == 0))
         fill_cache(sc_idx, cache);
 
     return cache->pop_block();
 }
-void BaseMeta::do_free(void* ptr){
+void BaseMeta::do_free(void* ptr, uint64_t instance_idx){
     if(ptr==nullptr) return;
     assert(_rgs->in_range(SB_IDX,ptr));
     Descriptor* desc = desc_lookup(ptr);
@@ -737,7 +737,7 @@ void BaseMeta::do_free(void* ptr){
         return;
     }
 
-    TCacheBin* cache = &t_caches.t_cache[sc_idx];
+    TCacheBin* cache = &t_caches.t_cache[instance_idx][sc_idx];
     const SizeClassData* sc = get_sizeclass_by_idx(sc_idx);
 
     // flush cache if need
@@ -748,14 +748,14 @@ void BaseMeta::do_free(void* ptr){
 }
 
 
-// this can be called by TCaches
-void ralloc::public_flush_cache(){
-    if(initialized) {
-        for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-            base_md->flush_cache(i, &t_caches.t_cache[i]);
-        }
-    }
-}
+// // this can be called by TCaches
+// void ralloc::public_flush_cache(){
+//     if(initialized) {
+//         for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
+//             base_md->flush_cache(i, &t_caches.t_cache[i]);
+//         }
+//     }
+// }
 
 /*
  * function GarbageCollection::operator()

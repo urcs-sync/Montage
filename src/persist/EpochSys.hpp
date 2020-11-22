@@ -196,6 +196,7 @@ public:
 
     static void init_thread(int _tid){
         EpochSys::tid = _tid;
+        Ralloc::set_tid(_tid);
     }
 
     // check if global is the same as c.

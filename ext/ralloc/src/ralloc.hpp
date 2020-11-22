@@ -11,14 +11,109 @@
 #include <stdint.h>
 #include <vector>
 #ifdef __cplusplus
+
+#include "RegionManager.hpp"
+#include "BaseMeta.hpp"
+#include "SizeClass.hpp"
+#include "TCache.hpp"
+class Ralloc{
+private:
+    bool initialized;
+    BaseMeta* base_md;
+    Regions* _rgs;
+    TCaches* t_caches;
+    std::function<void(const CrossPtr<char, SB_IDX>&, GarbageCollection&)> 
+        roots_filter_func[MAX_ROOTS];
+    bool restart;
+    int thd_num;
+    
+    static std::atomic<uint64_t> thd_cnt;
+    static SizeClass sizeclass;
+    static thread_local int tid;
+public:
+    Ralloc(const char* id_, uint64_t size_ = 5*1024*1024*1024ULL, int thd_num_= 100);
+    ~Ralloc();
+
+    inline void* allocate(size_t n){
+        assert(initialized&&"Ralloc isn't initialized!");
+        return base_md->do_malloc(sz,instance_idx);
+    }
+    void* allocate(size_t num, size_t size);
+    inline void* deallocate(void* ptr){
+        assert(initialized&&"Ralloc isn't initialized!");
+        base_md->do_free(ptr,instance_idx);
+    }
+    void* reallocate(void* ptr, size_t new_size);
+
+    inline void* set_root(void* ptr, uint64_t i){
+        assert(initialized&&"Ralloc isn't initialized!");
+        return base_md->set_root(ptr,i);
+    }
+    template <class T>
+    inline T* get_root(uint64_t i){
+        assert(initialized&&"Ralloc isn't initialized!");
+        return base_md->get_root<T>(i);
+    }
+    inline bool is_restart(){
+        return restart;
+    }
+    std::vector<InuseRecovery::iterator> int recover(int thd = 1);
+
+    inline void simulate_crash(int tid){
+        // Wentao: directly call destructors to mimic a crash
+        t_caches.~TCaches();
+        if(tid==0){ 
+            base_md->fake_dirty = true;
+            _holder.close();
+        }
+        new (&ralloc::t_caches) TCaches();
+    }
+    inline size_t malloc_size(void* ptr){
+        const Descriptor* desc = base_md->desc_lookup(ptr);
+        return (size_t)desc->block_size;
+    }
+
+    /* return 1 if ptr is in range of Ralloc heap, otherwise 0. */
+    inline int in_range(void* ptr){
+        if(_rgs->in_range(SB_IDX,ptr)) return 1;
+        else return 0;
+    }
+    /* return 1 if the query is invalid, otherwise 0 and write start and end addr to the parameter. */
+    inline int region_range(int idx, void** start_addr, void** end_addr){
+        if(start_addr == nullptr || end_addr == nullptr || idx>=_rgs->cur_idx){
+            return 1;
+        }
+        *start_addr = (void*)_rgs->regions_address[idx];
+        *end_addr = (void*) ((uint64_t)_rgs->regions_address[idx] + _rgs->regions[idx]->FILESIZE);
+        return 0;
+    }
+
+    static void public_flush_cache(){
+        assert(instances.size()==total_instance.load());
+        for(int i=0;i<instances.size()){
+            if(instances[i]->initialized) {
+                for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
+                    base_md->flush_cache(i, &t_caches.t_cache[i]);
+                }
+            }
+        }
+    }
+
+    static void set_tid(int tid_){
+        assert(tid==-1 && "tid set more than once!");
+        assert(tid_<thd_num && "tid exceeds total thread number passed to Ralloc constructor!");
+        tid = tid_;
+    }
+};
+
 /* return 1 if it's a restart, otherwise 0. */
 extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL);
-#include "BaseMeta.hpp"
-namespace ralloc{
-    extern bool initialized;
-    /* persistent metadata and their layout */
-    extern BaseMeta* base_md;
-};
+// #include "BaseMeta.hpp"
+// namespace ralloc{
+//     extern bool initialized;
+//     /* persistent metadata and their layout */
+//     extern BaseMeta* base_md;
+// };
 template<class T>
 T* RP_get_root(uint64_t i){
     assert(ralloc::initialized);
@@ -52,7 +147,7 @@ int RP_region_range(int idx, void** start_addr, void** end_addr);
 }
 #endif
 
-#define RP_pthread_create(thd, attr, f, arg) pm_thread_create(thd, attr, f, arg)
+// #define RP_pthread_create(thd, attr, f, arg) pm_thread_create(thd, attr, f, arg)
 /*
  ************class ralloc************
  * This is a persistent lock-free allocator based on LRMalloc.
