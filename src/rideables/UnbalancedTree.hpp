@@ -76,7 +76,7 @@ public:
 
     optional<V> get(K key, int tid){
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             if (!root){
                 return NONE;
             } else {
@@ -117,7 +117,7 @@ public:
 
     optional<V> put(K key, V val, int tid){
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             if (!root){
                 root = new TreeNode(key, val);
             } else {
@@ -163,7 +163,7 @@ public:
 
     bool insert(K key, V val, int tid){
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             if (!root){
                 root = new TreeNode(key, val);
                 return true;
@@ -213,7 +213,7 @@ public:
 
     optional<V> remove(K key, int tid){
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             if (!root){
                 return NONE;
             } else {

@@ -296,7 +296,7 @@ optional<V> MontageNatarajanTree<K,V>::get(K key, int tid){
     seek(key,tid);
     leaf=getPtr(seekRecord->leaf);
     if(nodeEqual(key,leaf)){
-        MontageOpHolder(this);
+        MontageOpHolder _holder(this);
         res = leaf->get_unsafe_val();//never old see new as we find node before BEGIN_OP
     }
 

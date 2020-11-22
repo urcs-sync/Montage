@@ -126,7 +126,7 @@ optional<V> MontageLfHashTable<K,V>::get(K key, int tid) {
     tracker.start_op(tid);
     // hold epoch from advancing so that the node we find won't be deleted
     if(findNode(prev,curr,next,key,tid)) {
-        MontageOpHolder(this);
+        MontageOpHolder _holder(this);
         res=curr.get_val<Node*>()->get_unsafe_val();//never old see new as we find node before BEGIN_OP
     }
     tracker.end_op(tid);

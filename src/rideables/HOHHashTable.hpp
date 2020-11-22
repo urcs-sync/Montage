@@ -65,7 +65,7 @@ public:
     optional<V> get(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -88,7 +88,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         ListNode* new_node = new ListNode(this, key, val);
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -123,7 +123,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         ListNode* new_node = new ListNode(this, key, val);
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);
@@ -160,7 +160,7 @@ public:
     optional<V> remove(K key, int tid){
         size_t idx=hash_fn(key)%idxSize;
         while(true){
-            MontageOpHolder(this);
+            MontageOpHolder _holder(this);
             try{
                 HOHLockHolder holder;
                 holder.hold(&buckets[idx]->ui.lock);

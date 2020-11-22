@@ -92,7 +92,7 @@ void MontageQueue<T>::enqueue(T val, int tid){
     // no read or write so impossible to have old see new exception
     new_node->set_sn(global_sn);
     global_sn++;
-    MontageOpHolder(this);
+    MontageOpHolder _holder(this);
     if(tail == nullptr) {
         head = tail = new_node;
         return;
@@ -106,7 +106,7 @@ optional<T> MontageQueue<T>::dequeue(int tid){
     optional<T> res = {};
     // while(true){
     lock.lock();
-    MontageOpHolder(this);
+    MontageOpHolder _holder(this);
     // try {
     if(head == nullptr) {
         lock.unlock();

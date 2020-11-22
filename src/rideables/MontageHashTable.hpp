@@ -93,7 +93,7 @@ public:
         ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        MontageOpHolder(this);
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -126,7 +126,7 @@ public:
         ListNode* new_node = new ListNode(this, key, val);
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        MontageOpHolder(this);
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;
@@ -161,7 +161,7 @@ public:
         size_t idx=hash_fn(key)%idxSize;
         // while(true){
         std::lock_guard<std::mutex> lk(buckets[idx].lock);
-        MontageOpHolder(this);
+        MontageOpHolder _holder(this);
         // try{
         ListNode* curr = buckets[idx].head.next;
         ListNode* prev = &buckets[idx].head;

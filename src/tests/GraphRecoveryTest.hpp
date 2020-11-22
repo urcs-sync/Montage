@@ -50,7 +50,7 @@ public:
         Rideable* ptr = gtc->allocRideable();
         g = dynamic_cast<RGraph*>(ptr);
         if(!g){
-            errexit("GraphTest must be run on RGraph type object.");
+            errexit("GraphRecoveryTest must be run on RGraph type object.");
         }
         rec = dynamic_cast<Recoverable*>(ptr);
         if (!rec){
