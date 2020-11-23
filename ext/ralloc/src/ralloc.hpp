@@ -10,13 +10,18 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <vector>
+#include <cstring>
 #ifdef __cplusplus
 
 #include "RegionManager.hpp"
 #include "BaseMeta.hpp"
 #include "SizeClass.hpp"
 #include "TCache.hpp"
+// namespace ralloc{
+//     extern std::atomic<int> thd_cnt;
+// }
 class Ralloc{
+    friend class BaseMeta;
 private:
     bool initialized;
     BaseMeta* base_md;
@@ -26,22 +31,39 @@ private:
         roots_filter_func[MAX_ROOTS];
     bool restart;
     int thd_num;
-    
-    static std::atomic<uint64_t> thd_cnt;
-    static SizeClass sizeclass;
+
+
+    // static SizeClass sizeclass;
     static thread_local int tid;
+    inline void flush_caches(){
+        for(int thd=0;thd<thd_num;thd++){
+            for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
+                base_md->flush_cache(i, &t_caches[thd].t_cache[i]);
+            }
+        }
+    }
 public:
-    Ralloc(const char* id_, uint64_t size_ = 5*1024*1024*1024ULL, int thd_num_= 100);
+    Ralloc(int thd_num_, const char* id_, uint64_t size_ = 5*1024*1024*1024ULL);
     ~Ralloc();
 
-    inline void* allocate(size_t n){
+    inline void* allocate(size_t sz){
         assert(initialized&&"Ralloc isn't initialized!");
-        return base_md->do_malloc(sz,instance_idx);
+        assert(tid!=-1 && "thread isn't initialized!");
+        return base_md->do_malloc(sz,t_caches[tid]);
     }
-    void* allocate(size_t num, size_t size);
-    inline void* deallocate(void* ptr){
+    inline void* allocate(size_t num, size_t size){
+        void* ptr = allocate(num*size);
+        if(UNLIKELY(ptr == nullptr)) return nullptr;
+        size_t real_size = malloc_size(ptr);
+        memset(ptr, 0, real_size);
+        FLUSH(ptr);
+        FLUSHFENCE;
+        return ptr;
+    }
+    inline void deallocate(void* ptr){
         assert(initialized&&"Ralloc isn't initialized!");
-        base_md->do_free(ptr,instance_idx);
+        assert(tid!=-1 && "thread isn't initialized!");
+        base_md->do_free(ptr,t_caches[tid]);
     }
     void* reallocate(void* ptr, size_t new_size);
 
@@ -57,16 +79,19 @@ public:
     inline bool is_restart(){
         return restart;
     }
-    std::vector<InuseRecovery::iterator> int recover(int thd = 1);
+    std::vector<InuseRecovery::iterator> recover(int thd = 1);
 
     inline void simulate_crash(int tid){
         // Wentao: directly call destructors to mimic a crash
-        t_caches.~TCaches();
-        if(tid==0){ 
-            base_md->fake_dirty = true;
-            _holder.close();
+        assert(tid!=-1 && "thread isn't initialized!");
+        flush_caches();
+        for(int i=0;i<thd_num;i++){
+            if(tid==0){ 
+                base_md->fake_dirty = true;
+                // _holder.close();
+            }
+            new (&(t_caches[i])) TCaches();
         }
-        new (&ralloc::t_caches) TCaches();
     }
     inline size_t malloc_size(void* ptr){
         const Descriptor* desc = base_md->desc_lookup(ptr);
@@ -88,26 +113,25 @@ public:
         return 0;
     }
 
-    static void public_flush_cache(){
-        assert(instances.size()==total_instance.load());
-        for(int i=0;i<instances.size()){
-            if(instances[i]->initialized) {
-                for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-                    base_md->flush_cache(i, &t_caches.t_cache[i]);
-                }
-            }
-        }
-    }
+    // static void public_flush_cache(){
+    //     for(int i=0;i<instances.size()){
+    //         if(instances[i]->initialized) {
+    //             for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
+    //                 base_md->flush_cache(i, &t_caches.t_cache[i]);
+    //             }
+    //         }
+    //     }
+    // }
 
     static void set_tid(int tid_){
         assert(tid==-1 && "tid set more than once!");
-        assert(tid_<thd_num && "tid exceeds total thread number passed to Ralloc constructor!");
+        // assert(tid_<thd_num && "tid exceeds total thread number passed to Ralloc constructor!");
         tid = tid_;
     }
 };
 
 /* return 1 if it's a restart, otherwise 0. */
-extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL);
+extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL, int thd_num = 100);
 // #include "BaseMeta.hpp"
 // namespace ralloc{
 //     extern bool initialized;
@@ -116,9 +140,12 @@ extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL);
 // };
 template<class T>
 T* RP_get_root(uint64_t i){
+    #if 0
     assert(ralloc::initialized);
     return ralloc::base_md->get_root<T>(i);
+    #endif
 }
+
 
 std::vector<InuseRecovery::iterator> RP_recover(int n = 1);
 extern "C"{
@@ -126,12 +153,14 @@ extern "C"{
 // This is a version for pure c only
 void* RP_get_root_c(uint64_t i);
 /* return 1 if it's a restart, otherwise 0. */
-int RP_init(const char* _id, uint64_t size);
+int RP_init(const char* _id, uint64_t size, int thd_num);
 /* return 1 if it's dirty, otherwise 0. */
 int RP_recover_c();
+
 #endif
 
 void RP_close();
+void RP_set_tid(int tid);
 void RP_simulate_crash(int tid);
 void* RP_malloc(size_t sz);
 void RP_free(void* ptr);

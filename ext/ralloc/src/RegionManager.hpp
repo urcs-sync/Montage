@@ -216,7 +216,7 @@ public:
         regions[cur_idx] = new_mgr;
         T* t = (T*) new_mgr->__fetch_heap_start();
         if(!restart){
-            new (t) T();
+            new (t) T(this);
         }
         regions_address[cur_idx] = (char*)t;
         cur_idx++;

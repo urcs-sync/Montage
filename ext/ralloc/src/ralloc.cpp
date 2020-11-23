@@ -13,11 +13,11 @@
 #include <algorithm>
 #include <cstring>
 
-#include "RegionManager.hpp"
-#include "BaseMeta.hpp"
-#include "SizeClass.hpp"
 #include "pm_config.hpp"
+#include "RegionManager.hpp"
+#include "SizeClass.hpp"
 #include "TCache.hpp"
+#include "BaseMeta.hpp"
 
 using namespace std;
 
@@ -31,12 +31,10 @@ using namespace std;
 // };
 // using namespace ralloc;
 
-std::atomic<uint64_t> Ralloc::thd_cnt(0);
-SizeClass Ralloc::sizeclass();
+// SizeClass Ralloc::sizeclass();
 thread_local int Ralloc::tid = -1;
 
-Ralloc::Ralloc(const char* id_, uint64_t size_, int thd_num_){
-    assert(thd_cnt.load()<=1 && "Instantiating Ralloc after spawning threads is forbidden!");
+Ralloc::Ralloc(int thd_num_, const char* id_, uint64_t size_){
     string filepath;
     string id(id_);
     thd_num = thd_num_;
@@ -61,14 +59,11 @@ Ralloc::Ralloc(const char* id_, uint64_t size_, int thd_num_){
         break;
     case META_IDX:
         base_md = _rgs->create_for<BaseMeta>(filepath+"_basemd", sizeof(BaseMeta), true);
-        base_md->init();
+        base_md->transient_reset(_rgs, thd_num);
         break;
     } // switch
     }
-    instance_idx=total_instance.fetch_add(1);
-    t_caches.emplace_back();
     initialized = true;
-    instances.push_back(this);
     // return (int)restart;
 }
 
@@ -78,11 +73,7 @@ Ralloc::~Ralloc(){
         // flush_region would affect the memory consumption result (rss) and 
         // thus is disabled for benchmark testing. To enable, simply comment out
         // -DMEM_CONSUME_TEST flag in Makefile.
-        for(int thd=0;thd<thd_num;thd++){
-            for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-                base_md->flush_cache(i, &t_caches[thd].t_cache[i]);
-            }
-        }
+        flush_caches();
         delete t_caches;
         _rgs->flush_region(DESC_IDX);
         _rgs->flush_region(SB_IDX);
@@ -104,30 +95,20 @@ std::vector<InuseRecovery::iterator> Ralloc::recover(int thd){
         }
     }
     std::vector<InuseRecovery::iterator> ret;
-    ret.reserve(n);
+    ret.reserve(thd);
     size_t begin_idx = 1;
     auto last_ptr = _rgs->regions[SB_IDX]->curr_addr_ptr->load();
     const size_t last_idx = (((uint64_t)last_ptr)>>SB_SHIFT) - 
         (((uint64_t)_rgs->lookup(SB_IDX))>>SB_SHIFT); // last sb+1
     size_t total_sb = last_idx-begin_idx;
-    size_t sb_stride = total_sb/n;
+    size_t sb_stride = total_sb/thd;
     size_t end_idx = begin_idx+sb_stride;
-    for(int i=0;i<n;i++){
-        ret.emplace_back(dirty,begin_idx,end_idx);
+    for(int i=0;i<thd;i++){
+        ret.emplace_back(base_md, dirty,begin_idx,end_idx);
         begin_idx+=sb_stride;
-        end_idx = i==n-2 ? last_idx : (end_idx+sb_stride);
+        end_idx = i==thd-2 ? last_idx : (end_idx+sb_stride);
     }
     return ret;
-}
-
-void* allocate(size_t num, size_t size){
-    void* ptr = allocate(num*size);
-    if(UNLIKELY(ptr == nullptr)) return nullptr;
-    size_t real_size = malloc_size(ptr);
-    memset(ptr, 0, real_size);
-    FLUSH(ptr);
-    FLUSHFENCE;
-    return ptr;
 }
 
 void* Ralloc::reallocate(void* ptr, size_t new_size){
@@ -148,8 +129,8 @@ void* Ralloc::reallocate(void* ptr, size_t new_size){
 
 struct RallocHolder{
     Ralloc* ralloc_instance;
-    inline int init(const char* _id, uint64_t size) {
-        ralloc_instance = new Ralloc(_id,size)
+    inline int init(int thd_num, const char* _id, uint64_t size) {
+        ralloc_instance = new Ralloc(thd_num, _id,size);
         return (int)ralloc_instance->is_restart();
     }
     ~RallocHolder(){ 
@@ -164,8 +145,8 @@ static RallocHolder _holder;
  * if such a heap doesn't exist, create one. aka start.
  * id is the distinguishable identity of applications.
  */
-int RP_init(const char* _id, uint64_t size){
-    return _holder.init(_id,size);
+int RP_init(const char* _id, uint64_t size, int thd_num){
+    return _holder.init(thd_num, _id,size);
 }
 
 std::vector<InuseRecovery::iterator> RP_recover(int n){
@@ -175,6 +156,10 @@ std::vector<InuseRecovery::iterator> RP_recover(int n){
 // we assume RP_close is called by the last exiting thread.
 void RP_close(){
     // Wentao: this is a noop as the real function body is now in ~RallocHolder
+}
+
+void RP_set_tid(int tid){
+    Ralloc::set_tid(tid);
 }
 
 void RP_simulate_crash(int tid){

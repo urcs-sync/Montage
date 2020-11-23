@@ -73,7 +73,7 @@ void * producer (void * arg)
     	// fprintf(stderr, "thread pinning on cpu %d succeeded.\n", core_id);
     }
 #endif
-
+	RP_set_tid(w1.pairIdx*2);
 	// Producer: allocate objNum of objects in size of ObjSize, push each to msq
 	pthread_barrier_wait(&barrier);
 	for (int i = 0; i < w1.objNum; i++) {
@@ -121,6 +121,7 @@ void * consumer (void * arg)
     	// fprintf(stderr, "thread pinning on cpu %d succeeded.\n", core_id);
     }
 #endif
+	RP_set_tid(w1.pairIdx*2+1);
 	int i = 0;
 	pthread_barrier_wait(&barrier);
 	while(i < w1.objNum) {
