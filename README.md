@@ -188,7 +188,7 @@ This is a wrapper of a globally visible Montage instance (`EpochSys`). Only thre
 currently using this API in this repo.
 
 The two sets of API share the same semantics as described in the paper, and is subject to
-further adjustments as we apply it to more applications. We will consier releasing 
+further adjustments as we apply it to more applications. We will consider releasing 
 documentations on the API once they become stable.
 
 ### 2.4. Different Mount Point
