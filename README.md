@@ -179,7 +179,17 @@ and `GraphTest:1m:i25r25l25:c25`, while the recovery test is
 
 ### 2.3. Use Montage in Your Code
 
-(In preparation)
+Montage's API can be found in `src/persist/api`. Currently, all Montage-based data structures
+in `src/rideables` are using the *Object-oriented* API by deriving from class `Recoverable`.
+Please see data structures `src/rideables/Montage*.hpp` as examples of detailed usage.
+
+Non-OO API, as described in the paper, is preserved in `src/persist/api/MontageGlobalAPI.hpp`.
+This is a wrapper of a globally visible Montage instance (`EpochSys`). Only threadcached is
+currently using this API in this repo.
+
+The two sets of API share the same semantics as described in the paper, and is subject to
+further adjustments as we apply it to more applications. We will consier releasing 
+documentations on the API once they become stable.
 
 ### 2.4. Different Mount Point
 
