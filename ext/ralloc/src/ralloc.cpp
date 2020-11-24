@@ -21,17 +21,6 @@
 
 using namespace std;
 
-// namespace ralloc{
-//     bool initialized = false;
-//     /* persistent metadata and their layout */
-//     BaseMeta* base_md;
-//     Regions* _rgs;
-//     std::function<void(const CrossPtr<char, SB_IDX>&, GarbageCollection&)> roots_filter_func[MAX_ROOTS];
-//     extern SizeClass sizeclass;
-// };
-// using namespace ralloc;
-
-// SizeClass Ralloc::sizeclass();
 thread_local int Ralloc::tid = -1;
 
 Ralloc::Ralloc(int thd_num_, const char* id_, uint64_t size_){

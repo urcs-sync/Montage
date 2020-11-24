@@ -64,20 +64,6 @@
  *      Wentao Cai (wcai6@cs.rochester.edu)
  */
 
-class BaseMeta;
-// namespace ralloc{
-//     /* manager to map, remap, and unmap the heap */
-//     // regions manager
-//     extern Regions* _rgs;//initialized when ralloc constructs
-//     // flag indicating Ralloc is initialized or not.
-//     extern bool initialized;
-//     // pointer to the instance of BaseMeta
-//     extern BaseMeta* base_md;
-//     // function to flush thread-local cache, used in TCaches::~TCaches and
-//     // BaseMeta::writeback()
-//     // extern void public_flush_cache();
-// };
-
 /* 
  * class CrossPtr<T, idx>
  *  
@@ -94,14 +80,7 @@ template<class T, RegionIndex idx>
 class CrossPtr {
 public:
     char* off;
-    CrossPtr(Regions* _rgs = nullptr, T* real_ptr = nullptr) noexcept{
-        if(UNLIKELY(real_ptr == nullptr)){
-            off = nullptr;
-        } else {
-            assert(_rgs!=nullptr);
-            off = _rgs->untranslate(idx, reinterpret_cast<char*>(real_ptr));
-        }
-    }
+    CrossPtr(Regions* _rgs = nullptr, T* real_ptr = nullptr) noexcept;
     CrossPtr(const CrossPtr& cptr) noexcept: off(cptr.off) {}
 
     inline CrossPtr& operator= (const CrossPtr<T,idx> &p){
@@ -302,7 +281,6 @@ public:
         partial_list(){};
 }__attribute__((aligned(CACHELINE_SIZE)));
 
-
 /* 
  * class GarbageCollection
  * 
@@ -347,15 +325,9 @@ public:
     inline void filter_func(T* ptr);
 };
 
-// namespace ralloc{
-//     // (transient) filter functions for each root
-//     extern std::function<void(const CrossPtr<char, SB_IDX>&, GarbageCollection&)> roots_filter_func[MAX_ROOTS];
-// }
-
-
-
 #include <iterator>
 #include <unordered_set>
+class BaseMeta;
 class InuseRecovery{
 public:
     class RallocBlock{ };
@@ -429,6 +401,8 @@ public:
  */
 class BaseMeta {
 public:
+    // _rgs and thd_num are reset in each execution, via either
+    // constructor or transient_reset
     RP_TRANSIENT Regions* _rgs;
     RP_TRANSIENT int thd_num;
     // unused small sb
@@ -469,14 +443,19 @@ public:
     }
     void* set_root(void* ptr, uint64_t i){
         //this is sequential
-        assert(i<MAX_ROOTS);
+
+        // Wentao: comment out since in Montage we don't set or get
+        // root.
         void* res = nullptr;
+        #if 0
+        assert(i<MAX_ROOTS);
         if(!roots[i].is_null()) 
             res = roots[i].to_addr(_rgs);
         roots[i].assign(_rgs, ptr);
 
         FLUSH(&roots[i]);
         FLUSHFENCE;
+        #endif
         return res;
     }
     template<class T>
@@ -484,6 +463,8 @@ public:
         //this is sequential
         // assert(i<MAX_ROOTS && roots[i]!=nullptr); // we allow
         // roots[i] to be null
+
+        // Wentao: comment out since in Montage we don't set or get root.
         #if 0
         assert(i<MAX_ROOTS);
         ralloc::roots_filter_func[i] = [](const CrossPtr<char, SB_IDX>& cptr, GarbageCollection& gc){
@@ -494,27 +475,27 @@ public:
         #endif
         return nullptr;
     }
-    bool restart(){
-        //obsolete function, left only for test purpose
-        assert(0);
-        // Restart, setting values and flags to normal
-        // Should be called during restart
-        bool ret = is_dirty();
-        // "dirty" should be set to true until
-        // writeback() is called so that crash will result in a dirty.
-        set_dirty();
-        if(ret) {
-            // Wentao: by this we make all blocks in an in-use sb in-use.
-            InuseRecovery::iterator iter (this, true);
-            while(!iter.is_last()){
-                ++iter;
-            }
-        }
-        FLUSHFENCE;
-        return ret;
-    }
+    // bool restart(){
+    //     //obsolete function, left only for test purpose
+    //     assert(0);
+    //     // Restart, setting values and flags to normal
+    //     // Should be called during restart
+    //     bool ret = is_dirty();
+    //     // "dirty" should be set to true until
+    //     // writeback() is called so that crash will result in a dirty.
+    //     set_dirty();
+    //     if(ret) {
+    //         // Wentao: by this we make all blocks in an in-use sb in-use.
+    //         InuseRecovery::iterator iter (this, true);
+    //         while(!iter.is_last()){
+    //             ++iter;
+    //         }
+    //     }
+    //     FLUSHFENCE;
+    //     return ret;
+    // }
     void writeback(){
-        // Should be called during normal exit
+        // Should be called during normal exit, after Ralloc::flush_cache()
 
         // Wentao: cache flush is done in caches' destructor (~TCaches)
         // ralloc::public_flush_cache();

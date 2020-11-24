@@ -28,6 +28,16 @@ using namespace ralloc;
 using namespace std::chrono;
 
 template<class T, RegionIndex idx>
+CrossPtr<T,idx>::CrossPtr(Regions* _rgs, T* real_ptr) noexcept{
+    if(UNLIKELY(real_ptr == nullptr)){
+        off = nullptr;
+    } else {
+        assert(_rgs!=nullptr);
+        off = _rgs->untranslate(idx, reinterpret_cast<char*>(real_ptr));
+    }
+}
+
+template<class T, RegionIndex idx>
 AtomicCrossPtrCnt<T,idx>::AtomicCrossPtrCnt(Regions* _rgs, T* real_ptr, uint64_t counter)noexcept{
     char* res;
     uint64_t cnt_prefix = counter << MAX_DESC_OFFSET_BITS;
@@ -43,7 +53,7 @@ AtomicCrossPtrCnt<T,idx>::AtomicCrossPtrCnt(Regions* _rgs, T* real_ptr, uint64_t
 
 // wrapped-up atomic ops for AtomicCrossPtrCnt
 template<class T, RegionIndex idx>
-inline ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(Regions* _rgs, memory_order order)const noexcept{
+ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(Regions* _rgs, memory_order order)const noexcept{
     char* cur_off = off.load(order);
     ptr_cnt<T> ret;
     ret.cnt = reinterpret_cast<uint64_t>(cur_off) >> MAX_DESC_OFFSET_BITS;
@@ -58,7 +68,7 @@ inline ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(Regions* _rgs, memory_order ord
 }
 
 template<class T, RegionIndex idx>
-inline void AtomicCrossPtrCnt<T,idx>::store(Regions* _rgs, ptr_cnt<T> desired, memory_order order)noexcept{
+void AtomicCrossPtrCnt<T,idx>::store(Regions* _rgs, ptr_cnt<T> desired, memory_order order)noexcept{
     char* new_off;
     uint64_t cnt_prefix = desired.cnt << MAX_DESC_OFFSET_BITS;
     if(desired.get_ptr() == nullptr){
@@ -72,7 +82,7 @@ inline void AtomicCrossPtrCnt<T,idx>::store(Regions* _rgs, ptr_cnt<T> desired, m
 }
 
 template<class T, RegionIndex idx>
-inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
+bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
     char* old_off;
     char* new_off;
     uint64_t old_cnt_prefix = expected.cnt << MAX_DESC_OFFSET_BITS;
@@ -104,7 +114,7 @@ inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(Regions* _rgs, ptr_c
 }
 
 template<class T, RegionIndex idx>
-inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_strong(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
+bool AtomicCrossPtrCnt<T,idx>::compare_exchange_strong(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
     char* old_off;
     char* new_off;
     uint64_t old_cnt_prefix = expected.cnt << MAX_DESC_OFFSET_BITS;
@@ -571,9 +581,7 @@ inline void BaseMeta::organize_sb_list(void* start, uint64_t count){
         newhead.set(desc_start, oldhead.get_counter()+1);
     }while(!avail_sb.compare_exchange_weak(_rgs,oldhead,newhead));
 }
-// namespace ralloc{
-//     extern std::atomic<uint64_t> thd_cnt;
-// }
+
 void* BaseMeta::small_sb_alloc(size_t size){
     if(size != SBSIZE){
         std::cout<<"desired size: "<<size<<std::endl;
@@ -737,16 +745,6 @@ void BaseMeta::do_free(void* ptr, TCaches& t_caches){
     cache->push_block((char*)ptr);
 }
 
-
-// // this can be called by TCaches
-// void ralloc::public_flush_cache(){
-//     if(initialized) {
-//         for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-//             base_md->flush_cache(i, &t_caches.t_cache[i]);
-//         }
-//     }
-// }
-
 /*
  * function GarbageCollection::operator()
  * 
@@ -755,6 +753,9 @@ void BaseMeta::do_free(void* ptr, TCaches& t_caches){
  *  segment exists.
  */
 void GarbageCollection::operator() () {
+    // Wentao: commenting this out since we don't use this routine in
+    // Montage and I don't want to fix issues brought into this
+    // routine with multi-instance support...
 #if 0
     printf("Start garbage collection...\n");
     auto start = high_resolution_clock::now(); 

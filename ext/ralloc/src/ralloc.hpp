@@ -17,9 +17,7 @@
 #include "BaseMeta.hpp"
 #include "SizeClass.hpp"
 #include "TCache.hpp"
-// namespace ralloc{
-//     extern std::atomic<int> thd_cnt;
-// }
+
 class Ralloc{
     friend class BaseMeta;
 private:
@@ -113,16 +111,6 @@ public:
         return 0;
     }
 
-    // static void public_flush_cache(){
-    //     for(int i=0;i<instances.size()){
-    //         if(instances[i]->initialized) {
-    //             for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-    //                 base_md->flush_cache(i, &t_caches.t_cache[i]);
-    //             }
-    //         }
-    //     }
-    // }
-
     static void set_tid(int tid_){
         assert(tid==-1 && "tid set more than once!");
         // assert(tid_<thd_num && "tid exceeds total thread number passed to Ralloc constructor!");
@@ -132,12 +120,7 @@ public:
 
 /* return 1 if it's a restart, otherwise 0. */
 extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL, int thd_num = 100);
-// #include "BaseMeta.hpp"
-// namespace ralloc{
-//     extern bool initialized;
-//     /* persistent metadata and their layout */
-//     extern BaseMeta* base_md;
-// };
+
 template<class T>
 T* RP_get_root(uint64_t i){
     #if 0

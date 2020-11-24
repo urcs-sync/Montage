@@ -61,10 +61,6 @@ public:
 	// slow operations like fill/flush handled in cache user
 };
 
-// namespace ralloc{
-	// extern void public_flush_cache();
-	// extern std::atomic<uint64_t> thd_cnt;
-// }
 struct TCaches
 {
 	TCacheBin t_cache[MAX_SZ_IDX];
@@ -72,9 +68,5 @@ struct TCaches
 	~TCaches();
 }__attribute__((aligned(CACHELINE_SIZE)));
 
-/* thread-local cache */
-// namespace ralloc{
-// 	extern thread_local TCaches t_caches;
-// }
 #endif // __TCACHE_H_
 
