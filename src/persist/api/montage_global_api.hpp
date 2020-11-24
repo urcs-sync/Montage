@@ -43,6 +43,7 @@ namespace pds{
 
     inline void init_thread(int id) {
         EpochSys::tid = id;
+        Ralloc::set_tid(id);
         // esys_global->init_thread(id);
     }
 

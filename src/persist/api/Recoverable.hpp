@@ -278,7 +278,7 @@ public:
     template <typename T, typename... Types> 
     T* pnew(Types... args) 
     {
-        T* ret = new T(args...);
+        T* ret = _esys->new_pblk<T>(args...);
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
             pending_allocs[pds::EpochSys::tid].ui.insert(ret);
         } else {

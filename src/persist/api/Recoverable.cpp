@@ -3,7 +3,7 @@
 Recoverable::Recoverable(GlobalTestConfig* gtc){
     // init Persistent allocator
     // TODO: put this into EpochSys.
-    Persistent::init();
+    // Persistent::init();
     epochs = new padded<uint64_t>[gtc->task_num];
     for(int i = 0; i < gtc->task_num; i++){
         epochs[i].ui = NULL_EPOCH;

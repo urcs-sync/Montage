@@ -32,7 +32,7 @@ struct PairHash{
 
 class ToBePersistContainer{
 public:
-    virtual void register_persist(PBlk* blk, uint64_t c) = 0;
+    virtual void register_persist(PBlk* blk, size_t sz, uint64_t c) = 0;
     virtual void register_persist_raw(PBlk* blk, uint64_t c){
         persist_func::clwb(blk);
     }
@@ -115,7 +115,7 @@ public:
         delete persister;
         delete container;
     }
-    void register_persist(PBlk* blk, uint64_t c);
+    void register_persist(PBlk* blk, size_t sz, uint64_t c);
     void register_persist_raw(PBlk* blk, uint64_t c);
     void persist_epoch(uint64_t c);
     void clear();
@@ -123,8 +123,8 @@ public:
 
 class DirWB : public ToBePersistContainer{
 public:
-    void register_persist(PBlk* blk, uint64_t c){
-        persist_func::clwb_range_nofence(blk, Persistent::get_malloc_size(blk));
+    void register_persist(PBlk* blk, size_t sz, uint64_t c){
+        persist_func::clwb_range_nofence(blk, sz);
     }
     void persist_epoch(uint64_t c){}
     void clear(){}
@@ -233,7 +233,7 @@ public:
         delete persister;
     }
     void push(std::pair<void*, size_t> entry, uint64_t c);
-    void register_persist(PBlk* blk, uint64_t c);
+    void register_persist(PBlk* blk, size_t sz, uint64_t c);
     void register_persist_raw(PBlk* blk, uint64_t c);
     void persist_epoch(uint64_t c);
     void clear();
@@ -241,7 +241,7 @@ public:
 
 class NoToBePersistContainer : public ToBePersistContainer{
     // a to-be-persist container that does absolutely nothing.
-    void register_persist(PBlk* blk, uint64_t c){}
+    void register_persist(PBlk* blk, size_t sz, uint64_t c){}
     void register_persist_raw(PBlk* blk, uint64_t c){}
     void persist_epoch(uint64_t c){}
     void clear(){}

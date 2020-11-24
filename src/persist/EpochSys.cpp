@@ -5,7 +5,7 @@
 namespace pds{
 
     thread_local int EpochSys::tid = -1;
-
+    std::atomic<int> EpochSys::esys_num(0);
     void EpochSys::parse_env(){
         if (to_be_persisted){
             delete to_be_persisted;
@@ -160,7 +160,7 @@ namespace pds{
             // update before BEGIN_OP, return. This register will be done by BEGIN_OP.
             return;
         }
-        to_be_persisted->register_persist(b, c);
+        to_be_persisted->register_persist(b, _ral->malloc_size(b), c);
     }
 
     // Arg is epoch we think we're ending
@@ -277,7 +277,7 @@ namespace pds{
 #ifndef MNEMOSYNE
         bool clean_start;
 
-        auto itr_raw = Persistent::recover(rec_thd);
+        auto itr_raw = _ral->recover(rec_thd);
 
         sys_mode=RECOVER;
         // set system mode to RECOVER -- all PDELETE_DATA and PDELETE becomes no-ops.
@@ -324,7 +324,7 @@ namespace pds{
         std::mutex in_use_m;
         std::mutex owned_m;
 
-        itr_raw = Persistent::recover(rec_thd);
+        itr_raw = _ral->recover(rec_thd);
 
         // Clear the heap
         if (epoch_cap < 1) {
