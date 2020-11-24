@@ -232,6 +232,12 @@ public:
         return ret;
     }
 
+    // deallocate pblk, giving it back to Ralloc
+    template <class T>
+    void delete_pblk(T* pblk){
+        _ral->deallocate(b);
+    }
+
     // check if global is the same as c.
     bool check_epoch(uint64_t c);
 

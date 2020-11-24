@@ -303,7 +303,7 @@ public:
                     assert(pending_allocs[pds::EpochSys::tid].ui.find(b) != pending_allocs[pds::EpochSys::tid].ui.end());
                     pending_allocs[pds::EpochSys::tid].ui.erase(b);
                 }
-                delete b;
+                _esys->delete_pblk(b);
             }
         }
     }

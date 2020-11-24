@@ -5,6 +5,7 @@
 using namespace pds;
 
 void PerThreadFreedContainer::do_free(PBlk*& x){
+    // FIXME
     delete x;
 }
 PerThreadFreedContainer::PerThreadFreedContainer(GlobalTestConfig* gtc): task_num(gtc->task_num){
@@ -61,6 +62,7 @@ void PerThreadFreedContainer::clear(){
 
 
 void PerEpochFreedContainer::do_free(PBlk*& x){
+    //FIXME
     delete x;
 }
 PerEpochFreedContainer::PerEpochFreedContainer(GlobalTestConfig* gtc){
@@ -85,5 +87,6 @@ void PerEpochFreedContainer::clear(){
 }
 
 void NoToBeFreedContainer::register_free(PBlk* blk, uint64_t c){
+    //FIXME
     delete blk;
 }

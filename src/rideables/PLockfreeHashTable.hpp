@@ -104,6 +104,10 @@ public:
         Persistent::finalize();
     };
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Persistent::init_thread(gtc, ltc);
+    }
+
     optional<std::string> get(std::string key, int tid);
     optional<std::string> put(std::string key, std::string val, int tid);
     bool insert(std::string key, std::string val, int tid);

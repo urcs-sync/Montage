@@ -63,6 +63,10 @@ public:
 	static void simulate_crash(int tid){
 		RP_simulate_crash(tid);
 	}
+
+	static void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+		Ralloc::set_tid(ltc->tid);
+	}
 };
 
 #endif

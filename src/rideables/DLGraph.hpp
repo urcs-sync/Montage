@@ -152,6 +152,9 @@ class DLGraph : public RGraph {
             Persistent::finalize();
         }
 
+        void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+            Persistent::init_thread(gtc, ltc);
+        }
         
         tVertex** idxToVertex; // Transient set of transient vertices to index map
 

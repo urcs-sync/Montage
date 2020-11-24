@@ -112,7 +112,8 @@ public:
     }
 
     static void set_tid(int tid_){
-        assert(tid==-1 && "tid set more than once!");
+        // Wentao: we deliberately allow tid to be set more than once
+        // assert((tid==-1 || tid==0) && "tid set more than once!");
         // assert(tid_<thd_num && "tid exceeds total thread number passed to Ralloc constructor!");
         tid = tid_;
     }

@@ -206,6 +206,10 @@ public:
         Persistent::finalize();
     }
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Persistent::init_thread(gtc, ltc);
+    }
+
   private:
     std::hash<K> hash_fn;
     RCUTracker<Node> tracker;

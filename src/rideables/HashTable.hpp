@@ -212,6 +212,9 @@ public:
         Persistent::finalize();
     }
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Persistent::init_thread(gtc, ltc);
+    }
 
     optional<std::string> get(std::string key, int tid){
         optional<std::string> ret={};
