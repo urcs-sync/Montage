@@ -5,13 +5,13 @@
 using namespace pds;
 
 void PerThreadFreedContainer::do_free(PBlk*& x){
-    // FIXME
-    delete x;
+    _esys->delete_pblk(x);
 }
-PerThreadFreedContainer::PerThreadFreedContainer(GlobalTestConfig* gtc): task_num(gtc->task_num){
+PerThreadFreedContainer::PerThreadFreedContainer(EpochSys* e, GlobalTestConfig* gtc): task_num(gtc->task_num){
     container = new VectorContainer<PBlk*>(gtc->task_num);
     threadEpoch = new padded<uint64_t>[gtc->task_num];
     locks = new padded<std::mutex>[gtc->task_num];
+    _esys = e;
     for(int i = 0; i < gtc->task_num; i++){
         threadEpoch[i] = NULL_EPOCH;
     }
@@ -47,14 +47,14 @@ void PerThreadFreedContainer::help_free(uint64_t c){
         while(!locks[i].ui.try_lock()){}
     }
 
-    container->pop_all(&do_free, c);
+    container->pop_all([this](PBlk*& x){this->do_free(x);}, c);
     
     for(int i = 0; i < task_num; i++){
         locks[i].ui.unlock();
     }
 }
 void PerThreadFreedContainer::help_free_local(uint64_t c){
-    container->pop_all_local(&do_free, EpochSys::tid, c);
+    container->pop_all_local([this](PBlk*& x){this->do_free(x);}, EpochSys::tid, c);
 }
 void PerThreadFreedContainer::clear(){
     container->clear();
@@ -62,11 +62,11 @@ void PerThreadFreedContainer::clear(){
 
 
 void PerEpochFreedContainer::do_free(PBlk*& x){
-    //FIXME
-    delete x;
+    _esys->delete_pblk(x);
 }
-PerEpochFreedContainer::PerEpochFreedContainer(GlobalTestConfig* gtc){
+PerEpochFreedContainer::PerEpochFreedContainer(EpochSys* e, GlobalTestConfig* gtc){
     container = new VectorContainer<PBlk*>(gtc->task_num);
+    _esys = e;
     // container = new HashSetContainer<PBlk*>(gtc->task_num);
 }
 PerEpochFreedContainer::~PerEpochFreedContainer(){
@@ -77,16 +77,15 @@ void PerEpochFreedContainer::register_free(PBlk* blk, uint64_t c){
     container->push(blk, EpochSys::tid, c);
 }
 void PerEpochFreedContainer::help_free(uint64_t c){
-    container->pop_all(&do_free, c);
+    container->pop_all([this](PBlk*& x){this->do_free(x);}, c);
 }
 void PerEpochFreedContainer::help_free_local(uint64_t c){
-    container->pop_all_local(&do_free, EpochSys::tid, c);
+    container->pop_all_local([this](PBlk*& x){this->do_free(x);}, EpochSys::tid, c);
 }
 void PerEpochFreedContainer::clear(){
     container->clear();
 }
 
 void NoToBeFreedContainer::register_free(PBlk* blk, uint64_t c){
-    //FIXME
-    delete blk;
+    _esys->delete_pblk(blk);
 }

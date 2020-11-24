@@ -62,11 +62,12 @@ DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* 
         }
     }
     started.store(false);
-    advancer_thread = std::move(std::thread(&DedicatedEpochAdvancer::advancer, this));
+    advancer_thread = std::move(std::thread(&DedicatedEpochAdvancer::advancer, this, gtc->task_num));
     started.store(true);
 }
 
-void DedicatedEpochAdvancer::advancer(){
+void DedicatedEpochAdvancer::advancer(int task_num){
+    EpochSys::init_thread(task_num);// set tid to be the last
     while(!started.load()){}
     while(started.load()){
         esys->advance_epoch_dedicated();

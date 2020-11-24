@@ -118,7 +118,7 @@ public:
         }
     }
     // try to pop the head before calling func.
-    bool try_pop(void (*func)(T& x)){
+    bool try_pop(const std::function<void(T& x)>& func){
         if (head.ui == tail.ui){
             // empty.
             return false;
@@ -159,16 +159,16 @@ public:
     void push(T x, int tid){
         buffers[tid].ui->push(x);
     }
-    void pop_all(void (*func)(T& x)){
+    void pop_all(const std::function<void(T& x)>& func){
         // std::cout<<"pop_all called"<<std::endl;
         for (int i = 0; i < count; i++){
             while(buffers[i].ui->try_pop(func)){}
         }
     }
-    void pop_all_local(void (*func)(T& x), int tid){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid){
         while(buffers[tid].ui->try_pop(func)){}
     }
-    bool try_pop_local(void (*func)(T& x), int tid){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
         return buffers[tid].ui->try_pop(func);
     }
     void clear(){
@@ -230,7 +230,7 @@ public:
             return true;
         }
     }
-    bool try_pop(void (*func)(T& x)){
+    bool try_pop(const std::function<void(T& x)>& func){
         int curr_head = head.ui.load(std::memory_order_acquire);
         if (tail.ui.load(std::memory_order_acquire) == curr_head){
             // empty.
@@ -292,16 +292,16 @@ public:
     bool try_push(T x, int tid){
         return buffers[tid].ui->try_push(x);
     }
-    void pop_all(void (*func)(T& x)){
+    void pop_all(const std::function<void(T& x)>& func){
         // std::cout<<"pop_all called"<<std::endl;
         for (int i = 0; i < count; i++){
             while(buffers[i].ui->try_pop(func)){}
         }
     }
-    void pop_all_local(void (*func)(T& x), int tid){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid){
         while(buffers[tid].ui->try_pop(func)){}
     }
-    bool try_pop_local(void (*func)(T& x), int tid){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
         return buffers[tid].ui->try_pop(func);
     }
     bool full_local(int tid){
@@ -339,7 +339,7 @@ public:
     void push(T x, int tid){
         buffers[tid].ui->push_back(x);
     }
-    void pop_all(void (*func)(T& x)){
+    void pop_all(const std::function<void(T& x)>& func){
         for (int i = 0; i < count; i++){
             while(!buffers[i].ui->empty()){
                 func(buffers[i].ui->back());
@@ -347,13 +347,13 @@ public:
             }
         }
     }
-    void pop_all_local(void (*func)(T& x), int tid){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid){
         while(!buffers[tid].ui->empty()){
             func(buffers[tid].ui->back());
             buffers[tid].ui->pop_back();
         }
     }
-    bool try_pop_local(void (*func)(T& x), int tid){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
         if (buffers[tid].ui->empty()){
             return false;
         } else {
@@ -393,7 +393,7 @@ public:
     void push(T x, int tid){
         buffers[tid].ui->insert(x);
     }
-    void pop_all(void (*func)(T& x)){
+    void pop_all(const std::function<void(T& x)>& func){
         for (int i = 0; i < count; i++){
             for (auto itr = buffers[i].ui->begin(); itr != buffers[i].ui->end(); itr++){
                 T t = *itr;
@@ -402,7 +402,7 @@ public:
             buffers[i].ui->clear();
         }
     }
-    void pop_all_local(void (*func)(T& x), int tid){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid){
         for (auto itr = buffers[tid].ui->begin(); itr != buffers[tid].ui->end(); itr++){
             T t = *itr;
             func(t);
@@ -410,7 +410,7 @@ public:
         buffers[tid].ui->clear();
 
     }
-    bool try_pop_local(void (*func)(T& x), int tid){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
         if (buffers[tid].ui->empty()){
             return false;
         } else {

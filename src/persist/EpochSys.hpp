@@ -152,7 +152,8 @@ public:
 
     EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
         std::string heap_name = get_ralloc_heap_name();
-        _ral = new Ralloc(_gtc->task_num,heap_name.c_str(),REGION_SIZE);
+        // task_num+1 to construct Ralloc for dedicated epoch advancer
+        _ral = new Ralloc(_gtc->task_num+1,heap_name.c_str(),REGION_SIZE);
         reset(); // TODO: change to recover() later on.
     }
 

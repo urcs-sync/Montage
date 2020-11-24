@@ -35,7 +35,7 @@ namespace pds{
         if (gtc->checkEnv("PersistStrat")){
             if (gtc->getEnv("PersistStrat") == "No"){
                 to_be_persisted = new NoToBePersistContainer();
-                to_be_freed = new NoToBeFreedContainer();
+                to_be_freed = new NoToBeFreedContainer(this);
                 epoch_advancer = new NoEpochAdvancer();
                 trans_tracker = new NoTransactionTracker(this->global_epoch);
                 return;
@@ -63,16 +63,16 @@ namespace pds{
         if (gtc->checkEnv("Free")){
             string env_free = gtc->getEnv("Free");
             if (env_free == "PerEpoch"){
-                to_be_freed = new PerEpochFreedContainer(gtc);
+                to_be_freed = new PerEpochFreedContainer(this, gtc);
             } else if(env_free == "PerThread"){
-                to_be_freed = new PerThreadFreedContainer(gtc);
+                to_be_freed = new PerThreadFreedContainer(this, gtc);
             }else if (env_free == "No"){
-                to_be_freed = new NoToBeFreedContainer();
+                to_be_freed = new NoToBeFreedContainer(this);
             } else {
                 errexit("unrecognized 'free' environment");
             }
         } else {
-            to_be_freed = new PerEpochFreedContainer(gtc);
+            to_be_freed = new PerEpochFreedContainer(this, gtc);
         }
 
         if (gtc->checkEnv("TransTracker")){
