@@ -264,7 +264,7 @@ public:
     };
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-        Recoverable::init_thread(gtc, ltc);
+        Persistent::init_thread(gtc, ltc);
     }
 
     optional<V> get(K key, int tid);

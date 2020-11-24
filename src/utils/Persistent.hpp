@@ -37,6 +37,8 @@ public:
 		strcat(heap_prefix, "_test");
 		RP_init(heap_prefix, REGION_SIZE);
 		free(heap_prefix);
+		// init main thread
+		Ralloc::set_tid(0);
 		// TODO: deal with returned value.
 	}
 	static void finalize(){

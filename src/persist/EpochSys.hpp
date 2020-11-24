@@ -235,7 +235,7 @@ public:
     // deallocate pblk, giving it back to Ralloc
     template <class T>
     void delete_pblk(T* pblk){
-        _ral->deallocate(b);
+        _ral->deallocate(pblk);
     }
 
     // check if global is the same as c.
