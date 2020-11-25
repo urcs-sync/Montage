@@ -98,7 +98,7 @@ LD:= $(CXX)
 # we input LIBS and output ARCHIVES
 # the name of the outputed .a archive file of all non executable source
 # name defaults to the name of the Makefile's parent directory
-STATICARCHIVE:=libMontage.a
+STATICARCHIVE:=
 # the name of the outputed .so shared library
 # file of all non executable source
 # name defaults to the name of the Makefile's parent directory
