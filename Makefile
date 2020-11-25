@@ -75,7 +75,7 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
-LIBS :=-l:libjemalloc.so.2 -lpthread -lhwloc -lralloc -lgomp -latomic
+LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
 LIBS+=-lnvmmalloc
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
@@ -98,7 +98,7 @@ LD:= $(CXX)
 # we input LIBS and output ARCHIVES
 # the name of the outputed .a archive file of all non executable source
 # name defaults to the name of the Makefile's parent directory
-STATICARCHIVE:=
+STATICARCHIVE:=libMontage.a
 # the name of the outputed .so shared library
 # file of all non executable source
 # name defaults to the name of the Makefile's parent directory

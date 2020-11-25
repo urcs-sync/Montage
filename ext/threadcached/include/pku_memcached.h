@@ -106,7 +106,7 @@ void memcached_start_server();
 memcached_return_t
 memcached_end ();
 
-void memcached_init();
+void memcached_init(int thd_num);
 
 void memcached_close();
 

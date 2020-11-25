@@ -111,6 +111,10 @@ public:
         return 0;
     }
 
+    inline bool is_initialized(){
+        return initialized;
+    }
+
     static void set_tid(int tid_){
         // Wentao: we deliberately allow tid to be set more than once
         // assert((tid==-1 || tid==0) && "tid set more than once!");
@@ -119,17 +123,24 @@ public:
     }
 };
 
+// RAII ralloc global instance holder for global API
+struct RallocHolder{
+    Ralloc* ralloc_instance;
+    int init(int thd_num, const char* _id, uint64_t size);
+    ~RallocHolder(){ 
+        delete ralloc_instance;
+    }
+};
+
+extern RallocHolder _holder;
+
 /* return 1 if it's a restart, otherwise 0. */
 extern "C" int RP_init(const char* _id, uint64_t size = 5*1024*1024*1024ULL, int thd_num = 100);
 
 template<class T>
 T* RP_get_root(uint64_t i){
-    #if 0
-    assert(ralloc::initialized);
-    return ralloc::base_md->get_root<T>(i);
-    #endif
+    return _holder.ralloc_instance->get_root<T>(i);
 }
-
 
 std::vector<InuseRecovery::iterator> RP_recover(int n = 1);
 extern "C"{

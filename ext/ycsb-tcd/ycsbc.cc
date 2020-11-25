@@ -64,6 +64,8 @@ exit(1);
 
 #ifdef MONTAGE
   pds::init_thread(tid);
+#elif defined(RALLOC)
+  RP_set_tid(tid);
 #endif
 
   db->Init(tid);
@@ -90,9 +92,9 @@ unsigned cache_test_item_size = 0;
 int main(const int argc, char *argv[]) {
   // TODO: include GlobalTestConfig, construct command line args, and initialize EpochSys
   
-  memcached_init();
   utils::Properties props;
   string file_name = ParseCommandLine(argc, argv, props);
+  const int num_threads = stoi(props.GetProperty("threadcount", "1"));
 #ifdef MONTAGE
   // Ralloc init and close are already handled by memcached_init() 
   // init epoch system with artificial gtc, only for passing t and d
@@ -131,8 +133,9 @@ int main(const int argc, char *argv[]) {
   hwloc_get_type_depth(gtc.topology, HWLOC_OBJ_PU));
   std::cout<<"initial affinity built"<<std::endl;
   gtc.buildAffinity(gtc.affinities);
-  // pds::init(&gtc);
+  pds::init(&gtc);
 #endif
+  memcached_init(num_threads);
   if (do_cache_test_flag){
     do_cache_test();
     memcached_close();
@@ -145,8 +148,6 @@ int main(const int argc, char *argv[]) {
   }
   ycsbc::CoreWorkload wl;
   wl.Init(props);
-
-  const int num_threads = stoi(props.GetProperty("threadcount", "1"));
 
   // Loads data
   vector<future<int>> actual_ops;

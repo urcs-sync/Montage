@@ -403,15 +403,18 @@ HODOR_FUNC_EXPORT(memcached_start_server, 0);
 #include <errno.h>
 #include <unistd.h>
 bool server_flag = false;
-void memcached_init(){
+void memcached_init(int thd_num){
   if (!run_once){
     run_once = true;
   } else return;
+// Wt: montage init is done before memcached_init
+// TODO: move montage inti into memcached_init
+// this part is initializing the global Ralloc heap for transient allocation
 #ifdef RALLOC
   char* heap_prefix = (char*) malloc(L_cuserid+6);
   cuserid(heap_prefix);
   strcat(heap_prefix, "_memcached");
-  is_restart = RP_init(heap_prefix, MEMORY_MAX);
+  is_restart = RP_init(heap_prefix, MEMORY_MAX, thd_num);
   free(heap_prefix);
 #else
   is_restart = pm_init();

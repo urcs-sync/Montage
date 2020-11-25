@@ -6,7 +6,7 @@ CFLAGS += -I$(MONTAGE_PATH)/ext/tbb/include
 #CFLAGS=-std=c++11 -O0 -g -Wall -pthread -I./ -DTCD -g -m64
 LDFLAGS= -lpthread -levent \
 	 -L../threadcached/obj \
-	 -ldl -ljemalloc -lhwloc 
+	 -ldl -ljemalloc -lhwloc -lgomp
 SUBDIRS=core db cache_test
 SUBSRCS=$(wildcard core/*.cc) $(wildcard db/*.cc) $(wildcard cache_test/*.cc)
 OBJECTS=$(SUBSRCS:.cc=.o)
@@ -16,8 +16,9 @@ EXEC=ycsbc
 ifeq ($(OPT),montage)
 	CFLAGS += -DMONTAGE
 	CFLAGS += -DRALLOC
+	LDFLAGS += -latomic
 	LDFLAGS += -lthreadcached_montage
-	LDFLAGS += -L$(MONTAGE_PATH)/lib -lPDSHarness
+	LDFLAGS += -L$(MONTAGE_PATH)/lib -lMontage
 	LDFLAGS += -L$(MONTAGE_PATH)/ext/ralloc -lralloc
 endif
 
@@ -34,7 +35,7 @@ ifeq ($(OPT),dram)
 	LDFLAGS += -lthreadcached
 endif
 
-# PDSHarness
+# Montage
 
 # Ralloc
 
