@@ -273,6 +273,16 @@ public:
             ds->end_readonly_op();
         }
     };
+    pds::PBlk* pmalloc(size_t sz) 
+    {
+        pds::PBlk* ret = (pds::PBlk*)_esys->malloc_pblk(sz);
+        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            pending_allocs[pds::EpochSys::tid].ui.insert(ret);
+        } else {
+            _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
+        }
+        return (pds::PBlk*)ret;
+    }
     // TODO: replace `new` operator of T with
     // per-heap allocation and placement new.
     template <typename T, typename... Types> 

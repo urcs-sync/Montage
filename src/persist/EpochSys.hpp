@@ -224,6 +224,10 @@ public:
         Ralloc::set_tid(_tid);
     }
 
+    void* malloc_pblk(size_t sz){
+        return _ral->allocate(sz);
+    }
+
     // allocate a T-typed block on Ralloc and
     // construct using placement new
     template <class T, typename... Types>
@@ -236,6 +240,7 @@ public:
     // deallocate pblk, giving it back to Ralloc
     template <class T>
     void delete_pblk(T* pblk){
+        pblk->~T();
         _ral->deallocate(pblk);
     }
 

@@ -82,8 +82,11 @@ namespace pds{
     #define BEGIN_READONLY_OP_AUTOEND( ... ) \
         Recoverable::MontageOpHolderReadOnly __holder_readonly(global_recoverable);
     
+    #define PMALLOC(sz) ({\
+        global_recoverable->pmalloc(sz);})
+
     #define PNEW(t, ...) ({\
-        global_recoverable->pnew<t>(__VA_ARGS__));})
+        global_recoverable->pnew<t>(__VA_ARGS__);})
 
     #define PDELETE(b) ({\
         global_recoverable->pdelete(b);})
