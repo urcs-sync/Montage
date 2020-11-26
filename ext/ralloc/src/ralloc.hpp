@@ -78,11 +78,11 @@ public:
     std::vector<InuseRecovery::iterator> recover(int thd = 1);
 
     inline void simulate_crash(){
-        // Wentao: directly call destructors to mimic a crash
+        // Wentao: directly call destructors from main thread to mimic
+        // a crash
         assert(tid==0 && "simulate_crash can only be called by main thread!");
         flush_caches();
         for(int i=0;i<thd_num;i++){
-                // _holder.close();
             new (&(t_caches[i])) TCaches();
         }
         base_md->fake_dirty = true;
