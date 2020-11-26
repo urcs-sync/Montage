@@ -25,8 +25,6 @@ private:
     BaseMeta* base_md;
     Regions* _rgs;
     TCaches* t_caches;
-    std::function<void(const CrossPtr<char, SB_IDX>&, GarbageCollection&)> 
-        roots_filter_func[MAX_ROOTS];
     bool restart;
     int thd_num;
 

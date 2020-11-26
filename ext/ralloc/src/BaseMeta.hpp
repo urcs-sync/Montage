@@ -414,6 +414,8 @@ public:
 
     RP_PERSIST ProcHeap heaps[MAX_SZ_IDX];
     RP_PERSIST CrossPtr<char, SB_IDX> roots[MAX_ROOTS];
+    RP_TRANSIENT std::function<void(const CrossPtr<char, SB_IDX>&, 
+        GarbageCollection&)> roots_filter_func[MAX_ROOTS];
     friend class GarbageCollection;
     friend class InuseRecovery;
     inline void transient_reset(Regions* rgs_, int thd_num_){
@@ -444,10 +446,7 @@ public:
     void* set_root(void* ptr, uint64_t i){
         //this is sequential
 
-        // Wentao: comment out since in Montage we don't set or get
-        // root.
         void* res = nullptr;
-        #if 0
         assert(i<MAX_ROOTS);
         if(!roots[i].is_null()) 
             res = roots[i].to_addr(_rgs);
@@ -455,7 +454,6 @@ public:
 
         FLUSH(&roots[i]);
         FLUSHFENCE;
-        #endif
         return res;
     }
     template<class T>
@@ -464,16 +462,12 @@ public:
         // assert(i<MAX_ROOTS && roots[i]!=nullptr); // we allow
         // roots[i] to be null
 
-        // Wentao: comment out since in Montage we don't set or get root.
-        #if 0
         assert(i<MAX_ROOTS);
-        ralloc::roots_filter_func[i] = [](const CrossPtr<char, SB_IDX>& cptr, GarbageCollection& gc){
+        roots_filter_func[i] = [this](const CrossPtr<char, SB_IDX>& cptr, GarbageCollection& gc){
             // this new statement is intentionally designed to use transient allocator since it's offline
             gc.mark_func(cptr.cast_to<T>(_rgs));
         };
         return roots[i].cast_to<T>(_rgs);
-        #endif
-        return nullptr;
     }
     // bool restart(){
     //     //obsolete function, left only for test purpose
