@@ -8,7 +8,7 @@
 #include <string.h>
 
 int main(){
-  memcached_init();
+  memcached_init(1);
   memcached_end();
   memcached_close();
   return 0;

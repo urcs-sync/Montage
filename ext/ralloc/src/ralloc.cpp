@@ -116,18 +116,13 @@ void* Ralloc::reallocate(void* ptr, size_t new_size){
     return new_ptr;
 }
 
-struct RallocHolder{
-    Ralloc* ralloc_instance;
-    inline int init(int thd_num, const char* _id, uint64_t size) {
-        ralloc_instance = new Ralloc(thd_num, _id,size);
-        return (int)ralloc_instance->is_restart();
-    }
-    ~RallocHolder(){ 
-        delete ralloc_instance;
-    }
-};
+int RallocHolder::init(int thd_num, const char* _id, uint64_t size){
+    ralloc_instance = new Ralloc(thd_num, _id,size);
+    RP_set_tid(0);// set tid for main thread
+    return (int)ralloc_instance->is_restart();
+}
 
-static RallocHolder _holder;
+RallocHolder _holder;
 /* 
  * mmap the existing heap file corresponding to id. aka restart,
  * 		and if multiple heaps exist, print out and let user select;

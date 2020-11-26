@@ -188,8 +188,11 @@ item *do_item_alloc_pull(const size_t ntotal, const unsigned int id) {
     uint64_t total_bytes = 0;
     /* Try to reclaim memory first */
     lru_pull_tail(id, COLD_LRU, 0, 0, 0, NULL);
+#ifdef MONTAGE
+    it = (item*)PMALLOC(ntotal);
+#else
     it = (item*)pm_malloc(ntotal);
-
+#endif
     if (it == NULL) {
       // We send '0' in for "total_bytes" as this routine is always
       // pulling to evict, or forcing HOT -> COLD migration.
@@ -666,7 +669,7 @@ int lru_pull_tail(const int orig_id, const int cur_lru,
      */
     switch (cur_lru) {
       case HOT_LRU:
-        limit = total_bytes * 20 / 100;
+        limit = total_bytes * 20 / 100; __attribute__ ((fallthrough));
       case WARM_LRU:
         if (limit == 0)
           limit = total_bytes * 40 / 100;

@@ -67,7 +67,11 @@ public:
 	}
 
 	static void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
-		Ralloc::set_tid(ltc->tid);
+		init_thread(ltc->tid);
+	}
+
+	static void init_thread(int tid_){
+		Ralloc::set_tid(tid_);
 	}
 };
 

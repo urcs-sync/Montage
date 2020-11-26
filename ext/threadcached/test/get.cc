@@ -9,7 +9,7 @@
 
 #define BUFF_LEN 32
 int main(){
-  memcached_init();
+  memcached_init(1);
   std::string name = "chris";
 
   char nbuff[BUFF_LEN];

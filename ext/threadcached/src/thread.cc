@@ -215,10 +215,8 @@ enum store_item_type store_item(item *item, int comm) {
 #endif
   ret = do_store_item(item, comm, hv).first;
 #ifdef MONTAGE
-  if(ret == STORED){
-    // Wentao: it is safe to persist item after do_store_item because of the lock
-    esys->register_alloc_pblk(item, epochs[_tid].ui);
-  }
+  // Wentao: PMALLOC is used to allocate new items, so we don't
+  // explicitly register allocated blocks anymore
   END_OP;
 #endif
   item_unlock(hv);

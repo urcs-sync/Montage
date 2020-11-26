@@ -75,7 +75,7 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
-LIBS :=-l:libjemalloc.so.2 -lpthread -lhwloc -lralloc -lgomp -latomic
+LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
 LIBS+=-lnvmmalloc
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
