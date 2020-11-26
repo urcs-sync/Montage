@@ -341,11 +341,13 @@ public:
     }
     template<typename T>
     const T* openread_pblk_unsafe(const T* b){
-        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
-            return _esys->openread_pblk_unsafe(b, epochs[pds::EpochSys::tid].ui);
-        } else {
+        // Wentao: skip checking epoch here since this may be called
+        // during recovery, which may not have epochs[tid]
+        // if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+        //     return _esys->openread_pblk_unsafe(b, epochs[pds::EpochSys::tid].ui);
+        // } else {
             return b;
-        }
+        // }
     }
     template<typename T>
     T* openwrite_pblk(T* b){

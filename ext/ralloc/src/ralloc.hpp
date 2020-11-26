@@ -42,13 +42,13 @@ public:
     Ralloc(int thd_num_, const char* id_, uint64_t size_ = 5*1024*1024*1024ULL);
     ~Ralloc();
 
-    inline void* allocate(size_t sz){
+    inline void* allocate(size_t sz, int tid_=tid){
         assert(initialized&&"Ralloc isn't initialized!");
-        assert(tid!=-1 && "thread isn't initialized!");
-        return base_md->do_malloc(sz,t_caches[tid]);
+        assert(tid_!=-1 && tid_<thd_num && "tid out of range!");
+        return base_md->do_malloc(sz,t_caches[tid_]);
     }
-    inline void* allocate(size_t num, size_t size){
-        void* ptr = allocate(num*size);
+    inline void* allocate(size_t num, size_t size, int tid_=tid){
+        void* ptr = allocate(num*size,tid_);
         if(UNLIKELY(ptr == nullptr)) return nullptr;
         size_t real_size = malloc_size(ptr);
         memset(ptr, 0, real_size);
@@ -56,12 +56,12 @@ public:
         FLUSHFENCE;
         return ptr;
     }
-    inline void deallocate(void* ptr){
+    inline void deallocate(void* ptr, int tid_=tid){
         assert(initialized&&"Ralloc isn't initialized!");
-        assert(tid!=-1 && "thread isn't initialized!");
-        base_md->do_free(ptr,t_caches[tid]);
+        assert(tid_!=-1 && tid_<thd_num && "tid out of range!");
+        base_md->do_free(ptr,t_caches[tid_]);
     }
-    void* reallocate(void* ptr, size_t new_size);
+    void* reallocate(void* ptr, size_t new_size, int tid_=tid);
 
     inline void* set_root(void* ptr, uint64_t i){
         assert(initialized&&"Ralloc isn't initialized!");
@@ -77,17 +77,15 @@ public:
     }
     std::vector<InuseRecovery::iterator> recover(int thd = 1);
 
-    inline void simulate_crash(int tid){
+    inline void simulate_crash(){
         // Wentao: directly call destructors to mimic a crash
-        assert(tid!=-1 && "thread isn't initialized!");
+        assert(tid==0 && "simulate_crash can only be called by main thread!");
         flush_caches();
         for(int i=0;i<thd_num;i++){
-            if(tid==0){ 
-                base_md->fake_dirty = true;
                 // _holder.close();
-            }
             new (&(t_caches[i])) TCaches();
         }
+        base_md->fake_dirty = true;
     }
     inline size_t malloc_size(void* ptr){
         const Descriptor* desc = base_md->desc_lookup(ptr);
@@ -154,7 +152,7 @@ int RP_recover_c();
 
 void RP_close();
 void RP_set_tid(int tid);
-void RP_simulate_crash(int tid);
+void RP_simulate_crash();
 void* RP_malloc(size_t sz);
 void RP_free(void* ptr);
 void* RP_set_root(void* ptr, uint64_t i);

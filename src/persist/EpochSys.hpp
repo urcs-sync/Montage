@@ -208,11 +208,12 @@ public:
     }
 
     void simulate_crash(){
-        if(tid==0){
+        assert(tid==0 && "simulate_crash can only be called by main thread");
+        // if(tid==0){
             delete epoch_advancer;
             epoch_advancer = nullptr;
-        }
-        Persistent::simulate_crash(tid);
+        // }
+        _ral->simulate_crash();
     }
 
     ////////////////

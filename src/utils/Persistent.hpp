@@ -62,8 +62,8 @@ public:
 	static InuseRecovery::iterator recover(){
 		return recover(1).at(0);
 	}
-	static void simulate_crash(int tid){
-		RP_simulate_crash(tid);
+	static void simulate_crash(){
+		RP_simulate_crash();
 	}
 
 	static void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){

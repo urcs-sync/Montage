@@ -30,7 +30,7 @@ Ralloc::Ralloc(int thd_num_, const char* id_, uint64_t size_){
     t_caches = new TCaches[thd_num];
 
     // // reinitialize global variables in case they haven't
-    // new (&sizeclass) SizeClass();
+    new (&ralloc::sizeclass) SizeClass();
 
     filepath = HEAPFILE_PREFIX + id;
     assert(sizeof(Descriptor) == DESCSIZE); // check desc size
@@ -100,25 +100,25 @@ std::vector<InuseRecovery::iterator> Ralloc::recover(int thd){
     return ret;
 }
 
-void* Ralloc::reallocate(void* ptr, size_t new_size){
+void* Ralloc::reallocate(void* ptr, size_t new_size, int tid_){
     if(ptr == nullptr) return allocate(new_size);
     if(!_rgs->in_range(SB_IDX, ptr)) return nullptr;
-    size_t old_size = RP_malloc_size(ptr);
+    size_t old_size = malloc_size(ptr);
     if(old_size == new_size) {
         return ptr;
     }
-    void* new_ptr = allocate(new_size);
+    void* new_ptr = allocate(new_size,tid_);
     if(UNLIKELY(new_ptr == nullptr)) return nullptr;
     memcpy(new_ptr, ptr, old_size);
     FLUSH(new_ptr);
     FLUSHFENCE;
-    RP_free(ptr);
+    deallocate(ptr,tid_);
     return new_ptr;
 }
 
 int RallocHolder::init(int thd_num, const char* _id, uint64_t size){
     ralloc_instance = new Ralloc(thd_num, _id,size);
-    RP_set_tid(0);// set tid for main thread
+    ralloc_instance->set_tid(0);// set tid for main thread
     return (int)ralloc_instance->is_restart();
 }
 
@@ -146,8 +146,8 @@ void RP_set_tid(int tid){
     Ralloc::set_tid(tid);
 }
 
-void RP_simulate_crash(int tid){
-    _holder.ralloc_instance->simulate_crash(tid);
+void RP_simulate_crash(){
+    _holder.ralloc_instance->simulate_crash();
 }
 
 void* RP_malloc(size_t sz){

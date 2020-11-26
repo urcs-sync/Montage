@@ -332,7 +332,7 @@ namespace pds{
             {
                 int tid = omp_get_thread_num();
                 for (; !itr_raw[tid].is_last(); ++itr_raw[tid]) {
-                    RP_free(*itr_raw[tid]);
+                    _ral->deallocate(*itr_raw[tid],0);
                 }
             }
             return in_use;
@@ -496,7 +496,7 @@ namespace pds{
         // reclaim all nodes in not_in_use bag
         for (auto itr = not_in_use.begin(); itr != not_in_use.end(); itr++){
             // we can't call delete here: the PBlk may have null vtable pointer
-            RP_free(*itr);
+            _ral->deallocate(*itr);
         }
 
         // set system mode back to online
