@@ -13,6 +13,7 @@
 namespace pds{
 
 class PBlk;
+class EpochSys;
 
 class ToBeFreedContainer{
 public:
@@ -29,10 +30,11 @@ class PerThreadFreedContainer : public ToBeFreedContainer{
     padded<uint64_t>* threadEpoch;
     padded<std::mutex>* locks = nullptr;
     int task_num;
-    static void do_free(PBlk*& x);
+    EpochSys* _esys = nullptr;
+    void do_free(PBlk*& x);
 public:
-    PerThreadFreedContainer(){}
-    PerThreadFreedContainer(GlobalTestConfig* gtc);
+    PerThreadFreedContainer(EpochSys* e):_esys(e){}
+    PerThreadFreedContainer(EpochSys* e, GlobalTestConfig* gtc);
     ~PerThreadFreedContainer();
 
     void free_on_new_epoch(uint64_t c);
@@ -45,12 +47,13 @@ public:
 
 class PerEpochFreedContainer : public ToBeFreedContainer{
     PerThreadContainer<PBlk*>* container = nullptr;
-    static void do_free(PBlk*& x);
+    EpochSys* _esys = nullptr;
+    void do_free(PBlk*& x);
 public:
-    PerEpochFreedContainer(){
+    PerEpochFreedContainer(EpochSys* e):_esys(e){
         // errexit("DO NOT USE DEFAULT CONSTRUCTOR OF ToBeFreedContainer");
     }
-    PerEpochFreedContainer(GlobalTestConfig* gtc);
+    PerEpochFreedContainer(EpochSys* e, GlobalTestConfig* gtc);
     ~PerEpochFreedContainer();
     void free_on_new_epoch(uint64_t c){}
     void register_free(PBlk* blk, uint64_t c);
@@ -61,8 +64,9 @@ public:
 
 class NoToBeFreedContainer : public ToBeFreedContainer{
     // A to-be-freed container that does absolutely nothing.
+    EpochSys* _esys = nullptr;
 public:
-    NoToBeFreedContainer(){}
+    NoToBeFreedContainer(EpochSys* e):_esys(e){}
     virtual void register_free(PBlk* blk, uint64_t c);
     void free_on_new_epoch(uint64_t c){}
     virtual void help_free(uint64_t c){}

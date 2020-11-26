@@ -64,20 +64,6 @@
  *      Wentao Cai (wcai6@cs.rochester.edu)
  */
 
-class BaseMeta;
-namespace ralloc{
-    /* manager to map, remap, and unmap the heap */
-    // regions manager
-    extern Regions* _rgs;//initialized when ralloc constructs
-    // flag indicating Ralloc is initialized or not.
-    extern bool initialized;
-    // pointer to the instance of BaseMeta
-    extern BaseMeta* base_md;
-    // function to flush thread-local cache, used in TCaches::~TCaches and
-    // BaseMeta::writeback()
-    extern void public_flush_cache();
-};
-
 /* 
  * class CrossPtr<T, idx>
  *  
@@ -94,32 +80,38 @@ template<class T, RegionIndex idx>
 class CrossPtr {
 public:
     char* off;
-    CrossPtr(T* real_ptr = nullptr) noexcept;
+    CrossPtr(Regions* _rgs = nullptr, T* real_ptr = nullptr) noexcept;
     CrossPtr(const CrossPtr& cptr) noexcept: off(cptr.off) {}
 
-    template<class F>
-    inline operator F*() const{// cast to absolute pointer
-        if(UNLIKELY(is_null())){
-            return nullptr;
-        } else{
-            return reinterpret_cast<F*>(ralloc::_rgs->translate(idx, off));
-        }
-    } 
-    T& operator* ();
-    T* operator-> ();
     inline CrossPtr& operator= (const CrossPtr<T,idx> &p){
         off = p.off;
         return *this;
     }
-    template<class F>
-    inline CrossPtr& operator= (const F* p){
-        uint64_t tmp = reinterpret_cast<uint64_t>(p);//get rid of const
-        off = ralloc::_rgs->untranslate(idx, reinterpret_cast<char*>(tmp));
-        return *this;
-    }
+
     inline CrossPtr& operator= (const std::nullptr_t& p){
         off = nullptr; return *this;
     }
+
+    template<class F>
+    inline F* cast_to(Regions* _rgs) const{// cast to absolute pointer
+        if(UNLIKELY(is_null())){
+            return nullptr;
+        } else{
+            return reinterpret_cast<F*>(_rgs->translate(idx, off));
+        }
+    } 
+
+    template<class F>
+    inline CrossPtr& assign (Regions* _rgs, const F* p){
+        uint64_t tmp = reinterpret_cast<uint64_t>(p);//get rid of const
+        off = _rgs->untranslate(idx, reinterpret_cast<char*>(tmp));
+        return *this;
+    }
+
+    inline T* to_addr (Regions* _rgs){
+        return reinterpret_cast<T*>(_rgs->translate(idx, off));
+    }
+
     inline bool is_null() const{
         return off == nullptr;
     }
@@ -132,7 +124,7 @@ inline bool operator==(const CrossPtr<T,idx>& lhs, const std::nullptr_t& rhs){
 
 template<class T, RegionIndex idx>
 inline bool operator==(const CrossPtr<T,idx>& lhs, const CrossPtr<T,idx>& rhs){
-    return static_cast<T*>(lhs) == static_cast<T*>(rhs);
+    return lhs.off == rhs.off;
 }
 
 template <class T, RegionIndex idx>
@@ -185,13 +177,13 @@ template<class T, RegionIndex idx>
 class AtomicCrossPtrCnt {
 public:
     std::atomic<char*> off; // higher 34 bits: counter, lower 30 bits: offset
-    AtomicCrossPtrCnt(T* real_ptr = nullptr, uint64_t counter = 0) noexcept;
-    ptr_cnt<T> load(std::memory_order order = std::memory_order_seq_cst) const noexcept;
-    void store(ptr_cnt<T> desired, 
+    AtomicCrossPtrCnt(Regions* _rgs = nullptr,T* real_ptr = nullptr, uint64_t counter = 0) noexcept;
+    ptr_cnt<T> load(Regions* _rgs, std::memory_order order = std::memory_order_seq_cst) const noexcept;
+    void store(Regions* _rgs, ptr_cnt<T> desired, 
         std::memory_order order = std::memory_order_seq_cst ) noexcept;
-    bool compare_exchange_weak(ptr_cnt<T>& expected, ptr_cnt<T> desired,
+    bool compare_exchange_weak(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired,
         std::memory_order order = std::memory_order_seq_cst ) noexcept;
-    bool compare_exchange_strong(ptr_cnt<T>& expected, ptr_cnt<T> desired,
+    bool compare_exchange_strong(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired,
         std::memory_order order = std::memory_order_seq_cst ) noexcept;
 };
 
@@ -310,6 +302,7 @@ public:
     // return true if ptr is a valid and unmarked pointer, otherwise false
     template<class T>
     inline void mark_func(T* ptr){
+        #if 0
         void* addr = reinterpret_cast<void*>(ptr);
         // Step 1: check if it's a valid pptr
         if(UNLIKELY(!ralloc::_rgs->in_range(SB_IDX, addr))) 
@@ -325,21 +318,16 @@ public:
                 });
         }
         return;
+        #endif
     }
 
     template<class T>
     inline void filter_func(T* ptr);
 };
 
-namespace ralloc{
-    // (transient) filter functions for each root
-    extern std::function<void(const CrossPtr<char, SB_IDX>&, GarbageCollection&)> roots_filter_func[MAX_ROOTS];
-}
-
-
-
 #include <iterator>
 #include <unordered_set>
+class BaseMeta;
 class InuseRecovery{
 public:
     class RallocBlock{ };
@@ -354,6 +342,7 @@ public:
         // this iterator reconstructs all descriptors during iterating, treating
         // all potentially in use blocks allocated.
         static const SizeClass sizeclass;
+        BaseMeta* base_md = nullptr;
         RallocBlock* curr_blk = nullptr;
         Descriptor* curr_desc = nullptr;
         RallocBlock* boundary = nullptr;
@@ -377,7 +366,7 @@ public:
         bool action_at_new_sb_dirty();
         bool action_at_new_sb_clean();
     public:
-        explicit iterator(bool d, size_t begin_sb_idx=0, size_t end_sb_idx=0);
+        explicit iterator(BaseMeta* b, bool d, size_t begin_sb_idx=0, size_t end_sb_idx=0);
         iterator& operator++();
         inline bool operator==(iterator other) const { return curr_blk == other.curr_blk; }
         inline bool operator!=(iterator other) const { return !(*this == other); }
@@ -412,6 +401,10 @@ public:
  */
 class BaseMeta {
 public:
+    // _rgs and thd_num are reset in each execution, via either
+    // constructor or transient_reset
+    RP_TRANSIENT Regions* _rgs;
+    RP_TRANSIENT int thd_num;
     // unused small sb
     RP_TRANSIENT AtomicCrossPtrCnt<Descriptor, DESC_IDX> avail_sb;
     RP_PERSIST pthread_mutexattr_t dirty_attr;
@@ -421,17 +414,23 @@ public:
 
     RP_PERSIST ProcHeap heaps[MAX_SZ_IDX];
     RP_PERSIST CrossPtr<char, SB_IDX> roots[MAX_ROOTS];
+    RP_TRANSIENT std::function<void(const CrossPtr<char, SB_IDX>&, 
+        GarbageCollection&)> roots_filter_func[MAX_ROOTS];
     friend class GarbageCollection;
     friend class InuseRecovery;
-    BaseMeta() noexcept;
+    inline void transient_reset(Regions* rgs_, int thd_num_){
+        _rgs = rgs_;
+        thd_num = thd_num_;
+    }
+    BaseMeta(Regions* r) noexcept;
     ~BaseMeta(){
         /* usually BaseMeta shouldn't be destructed, 
          * and will be reused in the next time
          */
         std::cout<<"Warning: BaseMeta is being destructed!\n";
     }
-    void* do_malloc(size_t size);
-    void do_free(void* ptr);
+    void* do_malloc(size_t size, TCaches& t_caches);
+    void do_free(void* ptr, TCaches& t_caches);
     // this func can be called only once during restart
     bool is_dirty();
     // set_dirty must be called AFTER is_dirty
@@ -446,11 +445,12 @@ public:
     }
     void* set_root(void* ptr, uint64_t i){
         //this is sequential
-        assert(i<MAX_ROOTS);
+
         void* res = nullptr;
-        if(roots[i]!=nullptr) 
-            res = static_cast<void*>(roots[i]);
-        roots[i] = ptr;
+        assert(i<MAX_ROOTS);
+        if(!roots[i].is_null()) 
+            res = roots[i].to_addr(_rgs);
+        roots[i].assign(_rgs, ptr);
 
         FLUSH(&roots[i]);
         FLUSHFENCE;
@@ -459,36 +459,37 @@ public:
     template<class T>
     inline T* get_root(uint64_t i){
         //this is sequential
-        // assert(i<MAX_ROOTS && roots[i]!=nullptr); // we allow roots[i] to be null
+        // assert(i<MAX_ROOTS && roots[i]!=nullptr); // we allow
+        // roots[i] to be null
+
         assert(i<MAX_ROOTS);
-        ralloc::roots_filter_func[i] = [](const CrossPtr<char, SB_IDX>& cptr, GarbageCollection& gc){
+        roots_filter_func[i] = [this](const CrossPtr<char, SB_IDX>& cptr, GarbageCollection& gc){
             // this new statement is intentionally designed to use transient allocator since it's offline
-            gc.mark_func(static_cast<T*>(cptr));
+            gc.mark_func(cptr.cast_to<T>(_rgs));
         };
-        return static_cast<T*>(roots[i]);
+        return roots[i].cast_to<T>(_rgs);
     }
-    bool restart(){
-        //obsolete function, left only for test purpose
-        assert(0);
-        // Restart, setting values and flags to normal
-        // Should be called during restart
-        bool ret = is_dirty();
-        // "dirty" should be set to true until
-        // writeback() is called so that crash will result in a dirty.
-        set_dirty();
-        if(ret) {
-            // Wentao: by this we make all blocks in an in-use sb in-use.
-            InuseRecovery::iterator iter (true);
-            while(!iter.is_last()){
-                ++iter;
-            }
-        }
-        FLUSHFENCE;
-        return ret;
-    }
+    // bool restart(){
+    //     //obsolete function, left only for test purpose
+    //     assert(0);
+    //     // Restart, setting values and flags to normal
+    //     // Should be called during restart
+    //     bool ret = is_dirty();
+    //     // "dirty" should be set to true until
+    //     // writeback() is called so that crash will result in a dirty.
+    //     set_dirty();
+    //     if(ret) {
+    //         // Wentao: by this we make all blocks in an in-use sb in-use.
+    //         InuseRecovery::iterator iter (this, true);
+    //         while(!iter.is_last()){
+    //             ++iter;
+    //         }
+    //     }
+    //     FLUSHFENCE;
+    //     return ret;
+    // }
     void writeback(){
-        // Give back tcached blocks
-        // Should be called during normal exit
+        // Should be called during normal exit, after Ralloc::flush_cache()
 
         // Wentao: cache flush is done in caches' destructor (~TCaches)
         // ralloc::public_flush_cache();
@@ -559,6 +560,7 @@ private:
 // in the block
 template<class T>
 inline void GarbageCollection::filter_func(T* ptr){
+    #if 0
     char* curr = reinterpret_cast<char*>(ptr);
     Descriptor* desc = ralloc::base_md->desc_lookup((char*)ptr);
     size_t sz = desc->block_size;
@@ -568,6 +570,7 @@ inline void GarbageCollection::filter_func(T* ptr){
             mark_func(curr_content);
         curr++;
     }
+    #endif
 }
 
 

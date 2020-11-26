@@ -402,6 +402,8 @@ extern unsigned stats_id;
 
 using namespace pds;
 struct item : public PBlk{
+  item(){};
+  item(const item& oth): PBlk(oth){};
 #else
 struct item{
 #endif
@@ -415,7 +417,7 @@ struct item{
   int             nbytes;     /* size of data */
   unsigned short  refcount;
   uint8_t         nsuffix;    /* length of flags-and-length string */
-  uint8_t         it_flags;   /* ITEM_* above */
+  uint8_t         it_flags=0;   /* ITEM_* above */
   uint8_t         slabs_clsid;/* which slab class we're in */
   uint8_t         nkey;       /* key length, w/terminating null and padding */
   /* this odd type prevents type-punning issues when we do

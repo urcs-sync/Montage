@@ -26,32 +26,25 @@
 using namespace std;
 using namespace ralloc;
 using namespace std::chrono;
+
 template<class T, RegionIndex idx>
-CrossPtr<T,idx>::CrossPtr(T* real_ptr) noexcept{
+CrossPtr<T,idx>::CrossPtr(Regions* _rgs, T* real_ptr) noexcept{
     if(UNLIKELY(real_ptr == nullptr)){
         off = nullptr;
     } else {
+        assert(_rgs!=nullptr);
         off = _rgs->untranslate(idx, reinterpret_cast<char*>(real_ptr));
     }
 }
 
 template<class T, RegionIndex idx>
-T& CrossPtr<T,idx>::operator*(){
-    return *(reinterpret_cast<T*>(_rgs->translate(idx, off)));
-}
-
-template<class T, RegionIndex idx>
-T* CrossPtr<T,idx>::operator->(){
-    return reinterpret_cast<T*>(_rgs->translate(idx, off));
-}
-
-template<class T, RegionIndex idx>
-AtomicCrossPtrCnt<T,idx>::AtomicCrossPtrCnt(T* real_ptr, uint64_t counter)noexcept{
+AtomicCrossPtrCnt<T,idx>::AtomicCrossPtrCnt(Regions* _rgs, T* real_ptr, uint64_t counter)noexcept{
     char* res;
     uint64_t cnt_prefix = counter << MAX_DESC_OFFSET_BITS;
     if(real_ptr == nullptr) {
         res = reinterpret_cast<char*>(cnt_prefix);
     } else {
+        assert(_rgs!=nullptr);
         res = _rgs->untranslate(idx, reinterpret_cast<char*>(real_ptr));
         res = reinterpret_cast<char*>(reinterpret_cast<uint64_t>(res) | cnt_prefix);
     }
@@ -60,7 +53,7 @@ AtomicCrossPtrCnt<T,idx>::AtomicCrossPtrCnt(T* real_ptr, uint64_t counter)noexce
 
 // wrapped-up atomic ops for AtomicCrossPtrCnt
 template<class T, RegionIndex idx>
-inline ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(memory_order order)const noexcept{
+ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(Regions* _rgs, memory_order order)const noexcept{
     char* cur_off = off.load(order);
     ptr_cnt<T> ret;
     ret.cnt = reinterpret_cast<uint64_t>(cur_off) >> MAX_DESC_OFFSET_BITS;
@@ -68,18 +61,20 @@ inline ptr_cnt<T> AtomicCrossPtrCnt<T,idx>::load(memory_order order)const noexce
     if(cur_off == nullptr){
         ret.ptr = nullptr;
     } else{
+        assert(_rgs!=nullptr);
         ret.ptr = (T*)(_rgs->translate(idx, cur_off));
     }
     return ret;
 }
 
 template<class T, RegionIndex idx>
-inline void AtomicCrossPtrCnt<T,idx>::store(ptr_cnt<T> desired, memory_order order)noexcept{
+void AtomicCrossPtrCnt<T,idx>::store(Regions* _rgs, ptr_cnt<T> desired, memory_order order)noexcept{
     char* new_off;
     uint64_t cnt_prefix = desired.cnt << MAX_DESC_OFFSET_BITS;
     if(desired.get_ptr() == nullptr){
         new_off = reinterpret_cast<char*>(cnt_prefix);
     } else{
+        assert(_rgs!=nullptr);
         new_off = _rgs->untranslate(idx, reinterpret_cast<char*>(desired.ptr));
         new_off = reinterpret_cast<char*>(reinterpret_cast<uint64_t>(new_off) | cnt_prefix);
     }
@@ -87,7 +82,7 @@ inline void AtomicCrossPtrCnt<T,idx>::store(ptr_cnt<T> desired, memory_order ord
 }
 
 template<class T, RegionIndex idx>
-inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
+bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
     char* old_off;
     char* new_off;
     uint64_t old_cnt_prefix = expected.cnt << MAX_DESC_OFFSET_BITS;
@@ -95,13 +90,14 @@ inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(ptr_cnt<T>& expected
     if(expected.get_ptr() == nullptr){
         old_off = reinterpret_cast<char*>(old_cnt_prefix);
     } else {
+        assert(_rgs!=nullptr);
         old_off = _rgs->untranslate(idx, reinterpret_cast<char*>(expected.ptr));
         old_off = reinterpret_cast<char*>(reinterpret_cast<uint64_t>(old_off) | old_cnt_prefix);
     }
     if(desired.get_ptr() == nullptr){
         new_off = reinterpret_cast<char*>(new_cnt_prefix);
     } else {
-         new_off = _rgs->untranslate(idx, reinterpret_cast<char*>(desired.ptr));
+        new_off = _rgs->untranslate(idx, reinterpret_cast<char*>(desired.ptr));
         new_off = reinterpret_cast<char*>(reinterpret_cast<uint64_t>(new_off) | new_cnt_prefix);
     }
     bool ret = off.compare_exchange_weak(old_off, new_off, order);
@@ -118,7 +114,7 @@ inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_weak(ptr_cnt<T>& expected
 }
 
 template<class T, RegionIndex idx>
-inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_strong(ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
+bool AtomicCrossPtrCnt<T,idx>::compare_exchange_strong(Regions* _rgs, ptr_cnt<T>& expected, ptr_cnt<T> desired, memory_order order)noexcept{
     char* old_off;
     char* new_off;
     uint64_t old_cnt_prefix = expected.cnt << MAX_DESC_OFFSET_BITS;
@@ -126,6 +122,7 @@ inline bool AtomicCrossPtrCnt<T,idx>::compare_exchange_strong(ptr_cnt<T>& expect
     if(expected.get_ptr() == nullptr){
         old_off = reinterpret_cast<char*>(old_cnt_prefix);
     } else {
+        assert(_rgs!=nullptr);
         old_off = _rgs->untranslate(idx, reinterpret_cast<char*>(expected.ptr));
         old_off = reinterpret_cast<char*>(reinterpret_cast<uint64_t>(old_off) | old_cnt_prefix);
     }
@@ -195,8 +192,9 @@ void BaseMeta::set_clean(){
     pthread_mutex_unlock(&dirty_mtx);
 }
 
-BaseMeta::BaseMeta() noexcept
+BaseMeta::BaseMeta(Regions* r) noexcept
 : 
+    _rgs(r),
     avail_sb(),
     heaps()
     // thread_num(thd_num) {
@@ -211,14 +209,14 @@ BaseMeta::BaseMeta() noexcept
     /* heaps init */
     for (size_t idx = 0; idx < MAX_SZ_IDX; ++idx){
         ProcHeap& heap = heaps[idx];
-        heap.partial_list.store(nullptr);
+        heap.partial_list.store(_rgs, nullptr);
         heap.sc_idx = idx;
         FLUSH(&heaps[idx]);
     }
 
     /* persistent roots init */
     for(int i=0;i<MAX_ROOTS;i++){
-        roots[i]=nullptr;
+        roots[i] = nullptr;
         FLUSH(&roots[i]);
     }
 
@@ -353,7 +351,7 @@ void BaseMeta::flush_cache(size_t sc_idx, TCacheBin* cache) {
         char* head = cache->peek_block();
         char* tail = head;
         Descriptor* desc = desc_lookup(head);
-        char* superblock = static_cast<char*>(desc->superblock);
+        char* superblock = desc->superblock.to_addr(_rgs);
 
         // cache is a linked list of blocks
         // superblock free list is also a linked list of blocks
@@ -436,18 +434,18 @@ char* BaseMeta::sb_lookup(Descriptor* desc){
 }
 
 void BaseMeta::heap_push_partial(Descriptor* desc) {
-    ProcHeap* heap = desc->heap;
-    ptr_cnt<Descriptor> oldhead = heap->partial_list.load();
+    ProcHeap* heap = desc->heap.to_addr(_rgs);
+    ptr_cnt<Descriptor> oldhead = heap->partial_list.load(_rgs);
     ptr_cnt<Descriptor> newhead;
     do {
         newhead.set(desc, oldhead.get_counter() + 1);
         assert(oldhead.get_ptr() != newhead.get_ptr());
         newhead.get_ptr()->next_partial.store(oldhead.get_ptr()); 
-    } while (!heap->partial_list.compare_exchange_weak(oldhead, newhead));
+    } while (!heap->partial_list.compare_exchange_weak(_rgs,oldhead, newhead));
 }
 
 Descriptor* BaseMeta::heap_pop_partial(ProcHeap* heap) {
-    ptr_cnt<Descriptor> oldhead = heap->partial_list.load();
+    ptr_cnt<Descriptor> oldhead = heap->partial_list.load(_rgs);
     ptr_cnt<Descriptor> newhead;
     do {
         Descriptor* olddesc = oldhead.get_ptr();
@@ -457,7 +455,7 @@ Descriptor* BaseMeta::heap_pop_partial(ProcHeap* heap) {
         Descriptor* desc = olddesc->next_partial.load();
         uint64_t counter = oldhead.get_counter();
         newhead.set(desc, counter);
-    } while (!heap->partial_list.compare_exchange_weak(oldhead, newhead));
+    } while (!heap->partial_list.compare_exchange_weak(_rgs, oldhead, newhead));
     return oldhead.get_ptr();
 }
 
@@ -474,7 +472,7 @@ retry:
     Anchor newanchor;
     uint32_t maxcount = desc->maxcount;
     uint32_t block_size = desc->block_size;
-    char* superblock = desc->superblock;
+    char* superblock = desc->superblock.to_addr(_rgs);
 
     // we have "ownership" of block, but anchor can still change
     // due to free()
@@ -530,10 +528,10 @@ void BaseMeta::malloc_from_newsb(size_t sc_idx, TCacheBin* cache, size_t& block_
     assert(superblock);
     Descriptor* desc = desc_lookup(superblock);
 
-    desc->heap = heap;
+    desc->heap.assign(_rgs,heap);
     desc->block_size = block_size;
     desc->maxcount = maxcount;
-    desc->superblock = superblock;
+    desc->superblock.assign(_rgs, superblock);
 
     // prepare block list
     for (uint32_t idx = 0; idx < maxcount - 1; ++idx) {
@@ -576,12 +574,12 @@ inline void BaseMeta::organize_sb_list(void* start, uint64_t count){
         desc++;
         new (desc) Descriptor();
     }
-    ptr_cnt<Descriptor> oldhead = avail_sb.load();
+    ptr_cnt<Descriptor> oldhead = avail_sb.load(_rgs);
     ptr_cnt<Descriptor> newhead;
     do{
         desc->next_free.store(oldhead.get_ptr());
         newhead.set(desc_start, oldhead.get_counter()+1);
-    }while(!avail_sb.compare_exchange_weak(oldhead,newhead));
+    }while(!avail_sb.compare_exchange_weak(_rgs,oldhead,newhead));
 }
 
 void* BaseMeta::small_sb_alloc(size_t size){
@@ -596,12 +594,12 @@ void* BaseMeta::small_sb_alloc(size_t size){
     char * old_curr_addr;
     while(true){
         old_curr_addr = _rgs->regions[SB_IDX]->curr_addr_ptr->load();
-        oldhead = avail_sb.load();
+        oldhead = avail_sb.load(_rgs);
         oldptr = oldhead.get_ptr();
         if(oldptr) {
             ptr_cnt<Descriptor> newhead;
             newhead.set(oldptr->next_free.load(),oldhead.get_counter());
-            if(avail_sb.compare_exchange_strong(oldhead,newhead)){
+            if(avail_sb.compare_exchange_strong(_rgs,oldhead,newhead)){
                 return reinterpret_cast<void*>(sb_lookup(oldptr));
             }
         }
@@ -616,7 +614,7 @@ void* BaseMeta::small_sb_alloc(size_t size){
                 new_curr_addr += (PAGESIZE - aln_adj);
             res = new_curr_addr;
             uint64_t sb_to_expand = SB_REGION_EXPAND_SIZE/SBSIZE;
-            sb_to_expand /= ralloc::thd_cnt.load(std::memory_order_relaxed);
+            sb_to_expand /= thd_num;
             next = new_curr_addr + sb_to_expand*SBSIZE;
             if (next > _rgs->regions[SB_IDX]->base_addr + _rgs->regions[SB_IDX]->FILESIZE){
                 printf("\n----Region Manager: out of space in mmaped file-----\nCurr:%p\nBase:%p\n",res,_rgs->regions[SB_IDX]->base_addr);
@@ -649,12 +647,12 @@ inline void BaseMeta::small_sb_retire(void* sb, size_t size){
     // no need for further flush and fence since they were called in constructor
     // FLUSH(desc);
     // FLUSHFENCE;
-    ptr_cnt<Descriptor> oldhead = avail_sb.load();
+    ptr_cnt<Descriptor> oldhead = avail_sb.load(_rgs);
     ptr_cnt<Descriptor> newhead;
     do{
         desc->next_free.store(oldhead.get_ptr());
         newhead.set(desc, oldhead.get_counter()+1);
-    } while (!avail_sb.compare_exchange_weak(oldhead,newhead));
+    } while (!avail_sb.compare_exchange_weak(_rgs,oldhead,newhead));
 }
 
 /* 
@@ -683,7 +681,7 @@ inline void* BaseMeta::alloc_large_block(size_t sz){
     return large_sb_alloc(sz);
 }
 
-void* BaseMeta::do_malloc(size_t size){
+void* BaseMeta::do_malloc(size_t size, TCaches& t_caches){
     if (UNLIKELY(size > MAX_SZ)) {
         // large block allocation
         size_t sbs = round_up(size, SBSIZE);//round size up to multiple of SBSIZE
@@ -691,10 +689,10 @@ void* BaseMeta::do_malloc(size_t size){
         assert(ptr);
         Descriptor* desc = desc_lookup(ptr);
 
-        desc->heap = &heaps[0];
+        desc->heap.assign(_rgs,&heaps[0]);
         desc->block_size = sbs;
         desc->maxcount = 1;
-        desc->superblock = ptr;
+        desc->superblock.assign(_rgs, ptr);
 
         Anchor anchor;
         anchor.avail = 0;
@@ -719,19 +717,19 @@ void* BaseMeta::do_malloc(size_t size){
 
     return cache->pop_block();
 }
-void BaseMeta::do_free(void* ptr){
+void BaseMeta::do_free(void* ptr, TCaches& t_caches){
     if(ptr==nullptr) return;
     assert(_rgs->in_range(SB_IDX,ptr));
     Descriptor* desc = desc_lookup(ptr);
     // @todo: this can happen with dynamic loading
     // need to print correct message
 
-    size_t sc_idx = desc->heap->sc_idx;
+    size_t sc_idx = desc->heap.to_addr(_rgs)->sc_idx;
     // DBG_PRINT("Desc %p, ptr %p", desc, ptr);
 
     // large allocation case
     if (UNLIKELY(!sc_idx)) {
-        char* superblock = desc->superblock;
+        char* superblock = desc->superblock.to_addr(_rgs);
         // free superblock
         large_sb_retire(superblock, desc->block_size);
         return;
@@ -747,16 +745,6 @@ void BaseMeta::do_free(void* ptr){
     cache->push_block((char*)ptr);
 }
 
-
-// this can be called by TCaches
-void ralloc::public_flush_cache(){
-    if(initialized) {
-        for(int i=1;i<MAX_SZ_IDX;i++){// sc 0 is reserved.
-            base_md->flush_cache(i, &t_caches.t_cache[i]);
-        }
-    }
-}
-
 /*
  * function GarbageCollection::operator()
  * 
@@ -765,6 +753,10 @@ void ralloc::public_flush_cache(){
  *  segment exists.
  */
 void GarbageCollection::operator() () {
+    // Wentao: commenting this out since we don't use this routine in
+    // Montage and I don't want to fix issues brought into this
+    // routine with multi-instance support...
+#if 0
     printf("Start garbage collection...\n");
     auto start = high_resolution_clock::now(); 
     // Step 0: initialize all transient data
@@ -781,7 +773,7 @@ void GarbageCollection::operator() () {
 
     // First mark all root nodes
     for(int i = 0; i < MAX_ROOTS; i++) {
-        if(base_md->roots[i]!=nullptr) {
+        if(!base_md->roots[i].is_null()) {
             ralloc::roots_filter_func[i](base_md->roots[i], *this);
         }
     }
@@ -816,7 +808,7 @@ void GarbageCollection::operator() () {
             // curr_marked_blk doesn't reach the end of marked_blk and curr_marked_blk is in curr_sb
 
             if(curr_desc->heap != nullptr &&
-                curr_desc->superblock == curr_sb) {
+                curr_desc->superblock.assign(_rgs, curr_sb)) {
                 // false positive shouldn't enter here
                 if(curr_desc->heap->sc_idx == 0) {
                     // large sb that's in use
@@ -901,7 +893,7 @@ void GarbageCollection::operator() () {
     }
     // store head of new free sb list into base_md
     ptr_cnt<Descriptor> tmp_avail_sb(avail_sb, 0);
-    base_md->avail_sb.store(tmp_avail_sb);
+    base_md->avail_sb.store(_rgs, tmp_avail_sb);
     printf("Reconstructed! \n");
     auto stop = high_resolution_clock::now(); 
     assert(curr_marked_blk == marked_blk.end());
@@ -920,6 +912,7 @@ void GarbageCollection::operator() () {
     }
     FLUSHFENCE;
     printf("Garbage collection Completed!\n");
+#endif
 }
 
 int InuseRecovery::iterator::update_status_dirty(){
@@ -929,9 +922,9 @@ int InuseRecovery::iterator::update_status_dirty(){
         return stat=0;
     } else {
         // in use
-        assert((RallocBlock *)curr_desc->superblock == (RallocBlock*)((size_t)curr_blk&SB_MASK));
+        assert((RallocBlock *)curr_desc->superblock.to_addr(base_md->_rgs) == (RallocBlock*)((size_t)curr_blk&SB_MASK));
         assert(curr_desc->block_size != 0);
-        if(curr_desc->heap->sc_idx == 0) {
+        if(curr_desc->heap.to_addr(base_md->_rgs)->sc_idx == 0) {
             // large
             assert(curr_desc->maxcount == 1);
             return stat=2;
@@ -951,9 +944,9 @@ int InuseRecovery::iterator::update_status_clean(){
         return stat=0;
     } else {
         // in use
-        assert((RallocBlock *)curr_desc->superblock == (RallocBlock*)((size_t)curr_blk&SB_MASK));
+        assert((RallocBlock *)curr_desc->superblock.to_addr(base_md->_rgs) == (RallocBlock*)((size_t)curr_blk&SB_MASK));
         assert(curr_desc->block_size != 0);
-        if(curr_desc->heap->sc_idx == 0) {
+        if(curr_desc->heap.to_addr(base_md->_rgs)->sc_idx == 0) {
             // large
             assert(curr_desc->maxcount == 1);
             return stat=2;
@@ -967,12 +960,12 @@ int InuseRecovery::iterator::update_status_clean(){
 
 void InuseRecovery::iterator::set_sb_free(){
     new (curr_desc) Descriptor();
-    ptr_cnt<Descriptor> oldhead = base_md->avail_sb.load();
+    ptr_cnt<Descriptor> oldhead = base_md->avail_sb.load(base_md->_rgs);
     ptr_cnt<Descriptor> newhead;
     do{
         curr_desc->next_free.store(oldhead.get_ptr());
         newhead.set(curr_desc, 0);
-    }while(!base_md->avail_sb.compare_exchange_weak(oldhead,newhead));
+    }while(!base_md->avail_sb.compare_exchange_weak(base_md->_rgs,oldhead,newhead));
 }
 
 bool InuseRecovery::iterator::action_at_new_sb_dirty(){
@@ -1022,8 +1015,8 @@ bool InuseRecovery::iterator::action_at_new_sb_clean(){
         if(anchor.count == 0) return true;
         uint32_t maxcount = curr_desc->maxcount;
         uint32_t block_size = curr_desc->block_size;
-        assert(curr_desc->superblock == (char*)curr_blk);
-        char* block = (char*)curr_desc->superblock + anchor.avail * block_size;
+        assert(curr_desc->superblock.to_addr(base_md->_rgs) == (char*)curr_blk);
+        char* block = curr_desc->superblock.to_addr(base_md->_rgs) + anchor.avail * block_size;
         assert(block != nullptr);
         for(int cnt = anchor.count; cnt > 0;cnt--){
             //build the set of free blk for lookup
@@ -1042,21 +1035,21 @@ bool InuseRecovery::iterator::action_at_new_sb_clean(){
     return true;
 }
 
-InuseRecovery::iterator::iterator(bool d, size_t begin_sb_idx, size_t end_sb_idx) : dirty(d) {
+InuseRecovery::iterator::iterator(BaseMeta* b, bool d, size_t begin_sb_idx, size_t end_sb_idx) : dirty(d) {
     // start recovery and construct the iterator
-    
+    base_md = b;
     curr_blk = begin_sb_idx==0 ? 
         reinterpret_cast<RallocBlock*>(
-            _rgs->translate(SB_IDX, reinterpret_cast<char*>(SBSIZE))) :
+            base_md->_rgs->translate(SB_IDX, reinterpret_cast<char*>(SBSIZE))) :
         reinterpret_cast<RallocBlock*>(
-            _rgs->translate(SB_IDX, reinterpret_cast<char*>(begin_sb_idx<<SB_SHIFT)));
+            base_md->_rgs->translate(SB_IDX, reinterpret_cast<char*>(begin_sb_idx<<SB_SHIFT)));
     curr_desc = base_md->desc_lookup((void*)curr_blk);
 
     boundary = end_sb_idx==0 ? 
         reinterpret_cast<RallocBlock*>(
-            _rgs->regions[SB_IDX]->curr_addr_ptr->load()) :
+            base_md->_rgs->regions[SB_IDX]->curr_addr_ptr->load()) :
         reinterpret_cast<RallocBlock*>(
-            _rgs->translate(SB_IDX, reinterpret_cast<char*>(end_sb_idx<<SB_SHIFT)));
+            base_md->_rgs->translate(SB_IDX, reinterpret_cast<char*>(end_sb_idx<<SB_SHIFT)));
 
     action_at_new_sb();
 }
@@ -1078,10 +1071,10 @@ InuseRecovery::iterator& InuseRecovery::iterator::operator++() {
     }
     if(is_last((RallocBlock*)next_blk)){
        curr_blk = reinterpret_cast<RallocBlock*>(
-        _rgs->regions[SB_IDX]->curr_addr_ptr->load());
+        base_md->_rgs->regions[SB_IDX]->curr_addr_ptr->load());
         return *this;
     } 
-    assert(next_blk <=  (size_t)_rgs->regions[SB_IDX]->curr_addr_ptr->load());
+    assert(next_blk <=  (size_t)base_md->_rgs->regions[SB_IDX]->curr_addr_ptr->load());
     if(next_blk+size() > ((next_blk+SBSIZE) & SB_MASK)){
         next_blk = (next_blk+SBSIZE) & SB_MASK;
     }

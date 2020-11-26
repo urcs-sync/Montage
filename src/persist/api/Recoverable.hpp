@@ -273,12 +273,22 @@ public:
             ds->end_readonly_op();
         }
     };
+    pds::PBlk* pmalloc(size_t sz) 
+    {
+        pds::PBlk* ret = (pds::PBlk*)_esys->malloc_pblk(sz);
+        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            pending_allocs[pds::EpochSys::tid].ui.insert(ret);
+        } else {
+            _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
+        }
+        return (pds::PBlk*)ret;
+    }
     // TODO: replace `new` operator of T with
     // per-heap allocation and placement new.
     template <typename T, typename... Types> 
     T* pnew(Types... args) 
     {
-        T* ret = new T(args...);
+        T* ret = _esys->new_pblk<T>(args...);
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
             pending_allocs[pds::EpochSys::tid].ui.insert(ret);
         } else {
@@ -303,7 +313,7 @@ public:
                     assert(pending_allocs[pds::EpochSys::tid].ui.find(b) != pending_allocs[pds::EpochSys::tid].ui.end());
                     pending_allocs[pds::EpochSys::tid].ui.erase(b);
                 }
-                delete b;
+                _esys->delete_pblk(b);
             }
         }
     }
@@ -331,11 +341,13 @@ public:
     }
     template<typename T>
     const T* openread_pblk_unsafe(const T* b){
-        if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
-            return _esys->openread_pblk_unsafe(b, epochs[pds::EpochSys::tid].ui);
-        } else {
+        // Wentao: skip checking epoch here since this may be called
+        // during recovery, which may not have epochs[tid]
+        // if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
+        //     return _esys->openread_pblk_unsafe(b, epochs[pds::EpochSys::tid].ui);
+        // } else {
             return b;
-        }
+        // }
     }
     template<typename T>
     T* openwrite_pblk(T* b){

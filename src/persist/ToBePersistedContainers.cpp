@@ -71,11 +71,10 @@ void PerEpoch::PerThreadDedicatedWait::persist_epoch(uint64_t c){
     signal.ring.notify_all();
 }
 
-void PerEpoch::register_persist(PBlk* blk, uint64_t c){
+void PerEpoch::register_persist(PBlk* blk, size_t sz, uint64_t c){
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    size_t sz = RP_malloc_size(blk);
     container->push(std::make_pair<void*, size_t>((char*)blk, (size_t)sz), EpochSys::tid, c);
 }
 void PerEpoch::register_persist_raw(PBlk* blk, uint64_t c){
@@ -239,11 +238,10 @@ void BufferedWB::push(std::pair<void*, size_t> entry, uint64_t c){
         persister->help_persist_local(c);
     }
 }
-void BufferedWB::register_persist(PBlk* blk, uint64_t c){
+void BufferedWB::register_persist(PBlk* blk, size_t sz, uint64_t c){
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    size_t sz = RP_malloc_size(blk);
     push(std::make_pair<void*, size_t>((char*)blk, (size_t)sz), c);
     
 }

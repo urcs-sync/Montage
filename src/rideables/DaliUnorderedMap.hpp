@@ -263,6 +263,10 @@ public:
         Persistent::finalize();
     };
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Persistent::init_thread(gtc, ltc);
+    }
+
     optional<V> get(K key, int tid);
     optional<V> put(K key, V val, int tid);
     bool insert(K key, V val, int tid);

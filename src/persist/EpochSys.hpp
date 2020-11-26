@@ -7,6 +7,7 @@
 #include <map>
 #include <thread>
 #include <condition_variable>
+#include <string>
 #include "TestConfig.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include "PersistFunc.hpp"
@@ -39,7 +40,7 @@ class EpochSys;
 // PBlk-related structures //
 /////////////////////////////
 
-class PBlk : public Persistent{
+class PBlk{
     friend class EpochSys;
     friend class Recoverable;
 protected:
@@ -135,7 +136,9 @@ private:
     EpochAdvancer* epoch_advancer = nullptr;
 
     GlobalTestConfig* gtc = nullptr;
+    Ralloc* _ral = nullptr;
     int task_num;
+    static std::atomic<int> esys_num;
 
 public:
 
@@ -148,6 +151,9 @@ public:
     SysMode sys_mode = ONLINE;
 
     EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
+        std::string heap_name = get_ralloc_heap_name();
+        // task_num+1 to construct Ralloc for dedicated epoch advancer
+        _ral = new Ralloc(_gtc->task_num+1,heap_name.c_str(),REGION_SIZE);
         reset(); // TODO: change to recover() later on.
     }
 
@@ -167,14 +173,33 @@ public:
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
+        delete _ral;
     }
 
     void parse_env();
 
+    std::string get_ralloc_heap_name(){
+        if (!gtc->checkEnv("HeapName")){
+            int esys_id = esys_num.fetch_add(1);
+            assert(esys_id<=0xfffff);
+            char* heap_prefix = (char*) malloc(L_cuserid+10);
+            cuserid(heap_prefix);
+            char* heap_suffix = (char*) malloc(12);
+            sprintf(heap_suffix, "_mon_%06X", esys_id);
+            strcat(heap_prefix, heap_suffix);
+            gtc->setEnv("HeapName", std::string(heap_prefix));
+        }
+        std::string ret;
+        if (gtc->checkEnv("HeapName")){
+            ret = gtc->getEnv("HeapName");
+        }
+        return ret;
+    }
+
     void reset(){
         task_num = gtc->task_num;
         if (!epoch_container){
-            epoch_container = new Epoch();
+            epoch_container = new_pblk<Epoch>();
             epoch_container->blktype = EPOCH;
             global_epoch = &epoch_container->global_epoch;
         }
@@ -183,11 +208,12 @@ public:
     }
 
     void simulate_crash(){
-        if(tid==0){
+        assert(tid==0 && "simulate_crash can only be called by main thread");
+        // if(tid==0){
             delete epoch_advancer;
             epoch_advancer = nullptr;
-        }
-        Persistent::simulate_crash(tid);
+        // }
+        _ral->simulate_crash();
     }
 
     ////////////////
@@ -196,6 +222,27 @@ public:
 
     static void init_thread(int _tid){
         EpochSys::tid = _tid;
+        Ralloc::set_tid(_tid);
+    }
+
+    void* malloc_pblk(size_t sz){
+        return _ral->allocate(sz);
+    }
+
+    // allocate a T-typed block on Ralloc and
+    // construct using placement new
+    template <class T, typename... Types>
+    T* new_pblk(Types... args){
+        T* ret = (T*)_ral->allocate(sizeof(T));
+        new (ret) T (args...);
+        return ret;
+    }
+
+    // deallocate pblk, giving it back to Ralloc
+    template <class T>
+    void delete_pblk(T* pblk){
+        pblk->~T();
+        _ral->deallocate(pblk);
     }
 
     // check if global is the same as c.
@@ -309,7 +356,7 @@ T* EpochSys::register_alloc_pblk(T* b, uint64_t c){
         blk->id = uid_generator.get_id(tid);
     }
 
-    to_be_persisted->register_persist(blk, c);
+    to_be_persisted->register_persist(blk, _ral->malloc_size(blk), c);
     PBlk* data = blk->get_data();
     if (data){
         register_alloc_pblk(data, c);
@@ -336,7 +383,7 @@ T* EpochSys::reset_alloc_pblk(T* b){
 template<typename T>
 PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
     PBlkArray<T>* ret = static_cast<PBlkArray<T>*>(
-        RP_malloc(sizeof(PBlkArray<T>) + s*sizeof(T)));
+        _ral->allocate(sizeof(PBlkArray<T>) + s*sizeof(T)));
     new (ret) PBlkArray<T>();
     // Wentao: content initialization has been moved into PBlkArray constructor
     ret->size = s;
@@ -348,14 +395,14 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(size_t s, uint64_t c){
     register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
-    // to_be_persisted->register_persist(ret, c);
+    // to_be_persisted->register_persist(ret, _ral->malloc_size(ret), c);
     return ret;
 }
 
 template<typename T>
 PBlkArray<T>* EpochSys::alloc_pblk_array(PBlk* owner, size_t s, uint64_t c){
     PBlkArray<T>* ret = static_cast<PBlkArray<T>*>(
-        RP_malloc(sizeof(PBlkArray<T>) + s*sizeof(T)));
+        _ral->allocate(sizeof(PBlkArray<T>) + s*sizeof(T)));
     new (ret) PBlkArray<T>(owner);
     ret->size = s;
     T* p = ret->content;
@@ -366,18 +413,18 @@ PBlkArray<T>* EpochSys::alloc_pblk_array(PBlk* owner, size_t s, uint64_t c){
     register_alloc_pblk(ret);
     // temporarily removed the following persist:
     // we have to persist it after modifications anyways.
-    // to_be_persisted->register_persist(ret, c);
+    // to_be_persisted->register_persist(ret, _ral->malloc_size(ret), c);
     return ret;
 }
 
 template<typename T>
 PBlkArray<T>* EpochSys::copy_pblk_array(const PBlkArray<T>* oth, uint64_t c){
     PBlkArray<T>* ret = static_cast<PBlkArray<T>*>(
-        RP_malloc(sizeof(PBlkArray<T>) + oth->size*sizeof(T)));
+        _ral->allocate(sizeof(PBlkArray<T>) + oth->size*sizeof(T)));
     new (ret) PBlkArray<T>(*oth);
     memcpy(ret->content, oth->content, oth->size*sizeof(T));
     ret->epoch = c;
-    to_be_persisted->register_persist(ret, c);
+    to_be_persisted->register_persist(ret, _ral->malloc_size(ret), c);
     return ret;
 }
 
@@ -394,7 +441,7 @@ void EpochSys::free_pblk(T* b, uint64_t c){
     } else if (e == c){
         if (blktype == ALLOC){
             to_be_persisted->register_persist_raw(blk, c);
-            delete(b);
+            _ral->deallocate(b);
             return;
         } else if (blktype == UPDATE){
             blk->blktype = DELETE;
@@ -405,11 +452,11 @@ void EpochSys::free_pblk(T* b, uint64_t c){
         // NOTE: The deletion node will be essentially "leaked" during online phase,
         // which may fundamentally confuse valgrind.
         // Consider keeping reference of all delete node for debugging purposes.
-        PBlk* del = new PBlk(*blk);
+        PBlk* del = new_pblk<PBlk>(*blk);
         del->blktype = DELETE;
         del->epoch = c;
         // to_be_persisted[c%4].push(del);
-        to_be_persisted->register_persist(del, c);
+        to_be_persisted->register_persist(del, _ral->malloc_size(del), c);
         // to_be_freed[(c+1)%4].push(del);
         to_be_freed->register_free(del, c+1);
     }
@@ -441,12 +488,12 @@ void EpochSys::retire_pblk(T* b, uint64_t c){
     } else {
         // note this actually modifies 'retire' field of a PBlk from the past
         // Which is OK since nobody else will look at this field.
-        blk->retire = new PBlk(*b);
+        blk->retire = new_pblk<PBlk>(*b);
         blk->retire->blktype = DELETE;
         blk->retire->epoch = c;
-        to_be_persisted->register_persist(blk->retire, c);
+        to_be_persisted->register_persist(blk->retire, _ral->malloc_size(blk->retire), c);
     }
-    to_be_persisted->register_persist(b, c);
+    to_be_persisted->register_persist(b, _ral->malloc_size(b), c);
     
 }
 
@@ -466,7 +513,7 @@ void EpochSys::reclaim_pblk(T* b, uint64_t c){
             // this PBlk is not retired. we PDELETE it here.
             free_pblk(b, c);
         } else if (e < c-1){ // this block was retired at least two epochs ago.
-            delete(b);
+            _ral->deallocate(b);
         } else {// this block was retired less than two epochs ago.
             // NOTE: putting b in c's to-be-free is safe, but not e's,
             // since if e==c-1, global epoch may go to c+1 and c-1's to-be-freed list
@@ -482,7 +529,7 @@ void EpochSys::reclaim_pblk(T* b, uint64_t c){
             // this block was retired at least two epochs ago.
             // Note that reclamation of retire node need to be deferred after a fence.
             to_be_freed->register_free(blk->retire, c);
-            delete(b);
+            _ral->deallocate(b);
         } else {
             // retired in recent epoch, act like a free_pblk.
             to_be_freed->register_free(blk->retire, c+1);
@@ -518,7 +565,7 @@ T* EpochSys::openwrite_pblk(T* b, uint64_t c){
     if (blk->epoch < c){
         // to_be_freed[c%4].push(b);
         to_be_freed->register_free(b, c);
-        b = new T(*b);
+        b = new_pblk<T>(*b);
         PBlk* blk = b;
         assert(blk);
         blk->epoch = c;

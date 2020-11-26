@@ -74,6 +74,10 @@ public:
         Persistent::finalize();
     };
 
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Persistent::init_thread(gtc, ltc);
+    }
+
     void enqueue(std::string value, int tid);
     optional<std::string> dequeue(int tid);
 };

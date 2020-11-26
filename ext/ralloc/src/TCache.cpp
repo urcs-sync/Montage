@@ -10,13 +10,12 @@
  * LRMalloc(https://github.com/ricleite/lrmalloc) and its copyright 
  * is retained. See LICENSE for details about MIT License.
  */
+#include <atomic>
 
 #include "TCache.hpp"
 
-using namespace ralloc;
-thread_local TCaches ralloc::t_caches;
-std::atomic<uint64_t> ralloc::thd_cnt;
-
+TCaches::TCaches():t_cache(){ };
+TCaches::~TCaches(){};
 void TCacheBin::push_block(char* block)
 {
 	// block has at least sizeof(char*)

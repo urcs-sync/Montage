@@ -73,7 +73,7 @@ obj/libthreadcached.a: $(PROT_OBJ)
 obj/libthreadcached_nvm.a: $(PROT_OBJ_NVM) $(MONTAGE_PATH)/ext/ralloc/libralloc.a
 	ar -rcs $@ $^
 
-obj/libthreadcached_montage.a: $(PROT_OBJ_MONTAGE) $(MONTAGE_PATH)/ext/ralloc/libralloc.a $(MONTAGE_PATH)/lib/libPDSHarness.a
+obj/libthreadcached_montage.a: $(PROT_OBJ_MONTAGE) $(MONTAGE_PATH)/ext/ralloc/libralloc.a $(MONTAGE_PATH)/lib/libMontage.a
 	ar -rcs $@ $^
 
 obj/%.o: src/%.cc

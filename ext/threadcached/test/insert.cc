@@ -53,7 +53,7 @@ char *keys[N_INSERT];
 char *dats[N_INSERT];
 
 int main(){
-  memcached_init();
+  memcached_init(1);
   std::string name = "chris";
   std::string quality = " tests memcached";
 

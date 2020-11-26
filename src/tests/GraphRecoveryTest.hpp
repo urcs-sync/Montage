@@ -127,8 +127,8 @@ public:
             rec->flush();
         }
         pthread_barrier_wait(&pthread_barrier);
-        rec->simulate_crash();
         if (tid == 0){
+            rec->simulate_crash();
             std::cout<<"crashed."<<std::endl;
 
             // start timer

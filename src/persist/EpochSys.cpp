@@ -5,7 +5,7 @@
 namespace pds{
 
     thread_local int EpochSys::tid = -1;
-
+    std::atomic<int> EpochSys::esys_num(0);
     void EpochSys::parse_env(){
         if (to_be_persisted){
             delete to_be_persisted;
@@ -35,7 +35,7 @@ namespace pds{
         if (gtc->checkEnv("PersistStrat")){
             if (gtc->getEnv("PersistStrat") == "No"){
                 to_be_persisted = new NoToBePersistContainer();
-                to_be_freed = new NoToBeFreedContainer();
+                to_be_freed = new NoToBeFreedContainer(this);
                 epoch_advancer = new NoEpochAdvancer();
                 trans_tracker = new NoTransactionTracker(this->global_epoch);
                 return;
@@ -63,16 +63,16 @@ namespace pds{
         if (gtc->checkEnv("Free")){
             string env_free = gtc->getEnv("Free");
             if (env_free == "PerEpoch"){
-                to_be_freed = new PerEpochFreedContainer(gtc);
+                to_be_freed = new PerEpochFreedContainer(this, gtc);
             } else if(env_free == "PerThread"){
-                to_be_freed = new PerThreadFreedContainer(gtc);
+                to_be_freed = new PerThreadFreedContainer(this, gtc);
             }else if (env_free == "No"){
-                to_be_freed = new NoToBeFreedContainer();
+                to_be_freed = new NoToBeFreedContainer(this);
             } else {
                 errexit("unrecognized 'free' environment");
             }
         } else {
-            to_be_freed = new PerEpochFreedContainer(gtc);
+            to_be_freed = new PerEpochFreedContainer(this, gtc);
         }
 
         if (gtc->checkEnv("TransTracker")){
@@ -160,7 +160,7 @@ namespace pds{
             // update before BEGIN_OP, return. This register will be done by BEGIN_OP.
             return;
         }
-        to_be_persisted->register_persist(b, c);
+        to_be_persisted->register_persist(b, _ral->malloc_size(b), c);
     }
 
     // Arg is epoch we think we're ending
@@ -277,7 +277,7 @@ namespace pds{
 #ifndef MNEMOSYNE
         bool clean_start;
 
-        auto itr_raw = Persistent::recover(rec_thd);
+        auto itr_raw = _ral->recover(rec_thd);
 
         sys_mode=RECOVER;
         // set system mode to RECOVER -- all PDELETE_DATA and PDELETE becomes no-ops.
@@ -324,7 +324,7 @@ namespace pds{
         std::mutex in_use_m;
         std::mutex owned_m;
 
-        itr_raw = Persistent::recover(rec_thd);
+        itr_raw = _ral->recover(rec_thd);
 
         // Clear the heap
         if (epoch_cap < 1) {
@@ -332,7 +332,7 @@ namespace pds{
             {
                 int tid = omp_get_thread_num();
                 for (; !itr_raw[tid].is_last(); ++itr_raw[tid]) {
-                    RP_free(*itr_raw[tid]);
+                    _ral->deallocate(*itr_raw[tid],0);
                 }
             }
             return in_use;
@@ -496,7 +496,7 @@ namespace pds{
         // reclaim all nodes in not_in_use bag
         for (auto itr = not_in_use.begin(); itr != not_in_use.end(); itr++){
             // we can't call delete here: the PBlk may have null vtable pointer
-            RP_free(*itr);
+            _ral->deallocate(*itr);
         }
 
         // set system mode back to online

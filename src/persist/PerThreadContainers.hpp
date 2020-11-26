@@ -10,14 +10,13 @@ namespace pds{
 ///////////////////////////
 // Concurrent Containers //
 ///////////////////////////
-
 template<typename T>
 class PerThreadContainer{
 public:
     virtual void push(T x, int tid, uint64_t c) = 0;
-    virtual void pop_all(void (*func)(T& x), uint64_t c) = 0;
-    virtual bool try_pop_local(void (*func)(T& x), int tid, uint64_t c) = 0;
-    virtual void pop_all_local(void (*func)(T& x), int tid, uint64_t c) = 0;
+    virtual void pop_all(const std::function<void(T& x)>& func, uint64_t c) = 0;
+    virtual bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
+    virtual void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
     virtual void clear() = 0;
     virtual ~PerThreadContainer(){}
 };
@@ -34,14 +33,14 @@ public:
     void push(T x, int tid, uint64_t c){
         containers[c%4].ui->push(x, tid);
     }
-    void pop_all(void (*func)(T& x), uint64_t c){
+    void pop_all(const std::function<void(T& x)>& func, uint64_t c){
         containers[c%4].ui->pop_all(func);
     }
-    void pop_all_local(void (*func)(T& x), int tid, uint64_t c){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         containers[c%4].ui->pop_all_local(func, tid);
     }
-    bool try_pop_local(void (*func)(T& x), int tid, uint64_t c){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%4].ui->try_pop_local(func, tid);
     }
@@ -67,14 +66,14 @@ public:
     bool try_push(T x, int tid, uint64_t c){
         return containers[c%4].ui->try_push(x, tid);
     }
-    void pop_all(void (*func)(T& x), uint64_t c){
+    void pop_all(const std::function<void(T& x)>& func, uint64_t c){
         containers[c%4].ui->pop_all(func);
     }
-    void pop_all_local(void (*func)(T& x), int tid, uint64_t c){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         containers[c%4].ui->pop_all_local(func, tid);
     }
-    bool try_pop_local(void (*func)(T& x), int tid, uint64_t c){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%4].ui->try_pop_local(func, tid);
     }
@@ -100,14 +99,14 @@ public:
     void push(T x, int tid, uint64_t c){
         containers[c%4].ui->push(x, tid);
     }
-    void pop_all(void (*func)(T& x), uint64_t c){
+    void pop_all(const std::function<void(T& x)>& func, uint64_t c){
         containers[c%4].ui->pop_all(func);
     }
-    void pop_all_local(void (*func)(T& x), int tid, uint64_t c){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         containers[c%4].ui->pop_all_local(func, tid);
     }
-    bool try_pop_local(void (*func)(T& x), int tid, uint64_t c){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%4].ui->try_pop_local(func, tid);
     }
@@ -130,14 +129,14 @@ public:
     void push(T x, int tid, uint64_t c){
         containers[c%4].ui->push(x, tid);
     }
-    void pop_all(void (*func)(T& x), uint64_t c){
+    void pop_all(const std::function<void(T& x)>& func, uint64_t c){
         containers[c%4].ui->pop_all(func);
     }
-    void pop_all_local(void (*func)(T& x), int tid, uint64_t c){
+    void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         containers[c%4].ui->pop_all_local(func, tid);
     }
-    bool try_pop_local(void (*func)(T& x), int tid, uint64_t c){
+    bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%4].ui->try_pop_local(func, tid);
     }

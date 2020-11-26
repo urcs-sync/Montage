@@ -50,7 +50,7 @@ class DedicatedEpochAdvancer : public EpochAdvancer{
     std::thread advancer_thread;
     std::atomic<bool> started;
     uint64_t epoch_length = 100*1000;
-    void advancer();
+    void advancer(int task_num);
 public:
     DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es);
     ~DedicatedEpochAdvancer();

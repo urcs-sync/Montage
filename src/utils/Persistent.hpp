@@ -37,6 +37,8 @@ public:
 		strcat(heap_prefix, "_test");
 		RP_init(heap_prefix, REGION_SIZE);
 		free(heap_prefix);
+		// init main thread
+		Ralloc::set_tid(0);
 		// TODO: deal with returned value.
 	}
 	static void finalize(){
@@ -60,8 +62,16 @@ public:
 	static InuseRecovery::iterator recover(){
 		return recover(1).at(0);
 	}
-	static void simulate_crash(int tid){
-		RP_simulate_crash(tid);
+	static void simulate_crash(){
+		RP_simulate_crash();
+	}
+
+	static void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+		init_thread(ltc->tid);
+	}
+
+	static void init_thread(int tid_){
+		Ralloc::set_tid(tid_);
 	}
 };
 

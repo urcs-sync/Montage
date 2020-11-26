@@ -131,7 +131,7 @@ diff -r ../MemcachedProtectedLibrary/Makefile ./ext/threadcached/Makefile
 > obj/libthreadcached_nvm.a: $(PROT_OBJ_NVM) $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a
 > 	ar -rcs $@ $^
 > 
-> obj/libthreadcached_montage.a: $(PROT_OBJ_MONTAGE) $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a $(MONTAGE_PATH)/lib/libPDSHarness.a
+> obj/libthreadcached_montage.a: $(PROT_OBJ_MONTAGE) $(MONTAGE_PATH)/ext/ralloc/test/libralloc.a $(MONTAGE_PATH)/lib/libMontage.a
 > 	ar -rcs $@ $^
 61c80,86
 < 	$(CXX) -c $^ $(OPTS) -o $@
