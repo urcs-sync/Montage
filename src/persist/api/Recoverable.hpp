@@ -283,8 +283,6 @@ public:
         }
         return (pds::PBlk*)ret;
     }
-    // TODO: replace `new` operator of T with
-    // per-heap allocation and placement new.
     template <typename T, typename... Types> 
     T* pnew(Types... args) 
     {
