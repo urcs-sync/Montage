@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
 	// gtc.addRideableOption(new FriedmanQueueFactory<string>(), "FriedmanQueue");//comparison
-	gtc.addRideableOption(new MontageMSQueueFactory<string>(), "MontageMSQueue");
+	// gtc.addRideableOption(new MontageMSQueueFactory<string>(), "MontageMSQueue");
 #if !defined(MNEMOSYNE) and !defined(PRONTO)
 	gtc.addRideableOption(new QueueFactory<string,PLACE_DRAM>(), "TransientQueue<DRAM>");
 	gtc.addRideableOption(new QueueFactory<string,PLACE_NVM>(), "TransientQueue<NVM>");
