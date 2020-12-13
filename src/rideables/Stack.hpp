@@ -11,28 +11,29 @@ class Stack
 {
     private:
 
-    typedef struct StackNode
+    struct StackNode
     {
 
         int data;
         StackNode *next;
 
-    } * StackNodePtr;
+    };
 
-    atomic<StackNodePtr> top;
+    atomic<StackNode*> top;
 
     public:
     Stack()
     {
         top = NULL;
     }
+
     void push(int data){
 
-        StackNodePtr new_node = new StackNode;
+        StackNode* new_node = new StackNode;
         new_node->data = data;
         new_node->next = NULL;
 
-        StackNodePtr old_node;
+        StackNode* old_node;
 
         do {
             old_node = top;
@@ -41,9 +42,10 @@ class Stack
 
 
     }
+    
     int pop(){
-        StackNodePtr new_node;
-        StackNodePtr old_node;
+        StackNode* new_node;
+        StackNode* old_node;
         do {
             old_node = top;
             if (old_node == NULL){
@@ -55,7 +57,7 @@ class Stack
     }
     int peek(){
         if(!is_empty()){
-            StackNodePtr top_node;
+            StackNode* top_node;
             top_node = top;
             return top_node->data;
         }else{
