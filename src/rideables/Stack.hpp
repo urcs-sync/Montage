@@ -36,6 +36,7 @@ private:
             do
             {
                 old_cnt = cnt;
+                new_cnt = old_cnt + v;
             } while (cnt.compare_exchange_weak(old_cnt, new_cnt)) return old_cnt;
         }
     };
