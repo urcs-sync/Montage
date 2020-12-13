@@ -10,10 +10,38 @@ using namespace std;
 class Stack
 {
 private:
+    template <class T>
+
+    class cnt_ptr
+    {
+
+        T *ptr;
+        int cnt;
+
+    public:
+        cnt_ptr() : ptr(nullptr), cnt(0) {}
+
+    private:
+        int get()
+        {
+            return cnt;
+        }
+        void set(int v)
+        {
+            cnt = v;
+        }
+        void increment(int v)
+        {
+            int old_cnt, new_cnt;
+            do
+            {
+                old_cnt = cnt;
+            } while (cnt.compare_exchange_weak(old_cnt, new_cnt)) return old_cnt;
+        }
+    };
 
     struct StackNode
     {
-
         int data;
         StackNode *next;
     };
@@ -21,7 +49,6 @@ private:
     atomic<StackNode *> top;
 
 public:
-
     Stack() : top(nullptr) {}
 
     void push(int data)
