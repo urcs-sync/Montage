@@ -59,7 +59,7 @@
 #include "ProntoHashTable.hpp"
 #endif
 // #include "Toy.hpp"
-
+#include "StackTest.hpp"
 #include "QueueTest.hpp"
 #include "KVTest.hpp"
 #include "YCSBTest.hpp"
@@ -133,7 +133,7 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new ProntoQueueFactory(), "ProntoQueue");
 	gtc.addRideableOption(new ProntoHashTableFactory(), "ProntoHashTable");
 #endif
-
+	gtc.addTestOption(new StackTest(50,50,2000), "Stack:push50pop50:prefill=2000");
 	gtc.addTestOption(new QueueChurnTest(50,50,2000), "QueueChurn:eq50dq50:prefill=2000");
 	gtc.addTestOption(new QueueTest(5000000,50), "Queue:5m");
 	gtc.addTestOption(new MapChurnTest<string,string>(0, 0, 50, 50, 1000000, 500000), "MapChurnTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
