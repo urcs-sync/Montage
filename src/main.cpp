@@ -78,12 +78,19 @@
 #endif /* !MNEMOSYNE */
 #include "CustomTypes.hpp"
 
+#include "TrieberStack.hpp"
+
 using namespace std;
 
 int main(int argc, char *argv[])
 {
 	const size_t numVertices = 1024 * 1024;
 	GlobalTestConfig gtc;
+
+
+	/* stacks */
+	gtc.addRideableOption(new TrieberStackFactory<string>(), "TrieberStack");
+
 
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
