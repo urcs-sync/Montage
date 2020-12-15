@@ -20,7 +20,7 @@ class Stack
 private:
     struct StackNode
     {
-        int data;
+        T data;
         StackNode *next;
     };
 
@@ -29,12 +29,12 @@ private:
 
 public:
     Stack(int task_num) : top(nullptr), tracker(task_num, 100, 1000, true) {}
-    void push(int data, int tid);
+    void push(T data, int tid);
     optional<T> pop(int tid);
 };
 
 template <typename T>
-void Stack<T>::push(int data, int tid)
+void Stack<T>::push(T data, int tid)
 {
     tracker.start_op(tid);
 
