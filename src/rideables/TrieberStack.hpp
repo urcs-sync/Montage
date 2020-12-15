@@ -1,5 +1,5 @@
-// #ifndef STACK_HPP
-// #define STACK_HPP
+#ifndef TRIEBERSTACK_HPP
+#define TRIEBERSTACK_HPP
 
 #include <stdio.h>
 #include <iostream>
@@ -96,3 +96,12 @@ bool TrieberStack<T>::is_empty()
 {
     return top.load() == NULL;
 }
+
+template <class T> 
+class TrieberStackFactory : public RideableFactory{
+    Rideable* build(GlobalTestConfig* gtc){
+        return new TrieberStack<T>(gtc->task_num);
+    }
+};
+
+#endif
