@@ -83,20 +83,12 @@ optional<T> Stack<T>::peek(int tid)
 {
     tracker.start_op(tid);
     optional<T> res = {};
-    if (!is_empty())
-    {
-        StackNode *top_node;
-        top_node = top.load();
-        tracker.end_op(tid);
-        res = top_node->data;
-        return res;
-    }
-    else
-    {
-        //TODO : throw error
-        tracker.end_op(tid);
-        return res;
-    }
+    StackNode *top_node;
+    top_node = top.load();
+    tracker.end_op(tid);
+    res = top_node->data;
+    return res;
+
 }
 
 template <typename T>
