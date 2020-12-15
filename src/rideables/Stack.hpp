@@ -13,11 +13,11 @@
 
 using namespace std;
 
+template <typename T>
 class Stack
 {
-    
-private:
 
+private:
     struct StackNode
     {
         int data;
@@ -29,69 +29,68 @@ private:
 
 public:
     Stack(int task_num) : top(nullptr), tracker(task_num, 100, 1000, true) {}
-
-    void push(int data, int tid)
-    {
-        tracker.start_op(tid);
-
-        StackNode *new_node = new StackNode;
-        new_node->data = data;
-        new_node->next = NULL;
-
-        StackNode *old_node;
-
-        do
-        {
-            old_node = top.load();
-            new_node->next = old_node;
-        } while (!top.compare_exchange_weak(old_node, new_node));
-
-        tracker.end_op(tid);
-
-    }
-
-    int pop(int tid)
-    {   
-        tracker.start_op(tid);
-        StackNode *new_node;
-        StackNode *old_node;
-        do
-        {
-            old_node = top.load();
-            if (old_node == NULL)
-            {
-                tracker.end_op(tid);
-                return NULL;
-            }
-            new_node = old_node->next;
-        } while (!top.compare_exchange_weak(old_node, new_node));
-        int data = old_node->data;
-        tracker.retire(old_node);
-        tracker.end_op(tid);
-        return data;
-
-    }
-    int peek(int tid)
-    {
-        tracker.start_op(tid);
-        if (!is_empty())
-        {
-            StackNode *top_node;
-            top_node = top.load();
-            tracker.end_op(tid);
-            return top_node->data;
-        }
-        else
-        {
-            //TODO : throw errro
-            tracker.end_op(tid);
-            return 55555;
-        }
-
-    }
-
-    bool is_empty()
-    {
-        return top.load() == NULL;
-    }
 };
+
+template <typename T>
+void Stack<T>::push(int data, int tid)
+{
+    tracker.start_op(tid);
+
+    StackNode *new_node = new StackNode;
+    new_node->data = data;
+    new_node->next = NULL;
+
+    StackNode *old_node;
+
+    do
+    {
+        old_node = top.load();
+        new_node->next = old_node;
+    } while (!top.compare_exchange_weak(old_node, new_node));
+
+    tracker.end_op(tid);
+}
+
+template <typename T>
+optional<T> MSQueue<T>::pop(int tid)
+{
+    tracker.start_op(tid);
+    StackNode *new_node;
+    StackNode *old_node;
+    do
+    {
+        old_node = top.load();
+        if (old_node == NULL)
+        {
+            tracker.end_op(tid);
+            return "Error : popping an empty stack";
+        }
+        new_node = old_node->next;
+    } while (!top.compare_exchange_weak(old_node, new_node));
+    int data = old_node->data;
+    tracker.retire(old_node);
+    tracker.end_op(tid);
+    return data;
+}
+optional<T> peek(int tid)
+{
+    tracker.start_op(tid);
+    if (!is_empty())
+    {
+        StackNode *top_node;
+        top_node = top.load();
+        tracker.end_op(tid);
+        return top_node->data;
+    }
+    else
+    {
+        //TODO : throw errro
+        tracker.end_op(tid);
+        return "Error : peeking an empty stack";
+    }
+}
+
+bool is_empty()
+{
+    return top.load() == NULL;
+}
