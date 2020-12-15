@@ -32,6 +32,8 @@ public:
     ~Stack(){};
     void push(T data, int tid);
     optional<T> pop(int tid);
+    optional<T> peek(int tid);
+    bool is_empty();
 };
 
 template <typename T>
@@ -67,7 +69,6 @@ optional<T> Stack<T>::pop(int tid)
         if (old_node == NULL)
         {
             tracker.end_op(tid);
-            res = "Error : popping an empty stack";
             return res;
         }
         new_node = old_node->next;
@@ -92,14 +93,14 @@ optional<T> Stack<T>::peek(int tid)
     }
     else
     {
-        //TODO : throw errro
+        //TODO : throw error
         tracker.end_op(tid);
-        res = "Error : peeking an empty stack";
         return res;
     }
 }
 
-bool is_empty()
+template <typename T>
+bool Stack<T>::is_empty()
 {
     return top.load() == NULL;
 }
