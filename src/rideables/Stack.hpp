@@ -29,6 +29,7 @@ private:
 
 public:
     Stack(int task_num) : top(nullptr), tracker(task_num, 100, 1000, true) {}
+    ~Stack(){};
     void push(T data, int tid);
     optional<T> pop(int tid);
 };
