@@ -11,43 +11,6 @@
 #include "RStack.hpp"
 
 class StackTest : public Test{
-#ifdef PRONTO
-    // some necessary var and func for running pronto
-    static pthread_t snapshot_thread;
-    static pthread_mutex_t snapshot_lock;
-
-    static void *snapshot_worker(void *arg) {
-        Snapshot *snap = (Snapshot *)arg;
-        snap->create();
-        delete snap;
-        return NULL;
-    }
-
-    static void signal_handler(int sig, siginfo_t *si, void *unused) {
-        assert(sig == SIGSEGV || sig == SIGUSR1);
-        if (sig == SIGSEGV) {
-            void *addr = si->si_addr;
-            if (!Snapshot::anyActiveSnapshot()) {
-                void *array[10];
-                size_t size;
-
-                size = backtrace(array, 10);
-                fprintf(stderr, "Segmentation fault!\n");
-                backtrace_symbols_fd(array, size, STDERR_FILENO);
-                exit(1);
-            }
-            Snapshot::getInstance()->pageFaultHandler(addr);
-        }
-        else { // SIGUSR1
-            pthread_mutex_lock(&snapshot_lock);
-            if (!Snapshot::anyActiveSnapshot()) {
-                Snapshot *snap = new Snapshot(PMEM_PATH);
-                pthread_create(&snapshot_thread, NULL, snapshot_worker, snap);
-            }
-            pthread_mutex_unlock(&snapshot_lock);
-        }
-    }
-#endif
 public:
     using V=std::string;
     int prop_push, prop_pop;
@@ -65,35 +28,15 @@ public:
 
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         s->init_thread(gtc, ltc);
-#ifdef PRONTO
-        if(ltc->tid==0)
-            doPrefill(gtc);
-#endif
     }
 
     void init(GlobalTestConfig* gtc){
-#ifdef PRONTO
-        // init pronto things
-        Savitar_core_init();
-        NVManager::getInstance(); // recover persistent objects (blocking)
-
-        // Register signal handler for snapshots
-        pthread_mutex_init(&snapshot_lock, NULL);
-        struct sigaction sa;
-        memset(&sa, 0, sizeof(sa));
-        sa.sa_flags = SA_SIGINFO;
-        sigemptyset(&sa.sa_mask);
-        sa.sa_sigaction = signal_handler;
-        assert(sigaction(SIGSEGV, &sa, NULL) == 0);
-        assert(sigaction(SIGUSR1, &sa, NULL) == 0);
-#endif
-
-		if(gtc->checkEnv("ValueSize")){
+        if(gtc->checkEnv("ValueSize")){
             val_size = atoi((gtc->getEnv("ValueSize")).c_str());
-			assert(val_size<=TESTS_VAL_SIZE&&"ValueSize dynamically passed in is greater than macro TESTS_VAL_SIZE!");
+            assert(val_size<=TESTS_VAL_SIZE&&"ValueSize dynamically passed in is greater than macro TESTS_VAL_SIZE!");
         }
 
-		value_buffer.reserve(val_size);
+        value_buffer.reserve(val_size);
         value_buffer.clear();
         std::mt19937_64 gen_v(7);
         for (size_t i = 0; i < val_size - 1; i++) {
@@ -104,7 +47,7 @@ public:
         getRideable(gtc);
         
         if(gtc->verbose){
-            printf("Enqueues:%d Dequeues:%d\n",
+            printf("Pushes:%d Pops:%d\n",
             prop_push,100-prop_push);
         }
         
@@ -112,9 +55,7 @@ public:
         if(gtc->checkEnv("prefill")){
             prefill = atoi((gtc->getEnv("prefill")).c_str());
         }
-#ifndef PRONTO
         doPrefill(gtc);
-#endif
     }
 
     int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
@@ -128,7 +69,6 @@ public:
         int tid = ltc->tid;
 
         // atomic_thread_fence(std::memory_order_acq_rel);
-        //broker->threadInit(gtc,ltc);
         auto now = std::chrono::high_resolution_clock::now();
 
         while(std::chrono::duration_cast<std::chrono::microseconds>(time_up - now).count()>0){
@@ -149,24 +89,13 @@ public:
     }
 
     void cleanup(GlobalTestConfig* gtc){
-#ifdef PRONTO
-        // Wait for active snapshots to complete
-        pthread_mutex_lock(&snapshot_lock);
-        if (Snapshot::anyActiveSnapshot()) {
-            pthread_join(snapshot_thread, NULL);
-        }
-        pthread_mutex_unlock(&snapshot_lock);
-
-        Savitar_core_finalize();
-        pthread_mutex_destroy(&snapshot_lock);
-#endif
         delete s;
     }
     void getRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();
         s = dynamic_cast<RStack<V>*>(ptr);
         if(!s){
-            errexit("QueueChurnTest must be run on RQueue<V> type object.");
+            errexit("QueueChurnTest must be run on RStack<V> type object.");
         } 
     }
     void doPrefill(GlobalTestConfig* gtc){
@@ -191,10 +120,5 @@ public:
         }
     }
 };
-
-#ifdef PRONTO
-pthread_t QueueChurnTest::snapshot_thread;
-pthread_mutex_t QueueChurnTest::snapshot_lock;
-#endif
 
 #endif
