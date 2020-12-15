@@ -60,6 +60,7 @@ public:
             old_node = top.load();
             if (old_node == NULL)
             {
+                tracker.end_op(tid);
                 return NULL;
             }
             new_node = old_node->next;
