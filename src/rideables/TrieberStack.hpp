@@ -74,7 +74,7 @@ optional<T> TrieberStack<T>::pop(int tid)
         new_node = old_node->next;
     } while (!top.compare_exchange_weak(old_node, new_node));
     res = old_node->data;
-    tracker.retire(old_node);
+    tracker.retire(old_node, tid);
     tracker.end_op(tid);
     return res;
 }
@@ -88,7 +88,6 @@ optional<T> TrieberStack<T>::peek(int tid)
     tracker.end_op(tid);
     res = top_node->data;
     return res;
-
 }
 
 template <typename T>
@@ -97,9 +96,11 @@ bool TrieberStack<T>::is_empty()
     return top.load() == NULL;
 }
 
-template <class T> 
-class TrieberStackFactory : public RideableFactory{
-    Rideable* build(GlobalTestConfig* gtc){
+template <class T>
+class TrieberStackFactory : public RideableFactory
+{
+    Rideable *build(GlobalTestConfig *gtc)
+    {
         return new TrieberStack<T>(gtc->task_num);
     }
 };
