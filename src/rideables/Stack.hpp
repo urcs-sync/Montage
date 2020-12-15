@@ -66,8 +66,8 @@ public:
         } while (!top.compare_exchange_weak(old_node, new_node));
         int data = old_node->data;
         tracker.retire(old_node);
-        return old_node->data;
         tracker.end_op(tid);
+        return data;
 
     }
     int peek(int tid)
@@ -77,14 +77,15 @@ public:
         {
             StackNode *top_node;
             top_node = top.load();
+            tracker.end_op(tid);
             return top_node->data;
         }
         else
         {
             //TODO : throw errro
+            tracker.end_op(tid);
             return 55555;
         }
-        tracker.end_op(tid);
 
     }
 
