@@ -3,8 +3,10 @@
 
 #include <atomic>
 #include <thread>
+#include <tbb/concurrent_queue.h>
 #include "TestConfig.hpp"
 #include "ConcurrentPrimitives.hpp"
+
 
 namespace pds{
 
@@ -56,6 +58,7 @@ class DedicatedEpochAdvancer : public EpochAdvancer{
     struct LocalSyncSignal{
         std::mutex bell;
         std::condition_variable ring;
+        std::atomic<bool> done;
         uint64_t curr_epoch;
     }__attribute__((aligned(CACHE_LINE_SIZE)));
     struct SyncQueueSignal{
@@ -70,8 +73,9 @@ class DedicatedEpochAdvancer : public EpochAdvancer{
     std::thread advancer_thread;
     std::atomic<bool> started;
     uint64_t epoch_length = 100*1000;
-    std::vector<LocalSyncSignal> local_sync_singals;
+    std::vector<LocalSyncSignal> local_sync_signals;
     SyncQueueSignal sync_queue_signal;
+    tbb::concurrent_queue<int> sync_queue;
     void advancer(int task_num);
 public:
     DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es);

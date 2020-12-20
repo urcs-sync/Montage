@@ -43,7 +43,8 @@ void GlobalCounterEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
 }
 
 
-DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):esys(es){
+DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):
+    esys(es), local_sync_signals(gtc->task_num){
     if (gtc->checkEnv("EpochLength")){
         epoch_length = stoi(gtc->getEnv("EpochLength"));
     } else {
@@ -68,11 +69,9 @@ DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* 
 
 void DedicatedEpochAdvancer::advancer(int task_num){
     EpochSys::init_thread(task_num);// set tid to be the last
+    uint64_t curr_epoch = INIT_EPOCH;
     while(!started.load()){}
     while(started.load()){
-        // esys->advance_epoch_dedicated();
-        // std::this_thread::sleep_for(std::chrono::microseconds(epoch_length));
-
         // wait for sync_queue_signal to fire or timeout
         std::unique_lock<std::mutex> lk(sync_queue_signal.bell);
         sync_queue_signal.ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
@@ -80,24 +79,52 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         // if woke up by sync_queue_signal:
         if (sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0){
             // go through sync queue
-            // does advance for the first entry, pop all the rest with the same epoch
-                // for each request, send signal to threads to unblock
-            // if request epoch is only 1 larger than prev, advance only once
+            uint64_t last_request = NULL_EPOCH;
+            while(sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0){
+                sync_queue_signal.request_cnt.fetch_sub(1, std::memory_order_acq_rel);
+                int target_id;
+                if (sync_queue.try_pop(target_id)){
+                    // does advance for entry with new epoch, pop all the rest with the same epoch
+                    uint64_t curr_request = local_sync_signals[target_id].curr_epoch;
+                    if (curr_request != last_request){
+                        int advance_cnt = (curr_request == curr_epoch? 2 : (curr_request == curr_epoch-1? 1 : 0));
+                        for (int i = 0; i < advance_cnt; i++){
+                            curr_epoch++;
+                            esys->advance_epoch_dedicated();
+                        }
+                    }
+                    // for each request, send signal to threads to unblock
+                    local_sync_signals[target_id].ring.notify_one();
+                } else {
+                    break;
+                }
+            }
         } else { // if time's up:
             // advance once.
+            curr_epoch++;
             esys->advance_epoch_dedicated();
         }
-                
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
 }
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
-
     // initialize local SyncSignal
-    // put SyncSignal into queue
-    // notify advancer thread
-    // wait for local SyncSignal, return
+    local_sync_signals[EpochSys::tid].done.store(false, std::memory_order_release);
+    local_sync_signals[EpochSys::tid].curr_epoch = c;
+    {
+        std::unique_lock<std::mutex> lk(local_sync_signals[EpochSys::tid].bell);
+        // put SyncSignal into queue
+        sync_queue.push(EpochSys::tid);
+        // notify advancer thread if necessary
+        if (sync_queue_signal.request_cnt.fetch_add(1, std::memory_order_acq_rel) == 0){
+            sync_queue_signal.ring.notify_one();
+        }
+        // wait for local SyncSignal, return
+        local_sync_signals[EpochSys::tid].ring.wait(lk, 
+            [&]{return local_sync_signals[EpochSys::tid].done.load(std::memory_order_acquire);});
+    }
+    
 }
 
 DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){
