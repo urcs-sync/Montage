@@ -70,10 +70,34 @@ void DedicatedEpochAdvancer::advancer(int task_num){
     EpochSys::init_thread(task_num);// set tid to be the last
     while(!started.load()){}
     while(started.load()){
-        esys->advance_epoch_dedicated();
-        std::this_thread::sleep_for(std::chrono::microseconds(epoch_length));
+        // esys->advance_epoch_dedicated();
+        // std::this_thread::sleep_for(std::chrono::microseconds(epoch_length));
+
+        // wait for sync_queue_signal to fire or timeout
+        std::unique_lock<std::mutex> lk(sync_queue_signal.bell);
+        sync_queue_signal.ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
+            [&]{return (sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0);});
+        // if woke up by sync_queue_signal:
+        if (sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0){
+            // go through sync queue
+            // does advance for the first entry, pop all the rest with the same epoch
+                // for each request, send signal to threads to unblock
+            // if request epoch is only 1 larger than prev, advance only once
+        } else { // if time's up:
+            // advance once.
+            esys->advance_epoch_dedicated();
+        }
+                
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
+}
+
+void DedicatedEpochAdvancer::sync(uint64_t c){
+
+    // initialize local SyncSignal
+    // put SyncSignal into queue
+    // notify advancer thread
+    // wait for local SyncSignal, return
 }
 
 DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){

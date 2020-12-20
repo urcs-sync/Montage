@@ -19,6 +19,7 @@ public:
     virtual void set_epoch_freq(int epoch_freq) = 0;
     virtual void set_help_freq(int help_freq) = 0;
     virtual void on_end_transaction(EpochSys* esys, uint64_t c) = 0;
+    virtual void sync(uint64_t c){}
     virtual ~EpochAdvancer(){}
 };
 
@@ -32,6 +33,9 @@ public:
     void set_epoch_freq(int epoch_power);
     void set_help_freq(int help_power);
     void on_end_transaction(EpochSys* esys, uint64_t c);
+    void sync(uint64_t c){
+        errexit("SingleThreadEpochAdvancer::sync() not implemented.");
+    }
 };
 
 class GlobalCounterEpochAdvancer : public EpochAdvancer{
@@ -43,13 +47,31 @@ public:
     void set_epoch_freq(int epoch_power);
     void set_help_freq(int help_power);
     void on_end_transaction(EpochSys* esys, uint64_t c);
+    void sync(uint64_t c){
+        errexit("GlobalCounterEpochAdvancer::sync() not implemented.");
+    }
 };
 
 class DedicatedEpochAdvancer : public EpochAdvancer{
+    struct LocalSyncSignal{
+        std::mutex bell;
+        std::condition_variable ring;
+        uint64_t curr_epoch;
+    }__attribute__((aligned(CACHE_LINE_SIZE)));
+    struct SyncQueueSignal{
+        std::mutex bell;
+        std::condition_variable ring;
+        atomic<int> request_cnt;
+        SyncQueueSignal(){
+            request_cnt.store(0);
+        }
+    };
     EpochSys* esys;
     std::thread advancer_thread;
     std::atomic<bool> started;
     uint64_t epoch_length = 100*1000;
+    std::vector<LocalSyncSignal> local_sync_singals;
+    SyncQueueSignal sync_queue_signal;
     void advancer(int task_num);
 public:
     DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es);
@@ -59,6 +81,7 @@ public:
     void on_end_transaction(EpochSys* esys, uint64_t c){
         // do nothing here.
     }
+    void sync(uint64_t c);
 };
 
 class NoEpochAdvancer : public EpochAdvancer{
@@ -68,6 +91,7 @@ public:
     void set_epoch_freq(int epoch_power){}
     void set_help_freq(int help_power){}
     void on_end_transaction(EpochSys* esys, uint64_t c){}
+    void sync(uint64_t c){}
 };
 
 }
