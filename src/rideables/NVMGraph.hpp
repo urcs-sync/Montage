@@ -151,6 +151,9 @@ class NVMGraph : public RGraph {
             if (src == dest) return false; // Loops not allowed
             tVertex *v1 = idxToVertex[src];
             tVertex *v2 = idxToVertex[dest];
+            // allocate before critical section, assuming accessing
+            // tVertex's id without lock is safe
+            Relation* r = new Relation(v1, v2, weight);
             if (src > dest) {
                 v2->lock();
                 v1->lock();
@@ -160,7 +163,6 @@ class NVMGraph : public RGraph {
             }
             
             {
-                Relation* r = new Relation(v1, v2, weight);
                 v1->adjacency_list.insert(r);
                 v2->dest_list.insert(r);
             }
