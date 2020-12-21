@@ -93,9 +93,11 @@ void DedicatedEpochAdvancer::advancer(int task_num){
                             esys->advance_epoch_dedicated();
                         }
                     }
-                    // for each request, send signal to threads to unblock
+                    // for each request, send signal to the thread to unblock
+                    local_sync_signals[target_id].done.store(true);
                     local_sync_signals[target_id].ring.notify_one();
                 } else {
+                    errexit("request_cnt > 0, but sync_queue empty.");
                     break;
                 }
             }
@@ -118,7 +120,7 @@ void DedicatedEpochAdvancer::sync(uint64_t c){
         sync_queue.push(EpochSys::tid);
         // notify advancer thread if necessary
         if (sync_queue_signal.request_cnt.fetch_add(1, std::memory_order_acq_rel) == 0){
-            sync_queue_signal.ring.notify_one();
+            sync_queue_signal.ring.notify_all();
         }
         // wait for local SyncSignal, return
         local_sync_signals[EpochSys::tid].ring.wait(lk, 

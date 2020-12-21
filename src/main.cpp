@@ -70,6 +70,7 @@
 #include "SetChurnTest.hpp"
 #include "MapTest.hpp"
 #include "MapChurnTest.hpp"
+#include "SyncTest.hpp"
 #ifndef MNEMOSYNE
 #include "RecoverVerifyTest.hpp"
 #include "GraphRecoveryTest.hpp"
@@ -135,6 +136,7 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new MapTest<string,string>(0, 0, 50, 50, 1000000, 500000, 10000000), "MapTest<string>:g0p0i50rm50:range=1000000:prefill=500000:op=10000000");
 	gtc.addTestOption(new MapTest<string,string>(50, 0, 25, 25, 1000000, 500000, 10000000), "MapTest<string>:g50p0i25rm25:range=1000000:prefill=500000:op=10000000");
 	gtc.addTestOption(new MapTest<string,string>(90, 0, 5, 5, 1000000, 500000, 10000000), "MapTest<string>:g90p0i5rm5:range=1000000:prefill=500000:op=10000000");
+	gtc.addTestOption(new MapSyncTest<string, string>(0, 0, 50, 50, 5, 1000000, 500000), "MapSyncTest<string>:g0p0i50rm50:sync5:range=1000000:prefill=500000");
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
@@ -144,7 +146,7 @@ int main(int argc, char *argv[])
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");
 #endif /* !MNEMOSYNE */
-	
+
 	gtc.parseCommandLine(argc, argv);
 	
         omp_set_num_threads(gtc.task_num);

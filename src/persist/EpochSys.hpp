@@ -311,6 +311,12 @@ public:
     template<typename T>
     T* openwrite_pblk(T* b, uint64_t c);
 
+    // block, call for persistence of epoch c, and wait until finish.
+    void sync(uint64_t c){
+        epoch_advancer->sync(c);
+    }
+
+
     /////////////////
     // Bookkeeping //
     /////////////////

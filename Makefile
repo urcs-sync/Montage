@@ -76,7 +76,7 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
 LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
-LIBS+=-lnvmmalloc
+LIBS+=-lnvmmalloc -ltbb
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
 # external libraries which we depend on
@@ -118,7 +118,7 @@ ARCHIVEDIR:=./lib
 # -since we do pattern matching between this list and the
 # source files, the file path specified must be the same
 # type (absolute or relative)
-EXECUTABLES:= ./src/main.cpp #./unit_test/dcss.cpp
+EXECUTABLES:= ./src/main.cpp #./unit_test/scratch.cpp #./unit_test/dcss.cpp
 
 # A list of source files contained in the
 # source directory to exclude from the build
