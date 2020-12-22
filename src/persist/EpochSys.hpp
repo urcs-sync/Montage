@@ -158,7 +158,7 @@ public:
     }
 
     void flush(){
-        for (int i = 0; i < 3; i++){
+        for (int i = 0; i < 4; i++){
             advance_epoch_dedicated();
         }
     }
@@ -320,7 +320,7 @@ public:
     /////////////////
     // Bookkeeping //
     /////////////////
-    
+
     // get the current global epoch number.
     uint64_t get_epoch();
 
