@@ -320,6 +320,9 @@ public:
     /////////////////
     // Bookkeeping //
     /////////////////
+    
+    // get the current global epoch number.
+    uint64_t get_epoch();
 
     // try to advance global epoch, helping others along the way.
     void advance_epoch(uint64_t c);

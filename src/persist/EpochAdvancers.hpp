@@ -55,27 +55,17 @@ public:
 };
 
 class DedicatedEpochAdvancer : public EpochAdvancer{
-    struct LocalSyncSignal{
+    struct SyncSignal{
         std::mutex bell;
-        std::condition_variable ring;
-        std::atomic<bool> done;
-        uint64_t curr_epoch;
-    }__attribute__((aligned(CACHE_LINE_SIZE)));
-    struct SyncQueueSignal{
-        std::mutex bell;
-        std::condition_variable ring;
-        atomic<int> request_cnt;
-        SyncQueueSignal(){
-            request_cnt.store(0);
-        }
+        std::condition_variable advancer_ring;
+        std::condition_variable worker_ring;
+        uint64_t target_epoch = INIT_EPOCH + 1;
     };
     EpochSys* esys;
     std::thread advancer_thread;
     std::atomic<bool> started;
     uint64_t epoch_length = 100*1000;
-    std::vector<LocalSyncSignal> local_sync_signals;
-    SyncQueueSignal sync_queue_signal;
-    tbb::concurrent_queue<int> sync_queue;
+    SyncSignal sync_signal;
     void advancer(int task_num);
 public:
     DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es);

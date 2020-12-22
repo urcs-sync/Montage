@@ -44,7 +44,7 @@ void GlobalCounterEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
 
 
 DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):
-    esys(es), local_sync_signals(gtc->task_num){
+    esys(es){
     if (gtc->checkEnv("EpochLength")){
         epoch_length = stoi(gtc->getEnv("EpochLength"));
     } else {
@@ -72,61 +72,25 @@ void DedicatedEpochAdvancer::advancer(int task_num){
     uint64_t curr_epoch = INIT_EPOCH;
     while(!started.load()){}
     while(started.load()){
-        // wait for sync_queue_signal to fire or timeout
-        std::unique_lock<std::mutex> lk(sync_queue_signal.bell);
-        sync_queue_signal.ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
-            [&]{return (sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0);});
-        // if woke up by sync_queue_signal:
-        if (sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0){
-            // go through sync queue
-            uint64_t last_request = NULL_EPOCH;
-            while(sync_queue_signal.request_cnt.load(std::memory_order_acquire) > 0){
-                sync_queue_signal.request_cnt.fetch_sub(1, std::memory_order_acq_rel);
-                int target_id;
-                if (sync_queue.try_pop(target_id)){
-                    // does advance for entry with new epoch, pop all the rest with the same epoch
-                    uint64_t curr_request = local_sync_signals[target_id].curr_epoch;
-                    if (curr_request != last_request){
-                        int advance_cnt = (curr_request == curr_epoch? 2 : (curr_request == curr_epoch-1? 1 : 0));
-                        for (int i = 0; i < advance_cnt; i++){
-                            curr_epoch++;
-                            esys->advance_epoch_dedicated();
-                        }
-                    }
-                    // for each request, send signal to the thread to unblock
-                    local_sync_signals[target_id].done.store(true);
-                    local_sync_signals[target_id].ring.notify_one();
-                } else {
-                    errexit("request_cnt > 0, but sync_queue empty.");
-                    break;
-                }
-            }
-        } else { // if time's up:
-            // advance once.
-            curr_epoch++;
+        // wait for sync_signal to fire or timeout
+        std::unique_lock<std::mutex> lk(sync_signal.bell);
+        sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
+            [&]{return (sync_signal.target_epoch > curr_epoch);});
+        for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
             esys->advance_epoch_dedicated();
         }
+        sync_signal.target_epoch++;
+        sync_signal.worker_ring.notify_all();
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
 }
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
-    // initialize local SyncSignal
-    local_sync_signals[EpochSys::tid].done.store(false, std::memory_order_release);
-    local_sync_signals[EpochSys::tid].curr_epoch = c;
-    {
-        std::unique_lock<std::mutex> lk(local_sync_signals[EpochSys::tid].bell);
-        // put SyncSignal into queue
-        sync_queue.push(EpochSys::tid);
-        // notify advancer thread if necessary
-        if (sync_queue_signal.request_cnt.fetch_add(1, std::memory_order_acq_rel) == 0){
-            sync_queue_signal.ring.notify_all();
-        }
-        // wait for local SyncSignal, return
-        local_sync_signals[EpochSys::tid].ring.wait(lk, 
-            [&]{return local_sync_signals[EpochSys::tid].done.load(std::memory_order_acquire);});
-    }
-    
+    uint64_t target_epoch = c+2;
+    std::unique_lock<std::mutex> lk(sync_signal.bell);
+    sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
+    sync_signal.advancer_ring.notify_all();
+    sync_signal.worker_ring.wait(lk, [&]{return (esys->get_epoch() >= target_epoch);});
 }
 
 DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){
