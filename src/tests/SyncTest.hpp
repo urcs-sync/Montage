@@ -8,15 +8,15 @@ template <class K, class V>
 class MapSyncTest: public MapChurnTest<K,V>{
 public:
     Recoverable* rec;
-    int ps;
+    int fs;
     int range;
 
     MapSyncTest(int p_gets, int p_puts, int p_inserts, int p_removes, 
-        int p_sync, int range, int prefill):
-        MapChurnTest<K,V>(p_gets, p_puts, p_inserts, p_removes, range, prefill), ps(p_sync), range(range){}
+        int f_sync, int range, int prefill):
+        MapChurnTest<K,V>(p_gets, p_puts, p_inserts, p_removes, range, prefill), fs(f_sync), range(range){}
     MapSyncTest(int p_gets, int p_puts, int p_inserts, int p_removes, 
-        int p_sync, int range):
-        MapChurnTest<K,V>(p_gets, p_puts, p_inserts, p_removes, range), ps(p_sync), range(range){}
+        int f_sync, int range):
+        MapChurnTest<K,V>(p_gets, p_puts, p_inserts, p_removes, range), fs(f_sync), range(range){}
     
     void init(GlobalTestConfig* gtc){
         MapChurnTest<K,V>::init(gtc);
@@ -52,8 +52,7 @@ public:
             
             this->operation(r, p, tid);
 
-            int s = abs((long)gen_s()%100);
-            if (s < ps){
+            if (abs((long)gen_s())%fs == 0){
                 rec->sync();
             }
             
