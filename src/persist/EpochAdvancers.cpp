@@ -76,10 +76,13 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         std::unique_lock<std::mutex> lk(sync_signal.bell);
         sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
             [&]{return (sync_signal.target_epoch > curr_epoch);});
+        if (curr_epoch == sync_signal.target_epoch){
+            // no sync singal. advance epoch once.
+            sync_signal.target_epoch++;
+        }
         for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
             esys->advance_epoch_dedicated();
         }
-        sync_signal.target_epoch++;
         sync_signal.worker_ring.notify_all();
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
