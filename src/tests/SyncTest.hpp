@@ -24,6 +24,12 @@ public:
         if (!rec){
             errexit("MapSyncTest must be run on Recoverable type object.");
         }
+        if (gtc->checkEnv("SyncFreq")){
+            fs = stoi(gtc->getEnv("SyncFreq"));
+        } else {
+            gtc->setEnv("SyncFreq", "5");
+            fs = 5;
+        }
     }
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         MapChurnTest<K,V>::parInit(gtc, ltc);

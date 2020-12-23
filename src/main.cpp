@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new MapTest<string,string>(0, 0, 50, 50, 1000000, 500000, 10000000), "MapTest<string>:g0p0i50rm50:range=1000000:prefill=500000:op=10000000");
 	gtc.addTestOption(new MapTest<string,string>(50, 0, 25, 25, 1000000, 500000, 10000000), "MapTest<string>:g50p0i25rm25:range=1000000:prefill=500000:op=10000000");
 	gtc.addTestOption(new MapTest<string,string>(90, 0, 5, 5, 1000000, 500000, 10000000), "MapTest<string>:g90p0i5rm5:range=1000000:prefill=500000:op=10000000");
-	gtc.addTestOption(new MapSyncTest<string, string>(0, 0, 50, 50, 1, 1000000, 500000), "MapSyncTest<string>:g0p0i50rm50:syncFreq1:range=1000000:prefill=500000");
+	gtc.addTestOption(new MapSyncTest<string, string>(0, 0, 50, 50, 1000000, 500000), "MapSyncTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 

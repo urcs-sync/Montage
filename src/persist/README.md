@@ -7,6 +7,8 @@ usage: add argument:
 ```
 to command line.
 
+### Montage:
+
 * `PersistStrat`: specify persist strategies
     * `DirWB`: directly write back every update to persistent blocks, and only issue an `sfence` on epoch advance
     * `PerEpoch`: keep to-be-persisted records of _whole epochs_ on a per-cache-line basis and flush them together
@@ -23,3 +25,7 @@ to command line.
     * `CurrEpoch`: per-thread indicator of current epoch on the thread
 * `EpochLength`: specify epoch length.
 * `EpochLengthUnit`: specify epoch length unit: `Second` (default) `Millisecond` or `Microsecond`.
+
+### SyncTest:
+
+* `SyncFreq`: The frequency of sync operation. On average one sync per x operations. Default is 5.
