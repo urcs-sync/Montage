@@ -3,7 +3,6 @@
 
 #include <atomic>
 #include <thread>
-#include <tbb/concurrent_queue.h>
 #include "TestConfig.hpp"
 #include "ConcurrentPrimitives.hpp"
 
