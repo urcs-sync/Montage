@@ -283,8 +283,6 @@ public:
         }
         return (pds::PBlk*)ret;
     }
-    // TODO: replace `new` operator of T with
-    // per-heap allocation and placement new.
     template <typename T, typename... Types> 
     T* pnew(Types... args) 
     {
@@ -356,6 +354,9 @@ public:
     }
     std::unordered_map<uint64_t, pds::PBlk*>* recover_pblks(const int rec_thd=10){
         return _esys->recover(rec_thd);
+    }
+    void sync(){
+        _esys->sync(epochs[pds::EpochSys::tid].ui);
     }
     void recover_mode(){
         _esys->sys_mode = pds::RECOVER; // PDELETE -> nop

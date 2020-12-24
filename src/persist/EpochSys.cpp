@@ -163,6 +163,10 @@ namespace pds{
         to_be_persisted->register_persist(b, _ral->malloc_size(b), c);
     }
 
+    uint64_t EpochSys::get_epoch(){
+        return global_epoch->load(std::memory_order_acquire);
+    }
+
     // Arg is epoch we think we're ending
     void EpochSys::advance_epoch(uint64_t c){
         // TODO: if we go with one bookkeeping thread, remove unecessary synchronizations.

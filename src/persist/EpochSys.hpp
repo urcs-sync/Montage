@@ -311,9 +311,18 @@ public:
     template<typename T>
     T* openwrite_pblk(T* b, uint64_t c);
 
+    // block, call for persistence of epoch c, and wait until finish.
+    void sync(uint64_t c){
+        epoch_advancer->sync(c);
+    }
+
+
     /////////////////
     // Bookkeeping //
     /////////////////
+
+    // get the current global epoch number.
+    uint64_t get_epoch();
 
     // try to advance global epoch, helping others along the way.
     void advance_epoch(uint64_t c);

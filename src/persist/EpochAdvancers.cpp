@@ -43,7 +43,8 @@ void GlobalCounterEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
 }
 
 
-DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):esys(es){
+DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):
+    esys(es){
     if (gtc->checkEnv("EpochLength")){
         epoch_length = stoi(gtc->getEnv("EpochLength"));
     } else {
@@ -68,12 +69,31 @@ DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* 
 
 void DedicatedEpochAdvancer::advancer(int task_num){
     EpochSys::init_thread(task_num);// set tid to be the last
+    uint64_t curr_epoch = INIT_EPOCH;
     while(!started.load()){}
     while(started.load()){
-        esys->advance_epoch_dedicated();
-        std::this_thread::sleep_for(std::chrono::microseconds(epoch_length));
+        // wait for sync_signal to fire or timeout
+        std::unique_lock<std::mutex> lk(sync_signal.bell);
+        sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
+            [&]{return (sync_signal.target_epoch > curr_epoch);});
+        if (curr_epoch == sync_signal.target_epoch){
+            // no sync singal. advance epoch once.
+            sync_signal.target_epoch++;
+        }
+        for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
+            esys->advance_epoch_dedicated();
+        }
+        sync_signal.worker_ring.notify_all();
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
+}
+
+void DedicatedEpochAdvancer::sync(uint64_t c){
+    uint64_t target_epoch = c+2;
+    std::unique_lock<std::mutex> lk(sync_signal.bell);
+    sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
+    sync_signal.advancer_ring.notify_all();
+    sync_signal.worker_ring.wait(lk, [&]{return (esys->get_epoch() >= target_epoch);});
 }
 
 DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){
