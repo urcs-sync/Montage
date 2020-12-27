@@ -100,7 +100,10 @@ public:
 	}
 	void cleanup(GlobalTestConfig* gtc){
 		ChurnTest::cleanup(gtc);
+#ifndef PRONTO
+		// Pronto handles deletion by its own
 		delete m;
+#endif
 	}
 };
 
