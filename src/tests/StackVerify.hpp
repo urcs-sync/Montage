@@ -17,12 +17,12 @@ class StackVerify : public Test{
     public :
         thread_local int counter = 0;
         RStack<T>* s;
-        std::vector<std::string> p; 
+        std::unordered_map<int, int> map; 
         StackVerify(){};
         void init(GlobalTestConfig* gtc);
         void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
         int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
-        void cleanup(GlobalTestConfig* gtc);
+        void cleanup(GlobalTestConfig* gtc, int tid);
 
 };
 
@@ -56,7 +56,20 @@ void StackVerify<T>::operation(int tid){
     }
     else{
         std::string popped_val = s->pop(tid);
-        p.push_back(popped_val);
+        size_t pos = popped_val.rfind("_"); 
+        int tid = atoi(popped_val.substr(0, pos));
+        int monoval = atoi(popped_val.substr(pos+1, popped_val.length()-1));
+
+        if (map.find(tid) != map.end()) {
+            if(map[tid] > monoval){
+                std::cout<<"tid:"<<tid<<"map monoval:"<<map[tid]<<"current monoval:"<<monoval<<"not recovered."<<std::endl;
+                exit(1);
+            } else {
+                map[tid] = monoval;
+            }
+        } else {
+            map[tid] = monoval;
+        }
     }
 }
 
@@ -82,33 +95,12 @@ int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         }
 
     }
-    verify();
     return ops;
 }
 
 template <typename T>
-void StackVerify<T>::verify(){
-    std::unordered_map<int, int> map; 
-    for(std::string i : p){
-        size_t pos = str.rfind("_"); 
-        int tid = atoi(i.substr(0, pos));
-        int monoval = atoi(i.substr(pos+1, i.length()-1));
+void StackVerify<T>::cleanup(GlobalTestConfig* gtc, int tid){
 
-        if (map.find(tid) == map.end()) {
-            if(map[tid] > monoval){
-                std::cout<<"tid:"<<tid<<"map monoval:"<<map[tid]<<"current monoval:"<<monoval<<"not recovered."<<std::endl;
-                exit(1);
-            } else {
-                map[tid] = monoval;
-            }
-        } else {
-            map[tid] = monoval;
-        }
-    }
-
-}
-template <typename T>
-void StackVerify<T>::cleanup(GlobalTestConfig* gtc){
     delete s;
 }
 
