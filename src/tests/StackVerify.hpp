@@ -8,6 +8,8 @@
 #include "RStack.hpp"
 #include <string> 
 #include <vector>
+#include <unordered_map>
+
 
 template <typename T>
 class StackVerify : public Test{
@@ -80,6 +82,7 @@ int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         }
 
     }
+    verify();
     return ops;
 }
 
