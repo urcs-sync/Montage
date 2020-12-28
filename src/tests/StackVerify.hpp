@@ -38,12 +38,12 @@ void StackVerify<T>::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 
 template <typename T>
 void StackVerify<T>::init(GlobalTestConfig* gtc){
-    if (gtc->task_num == 1){
+    if (gtc->task_num <= 1){
         errexit("StackVerify must run on multiple threads.");
     }
 
     Rideable* ptr = gtc->allocRideable();
-    s = dynamic_cast<RStack<T>*>(ptr);
+    s = dynamic_cast<RStack<pair<int, int>>*>(ptr);
     if (!s) {
         errexit("StackVerify must be run on RStack<T> type object.");
     }
@@ -60,20 +60,23 @@ void StackVerify<T>::operation(int tid){
         counter++;
     }
     else{
-        auto popped_val = s->pop(tid).value();
-        int tid = popped_val.first;
-        int monoval = popped_val.second;
+        auto popped_val = s->pop(tid);
+        if(popped_val.has_value()){
+            int tid = popped_val.value().first;
+            int monoval = popped_val.value().second;
 
-        if (map.find(tid) != map.end()) {
-            if(map[tid] > monoval){
-                std::cout<<"tid:"<<tid<<"map monoval:"<<map[tid]<<"current monoval:"<<monoval<<"not recovered."<<std::endl;
-                exit(1);
+            if (map.find(tid) != map.end()) {
+                if(map[tid] > monoval){
+                    std::cout<<"tid: "<<tid<<"\n --- last value popped for this tid : "<<map[tid]<<"\n --- current value popped: "<<monoval<<"\n --- not verfied."<<std::endl;
+                } else {
+                    map[tid] = monoval;
+                }
             } else {
                 map[tid] = monoval;
             }
-        } else {
-            map[tid] = monoval;
+
         }
+
     }
 }
 

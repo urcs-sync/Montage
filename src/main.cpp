@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
 
 
 	/* stacks */
-	gtc.addRideableOption(new TrieberStackFactory<string>(), "TrieberStack");
+	gtc.addRideableOption(new TrieberStackFactory<pair<int,int>>(), "TrieberStack");
 
 
 	/* queues */
