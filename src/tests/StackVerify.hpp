@@ -7,14 +7,15 @@
 #include "TestConfig.hpp"
 #include "RStack.hpp"
 #include <string> 
+#include <vector>
 
 template <typename T>
 class StackVerify : public Test{
 
     public :
-        int counter = 0;
+        thread_local int counter = 0;
         RStack<T>* s;
-        vector<T> p; 
+        std::vector<std::string> p; 
         RecoverVerifyTest(){};
         void init(GlobalTestConfig* gtc);
         void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
@@ -47,11 +48,12 @@ void StackVerify<T>::init(GlobalTestConfig* gtc){
 template <typename T>
 void StackVerify<T>::operation(int tid){
     if(tid != 0){
-        V value = std::to_string(tid)+"_"+std::to_string(counter);
+        std::string value = std::to_string(tid)+"_"+std::to_string(counter);
         s->push(value, tid);
+        counter++;
     }
     else{
-        V popped_val = s->pop(tid);
+        std::string popped_val = s->pop(tid);
         p.push_back(popped_val);
     }
 }
@@ -79,6 +81,32 @@ int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 
     }
     return ops;
+}
+
+template <typename T>
+void StackVerify<T>::verify(){
+    std::unordered_map<int, int> map; 
+    for(std::string i : p){
+        size_t pos = str.rfind("_"); 
+        int tid = atoi(i.substr(0, pos));
+        int monoval = atoi(i.substr(pos+1, i.length()-1));
+
+        if (map.find(tid) == map.end()) {
+            if(map[tid] > monoval){
+                std::cout<<"tid:"<<tid<<"map monoval:"<<map[tid]<<"current monoval:"<<monoval<<"not recovered."<<std::endl;
+                exit(1);
+            } else {
+                map[tid] = monoval;
+            }
+        } else {
+            map[tid] = monoval;
+        }
+    }
+
+}
+template <typename T>
+void StackVerify<T>::cleanup(GlobalTestConfig* gtc){
+    delete s;
 }
 
 #endif
