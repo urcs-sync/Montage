@@ -18,7 +18,7 @@ class StackVerify : public Test{
         thread_local int counter = 0;
         RStack<T>* s;
         std::vector<std::string> p; 
-        RecoverVerifyTest(){};
+        StackVerify(){};
         void init(GlobalTestConfig* gtc);
         void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
         int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
