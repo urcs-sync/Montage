@@ -7,7 +7,7 @@
 #include "TestConfig.hpp"
 #include "RStack.hpp"
 #include <string> 
-#include <vector>
+#include <utility>
 #include <unordered_map>
 
 
@@ -15,17 +15,20 @@ template <typename T>
 class StackVerify : public Test{
 
     public :
-        thread_local int counter = 0;
+        static thread_local int counter;
         RStack<T>* s;
         std::unordered_map<int, int> map; 
-        StackVerify(){};
+        StackVerify(){}
+        void operation(int tid);
         void init(GlobalTestConfig* gtc);
         void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
         int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
-        void cleanup(GlobalTestConfig* gtc, int tid);
+        void cleanup(GlobalTestConfig* gtc);
 
 };
 
+template <typename T>
+thread_local int StackVerify<T>::counter = 0;
 
 template <typename T>
 void StackVerify<T>::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
@@ -50,15 +53,16 @@ void StackVerify<T>::init(GlobalTestConfig* gtc){
 template <typename T>
 void StackVerify<T>::operation(int tid){
     if(tid != 0){
-        std::string value = std::to_string(tid)+"_"+std::to_string(counter);
+        pair<int,int> value;
+        value.first = tid;
+        value.second = counter;
         s->push(value, tid);
         counter++;
     }
     else{
-        std::string popped_val = s->pop(tid);
-        size_t pos = popped_val.rfind("_"); 
-        int tid = atoi(popped_val.substr(0, pos));
-        int monoval = atoi(popped_val.substr(pos+1, popped_val.length()-1));
+        auto popped_val = s->pop(tid).value();
+        int tid = popped_val.first;
+        int monoval = popped_val.second;
 
         if (map.find(tid) != map.end()) {
             if(map[tid] > monoval){
@@ -76,7 +80,7 @@ void StackVerify<T>::operation(int tid){
 template <typename T>
 int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
     auto time_up = gtc->finish;
-    
+    counter = 0;
     int ops = 0;
     uint64_t r = ltc->seed;
     std::mt19937_64 gen_p(r);
@@ -99,7 +103,7 @@ int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 }
 
 template <typename T>
-void StackVerify<T>::cleanup(GlobalTestConfig* gtc, int tid){
+void StackVerify<T>::cleanup(GlobalTestConfig* gtc){
 
     delete s;
 }
