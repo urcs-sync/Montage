@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new ProntoQueueFactory(), "ProntoQueue");
 	gtc.addRideableOption(new ProntoHashTableFactory(), "ProntoHashTable");
 #endif
-	gtc.addTestOption(new StackVerify<pair<int,int>>(), "StackVerify");
+	gtc.addTestOption(new StackVerify<pair<int,int>>(90,10), "StackVerify");
 	gtc.addTestOption(new StackTest(50,50,2000), "Stack:push50pop50:prefill=2000");
 	gtc.addTestOption(new QueueChurnTest(50,50,2000), "QueueChurn:eq50dq50:prefill=2000");
 	gtc.addTestOption(new QueueTest(5000000,50), "Queue:5m");
