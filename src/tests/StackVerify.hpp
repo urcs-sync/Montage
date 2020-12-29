@@ -93,7 +93,6 @@ int StackVerify<T>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         }
 
     }
-    verify(tid);
     return ops;
 }
 
@@ -121,6 +120,7 @@ void StackVerify<T>::verify(int tid){
 
 template <typename T>
 void StackVerify<T>::cleanup(GlobalTestConfig* gtc){
+    verify(0);
 
     delete s;
 }
