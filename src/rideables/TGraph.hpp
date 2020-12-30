@@ -65,6 +65,7 @@ class TGraph : public RGraph{
                 int dest;
                 int weight;
                 Relation(){}
+                Relation(int src, int dest, int weight): src(src), dest(dest), weight(weight){}
                 Relation(Vertex* src, Vertex* dest, int weight): src(src->get_id()), dest(dest->get_id()), weight(weight){}
                 Relation(const Relation& oth): src(oth.src), dest(oth.dest), weight(oth.weight){}
                 void set_weight(int w) {
@@ -75,8 +76,12 @@ class TGraph : public RGraph{
                 }
         };
 
+        // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
             idxToVertex = new Vertex*[numVertices];
+            vertexLocks = new std::atomic<bool>[numVertices];
+            vertexSeqs = new uint32_t[numVertices];
+
             // Initialize...
             for (size_t i = 0; i < numVertices; i++) {
                 idxToVertex[i] = new Vertex(i, -1);
@@ -84,71 +89,77 @@ class TGraph : public RGraph{
         }
 
         Vertex** idxToVertex; // Transient set of transient vertices to index map
+        std::atomic<bool> *vertexLocks; // Transient locks for transient vertices
+        uint32_t *vertexSeqs; // Transient sequence numbers for transactional operations on vertices
 
         // Thread-safe and does not leak edges
         void clear() {
-            // BEGIN_OP_AUTOEND();
             for (int i = 0; i < numVertices; i++) {
-                idxToVertex[i]->lock();
+                lock(i);
             }
             for (int i = 0; i < numVertices; i++) {
                 for (Relation *r : idxToVertex[i]->adjacency_list) {
                     delete r;
                 }
-                idxToVertex[i]->adjacency_list.clear();
-                idxToVertex[i]->dest_list.clear();
+                source(i).clear();
+                destination(i).clear();
             }
             for (int i = numVertices - 1; i >= 0; i--) {
-                idxToVertex[i]->seqNumber++;
-                idxToVertex[i]->unlock();
+                destroy(i);
+                inc_seq(i);
+                unlock(i);
             }
         }
-
 
         bool add_edge(int src, int dest, int weight) {
+            bool retval = false;
             if (src == dest) return false; // Loops not allowed
-            Vertex *v1 = idxToVertex[src];
-            Vertex *v2 = idxToVertex[dest];
-            // allocate before critical section, assuming accessing
-            // Vertex's id without lock is safe
-            Relation* r = new Relation(v1, v2, weight);
             if (src > dest) {
-                v2->lock();
-                v1->lock();
+                lock(dest);
+                lock(src);
             } else {
-                v1->lock();
-                v2->lock();
+                lock(src);
+                lock(dest);
             }
             
-            v1->adjacency_list.insert(r);
-            v2->dest_list.insert(r);
-            v1->seqNumber++;
-            v2->seqNumber++;
-
-            if (src > dest) {
-                v1->unlock();
-                v2->unlock();
-            } else {
-                v2->unlock();
-                v1->unlock();
+            Relation r(src,dest,weight);
+            auto& srcSet = source(src);
+            auto& destSet = destination(dest);
+            if (has_relation(srcSet, &r)) {
+                // Sanity check
+                assert(has_relation(destSet, &r));
+                goto exitEarly;
             }
-            return true;
+
+            {
+                Relation *rel = new Relation(src, dest, weight);
+                srcSet.insert(rel);
+                destSet.insert(rel);
+                inc_seq(src);
+                inc_seq(dest);
+                retval = true;
+            }
+
+            exitEarly:
+                if (src > dest) {
+                    unlock(src);
+                    unlock(dest);
+                } else {
+                    unlock(dest);
+                    unlock(src);
+                }
+                return retval;
         }
 
 
-        bool has_edge(int v1, int v2) {
+        bool has_edge(int src, int dest) {
             bool retval = false;
-            Vertex *v = idxToVertex[v1];
             
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
-            v->lock();            
-            {
-                if (std::any_of(v->adjacency_list.begin(), v->adjacency_list.end(), 
-                            [=] (Relation *r) { return r->dest == v2; })) {
-                    retval = true;
-                }
-            }
-            v->unlock();
+            lock(src);
+            Relation r(src, dest, -1);
+            retval = has_relation(source(src), &r);
+            unlock(src);
 
             return retval;
         }
@@ -161,42 +172,28 @@ class TGraph : public RGraph{
          */
         bool remove_edge(int src, int dest) {
             if (src == dest) return false;
-            Vertex *v1 = idxToVertex[src];
-            Vertex *v2 = idxToVertex[dest];
             if (src > dest) {
-                v2->lock();
-                v1->lock();
+                lock(dest);
+                lock(src)
             } else {
-                v1->lock();
-                v2->lock();
+                lock(src);
+                lock(dest);
             }
             
             {
-                // Scan v1 for an edge containing v2 in its adjacency list...
-                Relation *rdel = nullptr;
-                for (Relation *r : v1->adjacency_list) {
-                    if (r->dest == v2->id) {
-                        rdel = r;
-                        v1->adjacency_list.erase(r);
-                        break;
-                    }
-                }
-            
-                if (rdel){
-                    v2->dest_list.erase(rdel);
-                    delete rdel;
-                } else {
-                    v1->seqNumber++;
-                    v2->seqNumber++;
-                }
+                Relation r(src, dest, -1);
+                remove_relation(source(src), &r);
+                remove_relation(destination(dest), &r);
+                inc_seq(src);
+                inc_seq(dest);
             }
 
             if (src > dest) {
-                v1->unlock();
-                v2->unlock();
+                unlock(src);
+                unlock(dest);
             } else {
-                v2->unlock();
-                v1->unlock();
+                unlock(dest);
+                unlock(src);
             }
             return true;
         }
@@ -318,6 +315,56 @@ startOver:
             }
             idxToVertex[v]->unlock();
         }
+        
+    private:
+        void lock(size_t idx) {
+            std::atomic<bool>& lck = vertexLocks[idx];
+            bool expect = false;
+            while (lck.load() == true || lck.compare_exchange_strong(expect, true) == false) {
+                expect = false;
+            }
+        }
+
+        void unlock(size_t idx) {
+            std::atomic<bool>& lck = vertexLocks[idx];
+            lck.store(false);
+        }
+
+        // Lock must be owned for next operations...
+        void inc_seq(size_t idx) {
+            vertexSeqs[idx]++;
+        }
+            
+        uint64_t get_seq(size_t idx) {
+            return vertexSeqs[idx];
+        }
+
+        void destroy(size_t idx) {
+            delete idxToVertex[idx];
+            idxToVertex[idx] = nullptr;
+        }
+
+        // Incoming edges
+        std::unordered_set<Relation*>& source(size_t idx) {
+            return idxToVertex[idx]->adjacency_list;
+        }
+
+        // Outgoing edges
+        std::unordered_set<Relation*>& destination(size_t idx) {
+            return idxToVertex[idx]->dest_list;
+        }
+
+        bool has_relation(std::unordered_set<Relation*>& set, Relation *r) {
+            auto search = set.find(r);
+            return search != set.end();
+        }
+
+        void remove_relation(std::unordered_set<Relation*>& set, Relation *r) {
+            auto search = set.find(r);
+            if (search != set.end()) {
+                set.erase(search);
+            }
+        }
 };
 
 template <size_t numVertices = 1024>
@@ -326,6 +373,5 @@ class TGraphFactory : public RideableFactory{
         return new TGraph<numVertices>(gtc);
     }
 };
-
 
 #endif
