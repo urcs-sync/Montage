@@ -19,14 +19,20 @@ the License.
 #ifndef CLEVEL_HPP
 #define CLEVEL_HPP
 
+#include "RCUTracker.hpp"
 #include "RMap.hpp"
 #include "Recoverable.hpp"
 #include <atomic>
 #include <vector>
 
-const size_t SLOTS_PER_BUCKET = 8;
+const size_t slots_per_bucket = 8;
 
-template <typename K, typename V>
+// These constants are stolen from LockfreeHashTable.hpp
+const int epoch_freq = 100;
+const int empty_freq = 1000;
+const bool collect = true;
+
+template <typename K, typename V, typename Hasher = std::hash<K>>
 class CLevelHashTable : public RMap<K, V>, public Recoverable {
   class Payload : public pds::PBlk {
     GENERATE_FIELD(K, key, Payload);
@@ -47,12 +53,18 @@ class CLevelHashTable : public RMap<K, V>, public Recoverable {
     uint64_t data;
 
   public:
+    PayloadRef(Payload *plp, size_t hash) {
+      uint16_t tag = static_cast<uint16_t>(hash & 0xFFFF);
+      this->data = static_cast<uint64_t>((static_cast<uint64_t>(tag) << 48) | plp);
+    }
+
+    // Returns the first 16 bits of the payload
     inline uint16_t tag() {
-      // Takes the highest 16 bits
+      // Takes the highest 16 bits of the data
       return static_cast<uint16_t>(this->data >> 48);
     }
 
-    // Gets the pointer to the payload
+    // Returns the pointer to the payload
     inline Payload *ptr() {
       // Masks off the lower 48 bits
       return static_cast<Payload *>(this->data & 0xffffffffffff);
@@ -63,7 +75,7 @@ class CLevelHashTable : public RMap<K, V>, public Recoverable {
   };
 
   struct Bucket {
-    array<PayloadRef, SLOTS_PER_BUCKET> slots;
+    array<PayloadRef, slots_per_bucket> slots;
   };
 
   struct Level {
@@ -79,6 +91,23 @@ class CLevelHashTable : public RMap<K, V>, public Recoverable {
   };
 
   Context global_context;
+  atomic<Context *> global_ctx_ptr;
+
+  RCUTracker<Payload> tracker;
+
+public:
+  CLevelHashTable(int task_number)
+      : tracker{task_number, epoch_freq, empty_freq, collect} {}
+
+  optional<V> get(K key, int tid) {
+  }
+};
+
+template<class T>
+class CLevelHashTableFactory : public RideableFactory {
+  Rideable* build(GlobalTestConfig *gtc) {
+    return new CLevelHashTable<T, T>(gtc->task_num);
+  }
 };
 
 #endif
