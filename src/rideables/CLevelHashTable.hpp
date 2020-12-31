@@ -32,7 +32,8 @@ const int epoch_freq = 100;
 const int empty_freq = 1000;
 const bool collect = true;
 
-template <typename K, typename V> class CLevelHashTable : public RMap<K, V> {
+template <typename K, typename V, typename Hasher = std::hash<K>>
+class CLevelHashTable : public RMap<K, V>, Recoverable {
   class Payload : public pds::PBlk {
     GENERATE_FIELD(K, key, Payload);
     GENERATE_FIELD(V, val, Payload);
@@ -53,9 +54,13 @@ template <typename K, typename V> class CLevelHashTable : public RMap<K, V> {
 
   public:
     PayloadRef(Payload *plp, size_t hash) {
-      uint16_t tag = static_cast<uint16_t>(hash & 0xFFFF);
+      uint16_t tag = take_tag(hash);
       this->data =
           static_cast<uint64_t>((static_cast<uint64_t>(tag) << 48) | plp);
+    }
+
+    inline static uint16_t take_tag(size_t hash) {
+      return static_cast<uint16_t>(hash & 0xFFFF);
     }
 
     // Returns the first 16 bits of the payload
@@ -67,15 +72,32 @@ template <typename K, typename V> class CLevelHashTable : public RMap<K, V> {
     // Returns the pointer to the payload
     inline Payload *ptr() {
       // Masks off the lower 48 bits
-      return static_cast<Payload *>(this->data & 0xffffffffffff);
+      return reinterpret_cast<Payload *>(this->data & 0xffffffffffff);
     }
 
     // Checks if this reference is empty
     inline bool nullp() { return this->data == 0; }
+
+    optional<V> match(K k, size_t hash) {
+      if (nullp() || take_tag(hash) != tag())
+        return optional<V>{};
+      K key = ptr()->get_key();
+      if (key == k)
+        return ptr()->get_val();
+    }
   };
 
   struct Bucket {
     array<PayloadRef, slots_per_bucket> slots;
+
+    optional<V> search(K k, size_t hash) {
+      for (PayloadRef ref : slots) {
+        optional<V> res = ref.match(k, hash);
+        if (res.has_value())
+          return res;
+      }
+      return optional<V>{};
+    }
   };
 
   struct Level {
@@ -83,10 +105,34 @@ template <typename K, typename V> class CLevelHashTable : public RMap<K, V> {
     Level *next;
 
     Level(size_t size) : buckets{size}, next{nullptr} {}
+
+    // Finds the object in this level with hash =hash=
+    optional<V> search(K k, size_t hash) {
+      // Half of the size of size_t, in bits
+      constexpr size_t half_hash_size = (sizeof(size_t) * 8) / 2;
+
+      // A mask that covers the lower 'half_hash_size' of a size_t
+      constexpr size_t lower_half_mask =
+          ((size_t)1 << half_hash_size) - (size_t)1;
+
+      // The upper and lower halves of the hash
+      size_t hash_lower_half = hash & lower_half_mask;
+      size_t hash_upper_half = hash >> half_hash_size;
+
+      size_t first_index = hash_upper_half % buckets.size();
+      size_t second_index = hash_lower_half % buckets.size();
+
+      optional<V> first_lookup = buckets[first_index].search(k, hash);
+
+      if (first_lookup.has_value())
+        return first_lookup;
+
+      return buckets[second_index].search(k, hash);
+    }
   };
 
   struct Context {
-    atomic<Level *> first_level, last_level;
+    Level *first_level, *last_level;
     bool is_resizing;
   };
 
@@ -100,12 +146,27 @@ public:
       : tracker{task_number, epoch_freq, empty_freq, collect} {}
 
   optional<V> get(K key, int tid) {
-    std::hash<K> hasher{};
-    uint64_t hash = hasher(key);
+    Hasher hasher{};
+    size_t hash = hasher(key);
+    optional<V> res;
 
-    uint32_t top = static_cast<uint32_t>(hash >> 32);
-    uint32_t bottom = static_cast<uint32_t>(hash & 0xffffffff);
-    return optional<V>{};
+    Context *ctx;
+
+    do {
+      ctx = global_ctx_ptr.load();
+
+      for (Level *l = ctx->last_level; l != ctx->first_level; l = l->next) {
+        res = l->search(key, hash);
+
+        if (res.has_value())
+          goto end;
+      }
+
+    } while (ctx == global_ctx_ptr.load());
+
+  end:
+    tracker.end_op(tid);
+    return res;
   }
 
   optional<V> put(K key, V val, int tid) {
