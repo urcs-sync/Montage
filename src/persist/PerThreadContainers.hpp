@@ -55,13 +55,13 @@ template <typename T>
 class FixedCircBufferContainer: public PerThreadContainer<T>{
     padded<PerThreadFixedCircBuffer<T>*> containers[4];
 public:
-    FixedCircBufferContainer(int task_num, int cap){
+    FixedCircBufferContainer(int task_num, size_t cap){
         for (int i = 0; i < 4; i++){
             containers[i].ui = new PerThreadFixedCircBuffer<T>(task_num, cap);
         }
     }
     void push(T x, int tid, uint64_t c){
-        containers[c%4].ui->push(x, tid);
+        errexit("always use FixedCircBuffer::try_push().");
     }
     bool try_push(T x, int tid, uint64_t c){
         return containers[c%4].ui->try_push(x, tid);
@@ -76,9 +76,6 @@ public:
     bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%4].ui->try_pop_local(func, tid);
-    }
-    bool full_local(int tid, uint64_t c){
-        return containers[c%4].ui->full_local(tid);
     }
     void clear(){
         for (int i = 0; i < 4; i++){
