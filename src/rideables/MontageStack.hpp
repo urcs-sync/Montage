@@ -20,7 +20,6 @@ class MontageStack : public RStack<T>, Recoverable
 private:
     struct StackNode
     {
-        T data;
         StackNode *next;
         Payload *data;
 
@@ -28,16 +27,16 @@ private:
 
         void set_sn(uint64_t s)
         {
-            assert(payload != nullptr && "payload shouldn't be null");
-            payload->set_unsafe_sn(ds, s);
+            assert(data != nullptr && "payload shouldn't be null");
+            data->set_unsafe_sn(ds, s);
         }
         StackNode(){};
         StackNode(T v) : next(nullptr), data(pnew<Payload>(v)){};
         ~StackNode()
         {
-            if (payload)
+            if (data)
             {
-                ds->preclaim(payload);
+                ds->preclaim(data);
             }
         }
     };
@@ -94,7 +93,7 @@ void MontageStack<T>::push(T data, int tid)
         new_node->next = old_node;
         new_node->set_sn(s);
         begin_op();
-        if((!top.CAS_verify(this, old_node, new_node))){
+        if(top.CAS_verify(this, old_node, new_node)){
             end_op();
             break;
         }
@@ -122,13 +121,14 @@ optional<T> MontageStack<T>::pop(int tid)
         }
         begin_op();
         new_node = old_node->next;
-        if (!top.CAS_verify(this, old_node, new_node))){
+        if (top.CAS_verify(this, old_node, new_node))){
+            res = (T)old_node->data->get_val(this);// old see new is impossible
+            pretire(old_node->data); 
             end_op();
             break;
         }
         abort_op();
     };
-    res = old_node->data;
     tracker.retire(old_node, tid);
     tracker.end_op(tid);
     return res;
