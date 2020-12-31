@@ -14,7 +14,7 @@
 using namespace std;
 
 template <typename T>
-class MontageStack : public RStack<T>
+class MontageStack : public RStack<T>, Recoverable
 {
 
 private:
@@ -22,27 +22,56 @@ private:
     {
         T data;
         StackNode *next;
-        Payload* data;
+        Payload *data;
 
+        MontageStack *ds = nullptr;
+
+        void set_sn(uint64_t s)
+        {
+            assert(payload != nullptr && "payload shouldn't be null");
+            payload->set_unsafe_sn(ds, s);
+        }
+        StackNode(){};
+        StackNode(T v) : next(nullptr), data(pnew<Payload>(v)){};
+        ~StackNode()
+        {
+            if (payload)
+            {
+                ds->preclaim(payload);
+            }
+        }
     };
-    StackNode(){};
-    StackNode(T v): next(nullptr), data(pnew<Payload>(v)){}
 
+public:
+    std::atomic<uint64_t> global_sn;
+
+private:
     pds::atomic_lin_var<StackNode *> top;
     RCUTracker<StackNode> tracker;
 
 public:
-    class Payload : public pds::PBlk{
+    class Payload : public pds::PBlk
+    {
         GENERATE_FIELD(T, val, Payload);
-        GENERATE_FIELD(uint64_t, sn, Payload); 
+        GENERATE_FIELD(uint64_t, sn, Payload);
+
     public:
-        Payload(){}
-        Payload(T v, uint64_t n): m_val(v), m_sn(n){}
-        Payload(const Payload& oth): PBlk(oth), m_sn(0), m_val(oth.m_val){}
-        void persist(){}
+        Payload() {}
+        Payload(T v, uint64_t n) : m_val(v), m_sn(n) {}
+        Payload(const Payload &oth) : PBlk(oth), m_sn(0), m_val(oth.m_val) {}
+        void persist() {}
     };
-    MontageStack(int task_num) : top(nullptr), tracker(task_num, 100, 1000, true) {}
+    MontageStack(GlobalTestConfig* gtc) : Recoverable(gtc), global_sn(0), top(nullptr), tracker(gtc->task_num, 100, 1000, true) {}
     ~MontageStack(){};
+    
+    void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+        Recoverable::init_thread(gtc, ltc);
+    }
+
+    int recover(bool simulated){
+        errexit("recover of MontageStack not implemented.");
+        return 0;
+    }
     void push(T data, int tid);
     optional<T> pop(int tid);
     optional<T> peek(int tid);
@@ -58,11 +87,20 @@ void MontageStack<T>::push(T data, int tid)
 
     StackNode *old_node;
 
-    do
+    while(true)
     {
         old_node = top.load();
+        uint64_t s = global_sn.fetch_add(1);
         new_node->next = old_node;
-    } while (!top.compare_exchange_weak(old_node, new_node));
+        new_node->set_sn(s);
+        begin_op();
+        if((!top.CAS_verify(this, old_node, new_node))){
+            end_op();
+            break;
+        }
+        abort_op();
+
+    };
 
     tracker.end_op(tid);
 }
@@ -74,7 +112,7 @@ optional<T> MontageStack<T>::pop(int tid)
     StackNode *new_node;
     StackNode *old_node;
     optional<T> res = {};
-    do
+    while(true)
     {
         old_node = top.load();
         if (old_node == NULL)
@@ -82,8 +120,14 @@ optional<T> MontageStack<T>::pop(int tid)
             tracker.end_op(tid);
             return res;
         }
+        begin_op();
         new_node = old_node->next;
-    } while (!top.compare_exchange_weak(old_node, new_node));
+        if (!top.CAS_verify(this, old_node, new_node))){
+            end_op();
+            break;
+        }
+        abort_op();
+    };
     res = old_node->data;
     tracker.retire(old_node, tid);
     tracker.end_op(tid);
