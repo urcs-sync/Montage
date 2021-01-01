@@ -254,6 +254,10 @@ public:
     void pop_all(const std::function<void(T& x)>& func){
         size_t curr_popped = popped.ui.load(std::memory_order_acquire);
         size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+        if (curr_popped == curr_pushed){
+            // empty
+            return;
+        }
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_pushed, std::memory_order_acq_rel)){
             curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
@@ -264,11 +268,18 @@ public:
         }
         // successfully popped from curr_popped to curr_pushed.
         size_t i = curr_popped % cap;
-        size_t end = i + (curr_pushed - curr_popped);
+        size_t end = (i + (curr_pushed - curr_popped)) % cap;
+        if (end <= i){ // wrap around.
+            while(i < cap){
+                func(payloads[i].ui);
+                i++;
+            }
+            i = 0;
+        }
         while(i < end){
             func(payloads[i].ui);
             i++;
-        }
+        }  
     }
     void clear(){
         pushed.ui = 0;
