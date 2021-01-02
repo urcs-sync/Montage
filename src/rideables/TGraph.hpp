@@ -29,12 +29,10 @@ class TGraph : public RGraph{
         class Relation;
         class Vertex {
             public:
-                std::unordered_set<Relation*> adjacency_list;
-                std::unordered_set<Relation*> dest_list;
+                std::unordered_set<std::shared_ptr<Relation>> adjacency_list;
+                std::unordered_set<std::shared_ptr<Relation>> dest_list;
                 int id;
                 int lbl;
-                std::mutex lck;
-                uint64_t seqNumber; // Keeps track of number of changes made
                 Vertex(int id, int lbl): id(id), lbl(lbl){}
                 Vertex(const Vertex& oth): id(oth.id), lbl(oth.lbl){}
                 bool operator==(const Vertex& oth) const { return id==oth.id;}
@@ -47,7 +45,6 @@ class TGraph : public RGraph{
                 int get_id() {
                     return id;
                 }
-
 
                 void lock() {
                     lck.lock();
@@ -66,7 +63,6 @@ class TGraph : public RGraph{
                 int weight;
                 Relation(){}
                 Relation(int src, int dest, int weight): src(src), dest(dest), weight(weight){}
-                Relation(Vertex* src, Vertex* dest, int weight): src(src->get_id()), dest(dest->get_id()), weight(weight){}
                 Relation(const Relation& oth): src(oth.src), dest(oth.dest), weight(oth.weight){}
                 void set_weight(int w) {
                     weight = w;
@@ -197,63 +193,36 @@ class TGraph : public RGraph{
             }
             return true;
         }
-
-        /**
-         * Sets the label for a node to a specific value
-         * @param id The id the node whose weight to set
-         * @param l The new label for the node
-         */
-        bool set_lbl(int id, int l) {
-            Vertex *v = idxToVertex[id]; 
-            v->lock();
-            v->set_lbl(l);
-            v->unlock();
-            return true;
-        }
-
-        /**
-         * Sets the weight for an edge to a specific value. If the edge does not exist, this does not break, but does
-         * unnecessary computation.
-         * @param src the integer id of the source of the edge to set the weight for
-         * @param dest the integer id of the dest of the edge to set the weight for
-         * @param w the new weight value
-         */
-        bool set_weight(int src, int dest, int w) {
-            bool retval = false;
-            // Unimplemented because MontageGraph can't 
-            return retval;
-        }
         
-        bool clear_vertex(int id) {
+        bool remove_vertex(int vid) {
 startOver:
             {
                 // Step 1: Acquire vertex and collect neighbors...
                 std::vector<int> vertices;
-                Vertex *v = idxToVertex[id];
-                v->lock();
-                uint64_t seq = v->seqNumber;
-                for (Relation *r : v->adjacency_list) {
+                lock(vid);
+                uint32_t seq = get_seq(vid);
+                for (Relation *r : source(vid)) {
                     vertices.push_back(r->dest);
                 }
-                for (Relation *r : v->dest_list) {
+                for (Relation *r : destination(vid)) {
                     vertices.push_back(r->src);
                 }
                 
-                vertices.push_back(id);
+                vertices.push_back(vid);
                 std::sort(vertices.begin(), vertices.end()); 
                 vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
 
                 // Step 2: Release lock, then acquire lock-order...
-                v->unlock();
+                unlock(vid);
                 for (int _vid : vertices) {
-                    idxToVertex[_vid]->lock();
+                    lock(_vid);
                 }
 
                 // Has vertex been changed? Start over
-                if (v->seqNumber != seq) {
+                if (get_seq(vid) != seq) {
                     std::reverse(vertices.begin(), vertices.end());
                     for (int _vid : vertices) {
-                        idxToVertex[_vid]->unlock();
+                        unlock(_vid);
                     }
                     goto startOver;
                 }
@@ -261,59 +230,60 @@ startOver:
                 // Has not changed, continue...
                 // Step 3: Remove edges from all other
                 // vertices that relate to this vertex
-                std::vector<Relation*> garbageList;
-                for (int _vid : vertices) {
-                    if (_vid == id) continue;
-                    Vertex *_v = idxToVertex[_vid];
+                for (int other : vertices) {
+                    if (other == vid) continue;
                     std::vector<Relation*> toRemoveList;
 
-                    for (Relation *r : _v->adjacency_list) {
-                        if (r->src == id) {
-                            toRemoveList.push_back(r);
-                        }
-                    }
-                    for (Relation *r : toRemoveList) {
-                        _v->adjacency_list.erase(r);
-                        garbageList.push_back(r);
-                    }
-                    toRemoveList.clear();
+                    Relation src(other, vid, -1);
+                    Relation dst(vid, other, -1);
+                    remove_relation(source(other), &src);
+                    remove_relation(destination(other), &dst);
 
-                    for (Relation *r : _v->dest_list) {
-                        if (r->dest == id) {
-                            toRemoveList.push_back(r);
-                        }
-                    }
-                    for (Relation *r : toRemoveList) {
-                        _v->dest_list.erase(r);
-                        garbageList.push_back(r);
+                    // Last relation, delete this vertex
+                    if (source(other).size() == 0 && destination(other).size() == 0) {
+                        destroy(other);
                     }
                 }
                 
-                // Step 4: Delete edges, clear set of src and dest edges
-                v->adjacency_list.clear();
-                v->dest_list.clear();
+                // Step 4: Delete edges, clear set of src and dest edges, then delete the vertex itself
+                std::vector<Relation*> garbageList(source(vid).size() + destination(vid).size());
+                garbageList.insert(garbageList.begin(), source(vid).begin(), source(vid).end());
+                garbageList.insert(garbageList.begin(), destination(vid).begin(), destination(vid).end());
+                source(vid).clear();
+                destination(vid).clear();
                 for (Relation *r : garbageList) {
                     delete r;
                 }
+                destroy(vid);
                 
                 // Step 5: Release in reverse order
                 std::reverse(vertices.begin(), vertices.end());
                 for (int _vid : vertices) {
-                    idxToVertex[_vid]->seqNumber++;
-                    idxToVertex[_vid]->unlock();
+                    inc_seq(_vid);
+                    unlock(_vid);
                 }
             }
             return true;
         }
         
-        void for_each_edge(int v, std::function<bool(int)> fn) {
-            idxToVertex[v]->lock();
-            for (Relation *r : idxToVertex[v]->adjacency_list) {
+        void for_each_outgoing(int vid, std::function<bool(int)> fn) {
+            lock(v);
+            for (Relation *r : source(v)) {
                 if (!fn(r->dest)) {
                     break;
                 }
             }
-            idxToVertex[v]->unlock();
+            unlock(v);
+        }
+
+        void for_each_incoming(int vid, std::function<bool(int)> fn) {
+            lock(v);
+            for (Relation *r : destination(v)) {
+                if (!fn(r->src)) {
+                    break;
+                }
+            }
+            unlock(v);
         }
         
     private:
