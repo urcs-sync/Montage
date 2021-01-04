@@ -65,6 +65,13 @@ public:
      * @param fn Predicate function that performs work on outgoing edge and returns whether or not to continue processing.
      */
     virtual void for_each_incoming(int vid, std::function<bool(int)> fn) = 0;
+
+    /**
+     * @brief Obtains statistics including (|V|, |E|, average degree, vertex degrees, vertex degrees length)
+     * 
+     * @return std::tuple<int, int, double, int *> Tuple of |V|, |E|, average degree, and histogram
+     */
+    virtual std::tuple<int, int, double, int *, int> grab_stats() = 0; 
 };
 
 

@@ -8,20 +8,28 @@
 #include "RGraph.hpp"
 #include "Recoverable.hpp"
 #include <omp.h>
+#include <boost/histogram.hpp>
+#include <boost/format.hpp>
+#include <unistd.h>
 
-// void ErdosRenyi(RGraph *g, int numVertices, double p=0.5) {
-//     size_t x = numVertices;
-//     size_t numEdges = (x * x) * p;
-//     #pragma omp parallel 
-//     {
-//         std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + omp_get_thread_num());
-//         Recoverable::init_thread(omp_get_thread_num());
-//         #pragma omp for
-//         for (size_t i = 0; i < numEdges; i++) {
-//             g->add_edge(gen_p() % numVertices, gen_p() % numVertices, 1);
-//         }
-//     }
-// }
+static void print_stats(int numV, int numE, double averageDegree, int *vertexDegrees, int vertexDegreesLength) {
+    int maxDegree = 0;
+    for (auto i = 0; i < vertexDegreesLength; i++) {
+        maxDegree = max(maxDegree, vertexDegrees[i]);
+    }
+    std::cout << "|V|=" << numV << ",|E|=" << numE << ",average degree = " << averageDegree << ",maximum degree = " << maxDegree << std::endl;
+    using namespace boost::histogram;
+
+    auto h = make_histogram(axis::regular<>(maxDegree, 0, maxDegree));
+    for (auto i = 0; i < vertexDegreesLength; i++) {
+        h(vertexDegrees[i]);
+    }
+    for (auto&& x : indexed(h)) {
+        if (*x == 0) continue;
+      std::cout << boost::format("bin %i [ %.1f, %.1f ): %i\n")
+        % x.index() % x.bin().lower() % x.bin().upper() % *x;
+    }
+}
 
 class GraphTest : public Test {
     public:
@@ -55,7 +63,7 @@ class GraphTest : public Test {
             if (new_ops * gtc->task_num != total_ops) {
                 thd_ops[0] += (total_ops - new_ops * gtc->task_num);
             }
-
+            
             Rideable* ptr = gtc->allocRideable();
             g = dynamic_cast<RGraph*>(ptr);
             if(!g){
@@ -64,29 +72,16 @@ class GraphTest : public Test {
             
             /* set interval to inf so this won't be killed by timeout */
             gtc->interval = numeric_limits<double>::max();
+            auto stats = g->grab_stats();
+            std::apply(print_stats, stats);
         }
 
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             int tid = ltc->tid;
             std::mt19937_64 gen_p(ltc->seed);
-            std::mt19937_64 gen_v(ltc->seed + 1);
             for (size_t i = 0; i < thd_ops[ltc->tid]; i++) {
-                unsigned p = gen_p()%100;
-                int src = gen_v() % max_verts;
-                int dest = gen_v() % max_verts;
-                if (p<prop_inserts) {
-                    //std::cout << "Insert(" << src << ", " << dest << ")" << std::endl;
-                    g->add_edge(src, dest, 1);
-                } else if (p<prop_removes) {
-                    //std::cout << "Delete(" << src << ", " << dest << ")" << std::endl;
-                    g->for_each_edge(src, [&dest](int v) { dest = v; return false; });
-                    g->remove_edge(src, dest);
-                } else if (p < prop_lookup) {
-                    //std::cout << "Lookup(" << src << "," << dest << ")" << std::endl;
-                    g->has_edge(src, dest);
-                } else {
-                    g->clear_vertex(src);
-                }
+                // g->has_edge(0, 1, -1);
+                // if (true) break;
             }
             return thd_ops[ltc->tid];
         }
@@ -97,21 +92,7 @@ class GraphTest : public Test {
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             g->init_thread(gtc, ltc);
-            size_t x = max_verts;
-            size_t numEdges = (x * x) * 0.5;
-            std::random_device rd;
-            std::mt19937_64 gen_p(std::chrono::system_clock::now().time_since_epoch().count() + ltc->tid);
-            std::uniform_int_distribution<> distrib(0, max_verts - 1);
-            std::normal_distribution<double> norm(10,3);
-            std::default_random_engine generator;
-            for (uint64_t i = ltc->tid; i < max_verts; i += gtc->task_num) {
-                int n = max(1, (int) round(norm(generator)));
-                for (int j = 0; j < n; j++) {
-                    uint64_t k = round(distrib(gen_p));
-                    while (k == i) k = round(distrib(gen_p));
-                    g->add_edge(i, k, 1);
-                }
-            }
+            usleep(1 * 1000 * 1000);
         }
 };
 #endif

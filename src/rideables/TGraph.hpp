@@ -1,7 +1,7 @@
 /**
  * Author:      Louis Jenkins & Benjamin Valpey
  * Date:        31 Mar 2020
- * Filename:    PGraph.hpp
+ * Filename:    TGraph.hpp
  * Description: A simple implementation of a Transient Graph
  */
 
@@ -18,19 +18,47 @@
 #include <iterator>
 #include <unordered_set>
 #include "RCUTracker.hpp"
+#include <ratio>
+#include <cstdlib>
+
+// #pragma GCC optimize ("O0")
 
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
-template <size_t numVertices = 1024>
+template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad = 50>
 class TGraph : public RGraph{
 
     public:
+
+        // We use smart pointers in the unordered_set, but we can only lookup by a key allocated
+        // on the stack if and only if it is also wrapped into a smart pointer. We create a custom
+        // 'deleter' function to control whether or not it will try to delete the wrapped pointer below
+        // https://stackoverflow.com/a/17853770/4111188
+
+        template<class T>
+        struct maybe_deleter {
+            bool _delete;
+            explicit maybe_deleter(bool doIt = true) : _delete(doIt){}
+
+            void operator()(T *p) {
+                if (_delete) delete p;
+            }
+        };
+
+        template <class T>
+        using set_shared_ptr = std::shared_ptr<T>;
+
+        template <class T>
+        set_shared_ptr<T> make_find_ptr(T *raw) {
+            return set_shared_ptr<T>(raw, maybe_deleter<T>(false));
+        }
+
         class Relation;
         class Vertex {
             public:
-                std::unordered_set<std::shared_ptr<Relation>> adjacency_list;
-                std::unordered_set<std::shared_ptr<Relation>> dest_list;
+                std::unordered_set<set_shared_ptr<Relation>> adjacency_list;
+                std::unordered_set<set_shared_ptr<Relation>> dest_list;
                 int id;
                 int lbl;
                 Vertex(int id, int lbl): id(id), lbl(lbl){}
@@ -45,15 +73,6 @@ class TGraph : public RGraph{
                 int get_id() {
                     return id;
                 }
-
-                void lock() {
-                    lck.lock();
-                }
-
-                void unlock() {
-                    lck.unlock();
-                }
-
         };
 
         class Relation {
@@ -77,11 +96,59 @@ class TGraph : public RGraph{
             idxToVertex = new Vertex*[numVertices];
             vertexLocks = new std::atomic<bool>[numVertices];
             vertexSeqs = new uint32_t[numVertices];
-
-            // Initialize...
-            for (size_t i = 0; i < numVertices; i++) {
-                idxToVertex[i] = new Vertex(i, -1);
+            std::mt19937_64 gen(0xDEADBEEF);
+            std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
+            std::uniform_int_distribution<> coinflipRNG(0, 100);
+            std::cout << "Allocated core..." << std::endl;
+            // Fill to vertexLoad
+            for (int i = 0; i < numVertices; i++) {
+                if (coinflipRNG(gen) <= vertexLoad) {
+                    idxToVertex[i] = new Vertex(i,i);
+                } else {
+                    idxToVertex[i] = nullptr;
+                }
+                vertexLocks[i] = false;
+                vertexSeqs = 0;
             }
+
+            std::cout << "Filled vertexLoad" << std::endl;
+
+            // Fill to mean edges per vertex
+            for (int i = 0; i < numVertices; i++) {
+                for (int i = 0; i < meanEdgesPerVertex; i++) {
+                    if (idxToVertex[i] == nullptr) continue;
+                    int j = verticesRNG(gen);
+                    while (j == i) {
+                        j = verticesRNG(gen);
+                    }
+                    if (idxToVertex[j] != nullptr) {
+                        auto r = make_shared<Relation>(i,j,-1);
+                        source(i).insert(r);
+                        destination(j).insert(r);
+                    }
+                }
+            }
+            std::cout << "Filled mean edges per vertex" << std::endl;
+        }
+
+        // Obtain statistics of graph (|V|, |E|, average degree, vertex degrees)
+        // Not concurrent safe...
+        std::tuple<int, int, double, int *, int> grab_stats() {
+            int numV = 0;
+            int numE = 0;
+            int *degrees = new int[numVertices];
+            double averageEdgeDegree = 0;
+            for (auto i = 0; i < numVertices; i++) {
+                if (idxToVertex[i] != nullptr) {
+                    numV++;
+                    numE += source(i).size();
+                    degrees[i] = source(i).size() + destination(i).size();
+                } else {
+                    degrees[i] = 0;
+                }
+            }
+            averageEdgeDegree = numE / ((double) numV);
+            return std::make_tuple(numV, numE, averageEdgeDegree, degrees, numVertices);
         }
 
         Vertex** idxToVertex; // Transient set of transient vertices to index map
@@ -90,10 +157,10 @@ class TGraph : public RGraph{
 
         // Thread-safe and does not leak edges
         void clear() {
-            for (int i = 0; i < numVertices; i++) {
+            for (auto i = 0; i < numVertices; i++) {
                 lock(i);
             }
-            for (int i = 0; i < numVertices; i++) {
+            for (auto i = 0; i < numVertices; i++) {
                 for (Relation *r : idxToVertex[i]->adjacency_list) {
                     delete r;
                 }
@@ -128,7 +195,7 @@ class TGraph : public RGraph{
             }
 
             {
-                Relation *rel = new Relation(src, dest, weight);
+                std::shared_ptr<Relation> rel = std::make_shared<Relation>(src, dest, weight);
                 srcSet.insert(rel);
                 destSet.insert(rel);
                 inc_seq(src);
@@ -170,7 +237,7 @@ class TGraph : public RGraph{
             if (src == dest) return false;
             if (src > dest) {
                 lock(dest);
-                lock(src)
+                lock(src);
             } else {
                 lock(src);
                 lock(dest);
@@ -201,10 +268,10 @@ startOver:
                 std::vector<int> vertices;
                 lock(vid);
                 uint32_t seq = get_seq(vid);
-                for (Relation *r : source(vid)) {
+                for (auto r : source(vid)) {
                     vertices.push_back(r->dest);
                 }
-                for (Relation *r : destination(vid)) {
+                for (auto r : destination(vid)) {
                     vertices.push_back(r->src);
                 }
                 
@@ -246,14 +313,8 @@ startOver:
                 }
                 
                 // Step 4: Delete edges, clear set of src and dest edges, then delete the vertex itself
-                std::vector<Relation*> garbageList(source(vid).size() + destination(vid).size());
-                garbageList.insert(garbageList.begin(), source(vid).begin(), source(vid).end());
-                garbageList.insert(garbageList.begin(), destination(vid).begin(), destination(vid).end());
                 source(vid).clear();
                 destination(vid).clear();
-                for (Relation *r : garbageList) {
-                    delete r;
-                }
                 destroy(vid);
                 
                 // Step 5: Release in reverse order
@@ -267,23 +328,23 @@ startOver:
         }
         
         void for_each_outgoing(int vid, std::function<bool(int)> fn) {
-            lock(v);
-            for (Relation *r : source(v)) {
+            lock(vid);
+            for (auto r : source(vid)) {
                 if (!fn(r->dest)) {
                     break;
                 }
             }
-            unlock(v);
+            unlock(vid);
         }
 
         void for_each_incoming(int vid, std::function<bool(int)> fn) {
-            lock(v);
-            for (Relation *r : destination(v)) {
+            lock(vid);
+            for (auto r : destination(vid)) {
                 if (!fn(r->src)) {
                     break;
                 }
             }
-            unlock(v);
+            unlock(vid);
         }
         
     private:
@@ -315,33 +376,35 @@ startOver:
         }
 
         // Incoming edges
-        std::unordered_set<Relation*>& source(size_t idx) {
+        std::unordered_set<set_shared_ptr<Relation>>& source(int idx) {
             return idxToVertex[idx]->adjacency_list;
         }
 
         // Outgoing edges
-        std::unordered_set<Relation*>& destination(size_t idx) {
+        std::unordered_set<set_shared_ptr<Relation>>& destination(int idx) {
             return idxToVertex[idx]->dest_list;
         }
 
-        bool has_relation(std::unordered_set<Relation*>& set, Relation *r) {
-            auto search = set.find(r);
+        bool has_relation(std::unordered_set<set_shared_ptr<Relation>>& set, Relation *r) {
+            auto search = set.find(make_find_ptr(r));
             return search != set.end();
         }
 
-        void remove_relation(std::unordered_set<Relation*>& set, Relation *r) {
-            auto search = set.find(r);
+        void remove_relation(std::unordered_set<set_shared_ptr<Relation>>& set, Relation *r) {
+            auto search = set.find(make_find_ptr(r));
             if (search != set.end()) {
                 set.erase(search);
             }
         }
 };
 
-template <size_t numVertices = 1024>
+template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad = 50>
 class TGraphFactory : public RideableFactory{
     Rideable *build(GlobalTestConfig *gtc){
-        return new TGraph<numVertices>(gtc);
+        return new TGraph<numVertices, meanEdgesPerVertex, vertexLoad>(gtc);
     }
 };
+// #pragma GCC reset_options
 
 #endif
+
