@@ -80,8 +80,14 @@ class GraphTest : public Test {
             int tid = ltc->tid;
             std::mt19937_64 gen_p(ltc->seed);
             for (size_t i = 0; i < thd_ops[ltc->tid]; i++) {
-                // g->has_edge(0, 1, -1);
-                // if (true) break;
+                // Sketch:
+                // 1) Obtain metrics for average degree, make decision based on
+                // degree distribution, i.e. keep an array of pairs that are collected
+                // based on potential connectivity of the graph.
+                // 2) Use said metrics and data structures obtained from metrics to do insertions
+                // and removals in phases, split among threads.
+                // 3) Between each phase, print out metrics; log |V|, |E|, average degree, and maximum degree as a 
+                // datapoint to be plot later.
             }
             return thd_ops[ltc->tid];
         }
