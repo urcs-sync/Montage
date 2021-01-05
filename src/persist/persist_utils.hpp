@@ -180,6 +180,7 @@ public:
 
 // a fixed-sized circular buffer.
 // single producer, multiple consumer.
+// concurrent consumers may pop the same entry multiple times.
 template<typename T>
 class FixedCircBuffer{
     size_t cap;
@@ -205,9 +206,9 @@ public:
             return false;
         } else {
             // push x
-            payloads[pushed.ui.load(std::memory_order_acquire)%cap].ui = x;
+            payloads[curr_pushed%cap].ui = x;
             // advance pushed counter.
-            pushed.ui.fetch_add(1, std::memory_order_release);
+            pushed.ui.store(curr_pushed+1, std::memory_order_release);
             return true;
         }
     }
@@ -220,6 +221,7 @@ public:
             return false;
         }
         // try to pop the next unpopped entry
+        // TODO: read entry before CAS, otherwise it may get updated by producer.
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
             size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
@@ -238,6 +240,7 @@ public:
             // empty
             return false;
         }
+        // TODO: read entry before CAS, otherwise it may get updated by producer.
         // try to pop the next unpopped entry
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
             size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
@@ -258,6 +261,7 @@ public:
             // empty
             return;
         }
+        // TODO: read entry before CAS, otherwise it may get updated by producer.
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_pushed, std::memory_order_acq_rel)){
             curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
@@ -279,7 +283,7 @@ public:
         while(i < end){
             func(payloads[i].ui);
             i++;
-        }  
+        }
     }
     void clear(){
         pushed.ui = 0;

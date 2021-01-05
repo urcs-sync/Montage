@@ -154,6 +154,7 @@ namespace pds{
         }
     }
 
+    // TODO (Hs): possible to move these into .hpp for inlining?
     void EpochSys::register_update_pblk(PBlk* b, uint64_t c){
         // to_be_persisted[c%4].push(b);
         if (c == NULL_EPOCH){
