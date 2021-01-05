@@ -66,6 +66,8 @@ LIBITM_PATH = ./ext/libitm
 IDIRS:=./src ./src/utils ./src/rideables ./src/tests ./src/persist ./src/persist/api
 IDIRS+=./ext/ralloc/src
 IDIRS+=$(IMMER_DIR) $(NVM_MALLOC_DIR)/src/ 
+IDIRS+=./ext/pmdk/src/include
+IDIRS+=./ext/Clevel-Hashing/include
 
 # directory to put build artifacts (e.g. .o, .d files)
 ODIR:=./obj

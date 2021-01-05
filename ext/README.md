@@ -7,6 +7,8 @@
   - [4. pronto-v1.1](#4-pronto-v11)
   - [5. ralloc](#5-ralloc)
   - [6. threadcached and ycsb-tcd](#6-threadcached-and-ycsb-tcd)
+  - [7. pdmk](#7-pdmk)
+  - [8. Clevel-Hashing](#8-Clevel-Hashing)
 
 This directory contains code from other works, which may have their
 own license and authorship different from what Montage has. Please
@@ -136,3 +138,13 @@ yet, so please contact him for approval if you need to redistribute.
 Please refer to `threadcached.diff` in `./ext/threadcached` for all
 nontrivial difference between our version and the vanilla
 Threadcached.
+
+## 7. [pdmk](https://pmem.io/pmdk/)
+
+We include a copy of the [Persistent Memory Development Kit](https://pmem.io/pmdk/) (version 1.10) created by the PMDK team at Intel.
+
+## 8. [CLevel-Hashing](https://github.com/chenzhangyu/Clevel-Hashing)
+
+We use the copy of the library which is distributed with the [Clevel Hashing]([https://github.com/chenzhangyu/Clevel-Hashing) project, which implements the data structure described by the [2020 paper "Lock-Free Concurrent Level Hashing for Persistent Memory](https://www.usenix.org/system/files/atc20-chen.pdf) by Zhangyu Chen, Yu Hua, Bo Ding, and Pengfei Zuo from the Huazhong University of Science and Technology.
+
+This uses a modified version of the [libpmemobj++](https://pmem.io/libpmemobj-cpp/) library, which provides C++ bindings to [libpmemobj](https://pmem.io/pmdk/libpmemobj). The bindings were originally created by the [PDMK team](#7-pdmk).

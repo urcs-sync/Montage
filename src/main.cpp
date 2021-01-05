@@ -17,13 +17,13 @@
 // #include "MCASRBTree.hpp"
 // #include "MCASLinkList.hpp"
 // #include "MCASHMap.hpp"
-#include "CLevelHashTable.hpp"
 #include "MontageMSQueue.hpp"
 #include "MontageQueue.hpp"
 #include "MODQueue.hpp"
 #include "Queue.hpp"
 #include "MSQueue.hpp"
 #include "PriorityQueue.hpp"
+#include "clevel_hash.hpp"
 
 // #include "LinkedList.hpp"
 // #include "HOHHashTable.hpp"
@@ -109,7 +109,6 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new NVMSOFTHashTableFactory<string>(), "NVMSOFT");
 	gtc.addRideableOption(new MontageLfHashTableFactory<string>(), "MontageLfHashTable");
 	gtc.addRideableOption(new MontageNatarajanTreeFactory<string>(), "MontageNataTree");
-	gtc.addRideableOption(new CLevelHashTableFactory<string>(), "CLevelHashTable");
 
 	/* graphs */
 	gtc.addRideableOption(new TGraphFactory<numVertices>(), "TGraph");
