@@ -11,11 +11,13 @@ void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
     hwloc_set_cpubind(gtc->topology, 
         persister_affinities[worker_id]->cpuset,HWLOC_CPUBIND_THREAD);
     // spin until signaled to destruct.
+    // TODO (Hs): get rid of signal numbers and use just target epoch number.
     int last_signal = 0;
     int curr_signal = 0;
     int curr_epoch = NULL_EPOCH;
     while(!exit){
         // wait on worker (tid == worker_id) thread's signal.
+        // NOTE: lock here provides an sfence for epoch boundary
         std::unique_lock<std::mutex> lck(signal.bell);
         while(last_signal == curr_signal && !exit){
             curr_signal = signal.curr;
@@ -69,6 +71,8 @@ void PerEpoch::PerThreadDedicatedWait::persist_epoch(uint64_t c){
         signal.epoch = c;
     }
     signal.ring.notify_all();
+    // TODO: wait here until persisters finish.
+    // TODO: check the other (busy-waiting version) as well.
 }
 
 void PerEpoch::register_persist(PBlk* blk, size_t sz, uint64_t c){
