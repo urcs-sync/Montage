@@ -16,7 +16,7 @@ void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
         // wait on worker (tid == worker_id) thread's signal.
         // NOTE: lock here provides an sfence for epoch boundary
         std::unique_lock<std::mutex> lck(signal.bell);
-        signal.ring.wait(lck, [&]{return (curr_epoch != signal.epoch);});
+        signal.ring.wait(lck, [&]{return (curr_epoch != signal.epoch || exit);});
         curr_epoch = signal.epoch;
         // dumps
         con->container->pop_all_local(&do_persist, worker_id, curr_epoch);
@@ -42,6 +42,10 @@ PerEpoch::PerThreadDedicatedWait::PerThreadDedicatedWait(PerEpoch* _con, GlobalT
 PerEpoch::PerThreadDedicatedWait::~PerThreadDedicatedWait(){
     // signal exit of worker threads.
     exit.store(true, std::memory_order_release);
+    {
+        std::unique_lock<std::mutex> lck(signal.bell);
+        signal.epoch++;
+    }
     signal.ring.notify_all();
     // join threads
     for (auto i = persisters.begin(); i != persisters.end(); i++){
