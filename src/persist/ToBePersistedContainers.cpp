@@ -11,22 +11,17 @@ void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
     hwloc_set_cpubind(gtc->topology, 
         persister_affinities[worker_id]->cpuset,HWLOC_CPUBIND_THREAD);
     // spin until signaled to destruct.
-    // TODO (Hs): get rid of signal numbers and use just target epoch number.
-    int last_signal = 0;
-    int curr_signal = 0;
-    int curr_epoch = NULL_EPOCH;
+    int curr_epoch = INIT_EPOCH;
     while(!exit){
         // wait on worker (tid == worker_id) thread's signal.
         // NOTE: lock here provides an sfence for epoch boundary
         std::unique_lock<std::mutex> lck(signal.bell);
-        while(last_signal == curr_signal && !exit){
-            curr_signal = signal.curr;
-            signal.ring.wait(lck);
-            curr_epoch = signal.epoch;
-        }
-        last_signal = curr_signal;
+        signal.ring.wait(lck, [&]{return (curr_epoch != signal.epoch);});
+        curr_epoch = signal.epoch;
         // dumps
         con->container->pop_all_local(&do_persist, worker_id, curr_epoch);
+        // increment finish_counter
+        signal.finish_counter.fetch_add(1, std::memory_order_release);
     }
 }
 PerEpoch::PerThreadDedicatedWait::PerThreadDedicatedWait(PerEpoch* _con, GlobalTestConfig* _gtc) :
@@ -47,10 +42,6 @@ PerEpoch::PerThreadDedicatedWait::PerThreadDedicatedWait(PerEpoch* _con, GlobalT
 PerEpoch::PerThreadDedicatedWait::~PerThreadDedicatedWait(){
     // signal exit of worker threads.
     exit.store(true, std::memory_order_release);
-    {
-        std::unique_lock<std::mutex> lck(signal.bell);
-        signal.curr++;
-    }
     signal.ring.notify_all();
     // join threads
     for (auto i = persisters.begin(); i != persisters.end(); i++){
@@ -64,15 +55,18 @@ void PerEpoch::do_persist(std::pair<void*, size_t>& addr_size){
         addr_size.first, addr_size.second);
 }
 void PerEpoch::PerThreadDedicatedWait::persist_epoch(uint64_t c){
+    assert(c > last_persisted);
+    // set finish_counter to 0.
+    signal.finish_counter.store(0, std::memory_order_release);
     // notify hyperthreads.
     {
         std::unique_lock<std::mutex> lck(signal.bell);
-        signal.curr++;
         signal.epoch = c;
     }
     signal.ring.notify_all();
-    // TODO: wait here until persisters finish.
-    // TODO: check the other (busy-waiting version) as well.
+    // wait here until persisters finish.
+    while(signal.finish_counter.load(std::memory_order_acquire) < gtc->task_num);
+    last_persisted = c;
 }
 
 void PerEpoch::register_persist(PBlk* blk, size_t sz, uint64_t c){
@@ -179,12 +173,12 @@ void BufferedWB::PerThreadDedicatedBusy::persister_main(int worker_id){
             }
         }
         curr_epoch = signals[worker_id].epoch;
-        signals[worker_id].ack.fetch_add(1, std::memory_order_release);
-        last_signal = curr_signal;
         // dumps
         for (int i = 0; i < con->dump_size; i++){
             con->container->try_pop_local(&do_persist, worker_id, curr_epoch);
         }
+        signals[worker_id].ack.fetch_add(1, std::memory_order_release);
+        last_signal = curr_signal;
     }
 }
 BufferedWB::PerThreadDedicatedBusy::PerThreadDedicatedBusy(BufferedWB* _con, GlobalTestConfig* _gtc) :
