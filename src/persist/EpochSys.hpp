@@ -145,8 +145,6 @@ public:
     /* static */
     static thread_local int tid;
     
-    std::mutex dedicated_epoch_advancer_lock;
-
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
 
@@ -158,18 +156,18 @@ public:
     }
 
     void flush(){
-        for (int i = 0; i < 4; i++){
-            advance_epoch_dedicated();
+        for (int i = 0; i < 2; i++){
+            sync(NULL_EPOCH);
         }
     }
 
     ~EpochSys(){
         // std::cout<<"epochsys descructor called"<<std::endl;
         trans_tracker->finalize();
+        flush();
         if (epoch_advancer){
             delete epoch_advancer;
         }
-        flush();
         // std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
         delete trans_tracker;
         delete to_be_persisted;
