@@ -220,8 +220,9 @@ public:
             // empty
             return false;
         }
+        // consume the to-be-popped entry.
+        func(payloads[curr_popped%cap].ui);
         // try to pop the next unpopped entry
-        // TODO: read entry before CAS, otherwise it may get updated by producer.
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
             size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
@@ -231,7 +232,6 @@ public:
             }
         }
         // successfully popped.
-        func(payloads[curr_popped%cap].ui);
         return true;
     }
     bool try_pop(T& x){
@@ -240,7 +240,8 @@ public:
             // empty
             return false;
         }
-        // TODO: read entry before CAS, otherwise it may get updated by producer.
+        // consume the to-be-popped entry.
+        x = payloads[curr_popped%cap].ui;
         // try to pop the next unpopped entry
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
             size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
@@ -251,38 +252,34 @@ public:
             }
         }
         // successfully popped.
-        x = payloads[curr_popped%cap].ui;
         return true;
     }
     void pop_all(const std::function<void(T& x)>& func){
-        size_t curr_popped = popped.ui.load(std::memory_order_acquire);
-        size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
-        if (curr_popped == curr_pushed){
-            // empty
-            return;
-        }
-        // TODO: read entry before CAS, otherwise it may get updated by producer.
-        while(!popped.ui.compare_exchange_strong(curr_popped, curr_pushed, std::memory_order_acq_rel)){
-            curr_pushed = pushed.ui.load(std::memory_order_acquire);
-            assert(curr_popped <= curr_pushed);
+        while (true){
+            size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+            size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
             if (curr_popped == curr_pushed){
                 // empty
                 return;
             }
-        }
-        // successfully popped from curr_popped to curr_pushed.
-        size_t i = curr_popped % cap;
-        size_t end = (i + (curr_pushed - curr_popped)) % cap;
-        if (end <= i){ // wrap around.
-            while(i < cap){
+            // consume all entries.
+            size_t i = curr_popped % cap;
+            size_t end = (i + (curr_pushed - curr_popped)) % cap;
+            if (end <= i){ // wrap around.
+                while(i < cap){
+                    func(payloads[i].ui);
+                    i++;
+                }
+                i = 0;
+            }
+            while(i < end){
                 func(payloads[i].ui);
                 i++;
             }
-            i = 0;
-        }
-        while(i < end){
-            func(payloads[i].ui);
-            i++;
+            // try to CAS the container to empty. If faild, try over.
+            if (popped.ui.compare_exchange_strong(curr_popped, curr_pushed, std::memory_order_acq_rel)){
+                return;
+            }
         }
     }
     void clear(){
