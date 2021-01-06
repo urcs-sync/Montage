@@ -170,6 +170,7 @@ public:
             delete epoch_advancer;
         }
         flush();
+        // std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;

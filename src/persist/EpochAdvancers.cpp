@@ -89,7 +89,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
 }
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
-    uint64_t target_epoch = c+2;
+    uint64_t target_epoch = (c == NULL_EPOCH)? esys->get_epoch()+2 : c+2;
     std::unique_lock<std::mutex> lk(sync_signal.bell);
     sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
     sync_signal.advancer_ring.notify_all();

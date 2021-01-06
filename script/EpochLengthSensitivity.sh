@@ -5,7 +5,7 @@ cd "$( dirname "${BASH_SOURCE[0]}" )"
 cd ..
 make clean; make
 
-base="bin/main -r10 -m3 -i30"
+base_list=("bin/main -r10 -m3 -i30" "bin/main -r2 -m0 -i30")
 output="data/sensitivity.txt"
 
 args_list=(
@@ -21,15 +21,17 @@ args_list=(
     "-t40 -dPersistStrat=BufferedWB -dPersister=Worker -dFree=No"
 )
 
-for args in "${args_list[@]}"; do
-    for unit in "Microsecond" "Millisecond"; do
-        for length in 1 5 10 50 100 500; do
-            echo $args "-dEpochLengthUnit=$unit -dEpochLength=$length" >> $output
-            rm -rf /mnt/pmem/hwen5_*; $base -dEpochLengthUnit=$unit -dEpochLength=$length $args >> $output
+for base in "${base_list[@]}"; do
+    for args in "${args_list[@]}"; do
+        for unit in "Microsecond" "Millisecond"; do
+            for length in 1 5 10 50 100 500; do
+                echo -n "$args -dEpochLengthUnit=$unit -dEpochLength=$length," >> $output
+                rm -rf /mnt/pmem/${USER}_*; $base -dEpochLengthUnit=$unit -dEpochLength=$length $args >> $output
+            done
         done
-    done
-    for length in 1 5 8 10 12 15; do
-        echo $args "-dEpochLengthUnit=Second -dEpochLength=$length" >> $output
-        rm -rf /mnt/pmem/hwen5_*; $base -dEpochLengthUnit=Second -dEpochLength=$length $args >> $output
+        for length in 1 5 8 10 12 15; do
+            echo -n "$args -dEpochLengthUnit=Second -dEpochLength=$length," >> $output
+            rm -rf /mnt/pmem/${USER}_*; $base -dEpochLengthUnit=Second -dEpochLength=$length $args >> $output
+        done
     done
 done
