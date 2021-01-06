@@ -144,8 +144,7 @@ int main(int argc, char *argv[])
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
-	gtc.addTestOption(new GraphTest(1000000,numVertices,33,33,33, 1), "GraphTest:1m:i33r33l33:c1");
-	gtc.addTestOption(new GraphTest(1000000,numVertices,25,25,25,25), "GraphTest:1m:i25r25l25:c25");
+	gtc.addTestOption(new GraphTest(1000000,numVertices, meanEdgesPerVertex), "GraphTest:1m:i33r33l33:c1");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");

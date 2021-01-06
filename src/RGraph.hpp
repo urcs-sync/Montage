@@ -26,6 +26,15 @@ public:
      * @return True if the edge exists
      */
     virtual bool remove_edge(int src, int dest) = 0;
+
+    /**
+     * @brief Removes any edge from the selected vertex.
+     * 
+     * @param src The integer id of the source node.
+     * @return true If an edge can be removed.
+     * @return false If an edge cannot be removed, i.e. non-allocated vertex
+     */
+    virtual bool remove_any_edge(int src) = 0;
     
     /**
      * @brief Removes vertex from graph, along with the incoming and outgoing edges.

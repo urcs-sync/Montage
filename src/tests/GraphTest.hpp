@@ -11,6 +11,7 @@
 #include <boost/histogram.hpp>
 #include <boost/format.hpp>
 #include <unistd.h>
+#include <cmath>
 
 static void print_stats(int numV, int numE, double averageDegree, int *vertexDegrees, int vertexDegreesLength) {
     int maxDegree = 0;
@@ -26,8 +27,8 @@ static void print_stats(int numV, int numE, double averageDegree, int *vertexDeg
     }
     for (auto&& x : indexed(h)) {
         if (*x == 0) continue;
-      std::cout << boost::format("bin %i [ %.1f, %.1f ): %i\n")
-        % x.index() % x.bin().lower() % x.bin().upper() % *x;
+      std::cout << boost::format("bin %i: %i\n")
+        % x.index() % *x;
     }
 }
 
@@ -37,22 +38,33 @@ class GraphTest : public Test {
         uint64_t total_ops;
         uint64_t *thd_ops;
         uint64_t max_verts;
-        int pi;
-        int pr;
-        int pl;
-        int pc;
-        unsigned prop_inserts, prop_removes, prop_lookup, prop_clear;
+        int insertionProb;
+        int removalProb;
+        int lookupProb;
+        int clearProb;
+        int desiredAvgDegree;
+        std::atomic<int> workingThreads;
+        std::atomic<int> threadsDone;
 
-        GraphTest(uint64_t numOps, uint64_t max_verts, int insertP, int removeP, int lookupP, int clearP) :
-            total_ops(numOps), max_verts(max_verts), pi(insertP), pr(removeP), pl(lookupP), pc(clearP) {
-                if (insertP + removeP + lookupP + clearP != 100) {
-                    errexit("Probability of insert/remove/lookup must accumulate to 100!");
-                }
-                prop_inserts = pi;
-                prop_removes = pi + pr;
-                prop_lookup = pi + pr + pl;
-                prop_clear = pi + pr + pl + pc;
-            }
+
+        GraphTest(uint64_t numOps, uint64_t max_verts, int desiredAvgDegree) :
+            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree) {
+        }
+
+        // New ratio is based on delta = averageDegree - desiredAvgDegree
+        // When delta = 0, it defaults to (33%,33%,33%,1%), but we adjust based on delta such that:
+        // 1) insertProb (33% + delta) + removalProb (33% - delta) = 66%
+        // 2) clearProb = min(0, max(1, delta / 33%))
+        // 3) lookupProb = 100% - insertProb  - removalProb - clearProb
+        void update_ratio(double averageDegree) {
+            double ratio = min(2.0, max(desiredAvgDegree / averageDegree - 1, averageDegree / desiredAvgDegree - 1));
+            int delta = 1650 * ratio; // 16.5% is half of 33%
+            insertionProb = 3300 + delta; 
+            removalProb = 3300 - delta;
+            clearProb = min(0.0, max(1.0, delta / 3300.0));
+            lookupProb = 10000 - insertionProb - removalProb - clearProb;
+            std::cout << "(" << insertionProb / 100.0 << "," << removalProb / 100.0 << "," << lookupProb / 100.0 << "," << clearProb / 100.0 << ")" << std::endl;
+        }
 
         void init(GlobalTestConfig *gtc) {
             uint64_t new_ops = total_ops / gtc->task_num;
@@ -74,20 +86,44 @@ class GraphTest : public Test {
             gtc->interval = numeric_limits<double>::max();
             auto stats = g->grab_stats();
             std::apply(print_stats, stats);
+            update_ratio(std::get<2>(stats));
+            workingThreads = gtc->task_num;
+            threadsDone = 0;
         }
 
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             int tid = ltc->tid;
             std::mt19937_64 gen_p(ltc->seed);
+            std::mt19937_64 gen_v(ltc->seed + 1);
+            std::uniform_int_distribution<> dist(0,9999);
+            std::uniform_int_distribution<> distv(0,max_verts-1);
             for (size_t i = 0; i < thd_ops[ltc->tid]; i++) {
-                // Sketch:
-                // 1) Obtain metrics for average degree, make decision based on
-                // degree distribution, i.e. keep an array of pairs that are collected
-                // based on potential connectivity of the graph.
-                // 2) Use said metrics and data structures obtained from metrics to do insertions
-                // and removals in phases, split among threads.
-                // 3) Between each phase, print out metrics; log |V|, |E|, average degree, and maximum degree as a 
-                // datapoint to be plot later.
+                if ((i+1) % 1000 == 0) {
+                    threadsDone++;
+                    while (threadsDone != workingThreads) {
+                        pthread_yield();
+                    }
+                    if (tid == 0) {
+                        auto stats = g->grab_stats();
+                        std::apply(print_stats, stats);
+                        update_ratio(std::get<2>(stats));
+                        threadsDone = 0;
+                    } else {
+                        while (threadsDone == workingThreads) {
+                            pthread_yield();
+                        }
+                    }
+                }
+                int rng = dist(gen_p);
+                if (rng <= insertionProb) {
+                    g->add_edge(distv(gen_v), distv(gen_v), -1);
+                } else if (rng <= insertionProb + removalProb) {
+                    g->remove_any_edge(distv(gen_v));
+                } else if (rng <= insertionProb + removalProb + lookupProb) {
+                    g->has_edge(distv(gen_v), distv(gen_v));
+                } else {
+                    g->remove_vertex(distv(gen_v));
+                }
             }
             return thd_ops[ltc->tid];
         }
@@ -98,7 +134,6 @@ class GraphTest : public Test {
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             g->init_thread(gtc, ltc);
-            usleep(1 * 1000 * 1000);
         }
 };
 #endif

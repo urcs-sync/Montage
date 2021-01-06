@@ -260,6 +260,36 @@ class TGraph : public RGraph{
             }
             return true;
         }
+
+        bool remove_any_edge(int vid) {
+            lock(vid);
+            int src = -1;
+            int dest = -1;
+            
+            if (idxToVertex[src] != nullptr) {
+                // Check source first
+                auto search = source(src).begin();
+                if (search == source(src).end()) {
+                    // Then destination
+                    search = destination(src).begin();
+                    if (search == destination(src).end()) {
+                        goto failure;
+                    }
+                }
+                std::shared_ptr<Relation> r = *search;
+                src = r->src;
+                dest = r->dest;
+            }
+            
+        failure:
+            unlock(vid);
+            if (src == -1 || dest == -1) {
+                return false;
+            } else {
+                return remove_edge(src, dest);
+            }
+        }
+
         
         bool remove_vertex(int vid) {
 startOver:
