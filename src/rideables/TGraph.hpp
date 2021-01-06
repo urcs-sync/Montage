@@ -93,9 +93,9 @@ class TGraph : public RGraph{
 
         // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
-            idxToVertex = new Vertex*[numVertices];
-            vertexLocks = new std::atomic<bool>[numVertices];
-            vertexSeqs = new uint32_t[numVertices];
+            this->idxToVertex = new Vertex*[numVertices];
+            this->vertexLocks = new std::atomic<bool>[numVertices];
+            this->vertexSeqs = new uint32_t[numVertices];
             std::mt19937_64 gen(0xDEADBEEF);
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
@@ -108,14 +108,14 @@ class TGraph : public RGraph{
                     idxToVertex[i] = nullptr;
                 }
                 vertexLocks[i] = false;
-                vertexSeqs = 0;
+                vertexSeqs[i] = 0;
             }
 
             std::cout << "Filled vertexLoad" << std::endl;
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                for (int i = 0; i < meanEdgesPerVertex; i++) {
+                for (int i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
                     if (idxToVertex[i] == nullptr) continue;
                     int j = verticesRNG(gen);
                     while (j == i) {
@@ -185,6 +185,13 @@ class TGraph : public RGraph{
                 lock(dest);
             }
             
+            if (idxToVertex[src] == nullptr) {
+                idxToVertex[src] = new Vertex(src, src);
+            }
+            if (idxToVertex[dest] == nullptr) {
+                idxToVertex[dest] = new Vertex(dest, dest);
+            }
+
             Relation r(src,dest,weight);
             auto& srcSet = source(src);
             auto& destSet = destination(dest);
@@ -220,6 +227,10 @@ class TGraph : public RGraph{
             
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
             lock(src);
+            if (idxToVertex[src] == nullptr) {
+                unlock(src);
+                return false;
+            }
             Relation r(src, dest, -1);
             retval = has_relation(source(src), &r);
             unlock(src);
@@ -243,7 +254,7 @@ class TGraph : public RGraph{
                 lock(dest);
             }
             
-            {
+            if (idxToVertex[src] != nullptr && idxToVertex[dest] != nullptr) {
                 Relation r(src, dest, -1);
                 remove_relation(source(src), &r);
                 remove_relation(destination(dest), &r);
@@ -266,13 +277,13 @@ class TGraph : public RGraph{
             int src = -1;
             int dest = -1;
             
-            if (idxToVertex[src] != nullptr) {
+            if (idxToVertex[vid] != nullptr) {
                 // Check source first
-                auto search = source(src).begin();
-                if (search == source(src).end()) {
+                auto search = source(vid).begin();
+                if (search == source(vid).end()) {
                     // Then destination
-                    search = destination(src).begin();
-                    if (search == destination(src).end()) {
+                    search = destination(vid).begin();
+                    if (search == destination(vid).end()) {
                         goto failure;
                     }
                 }
@@ -297,6 +308,10 @@ startOver:
                 // Step 1: Acquire vertex and collect neighbors...
                 std::vector<int> vertices;
                 lock(vid);
+                if (idxToVertex[vid] == nullptr) {
+                    unlock(vid);
+                    return false;
+                }
                 uint32_t seq = get_seq(vid);
                 for (auto r : source(vid)) {
                     vertices.push_back(r->dest);

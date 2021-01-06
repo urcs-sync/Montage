@@ -57,12 +57,14 @@ class GraphTest : public Test {
         // 2) clearProb = min(0, max(1, delta / 33%))
         // 3) lookupProb = 100% - insertProb  - removalProb - clearProb
         void update_ratio(double averageDegree) {
-            double ratio = min(2.0, max(desiredAvgDegree / averageDegree - 1, averageDegree / desiredAvgDegree - 1));
-            int delta = 1650 * ratio; // 16.5% is half of 33%
+            int sign = averageDegree > desiredAvgDegree ? -1 : averageDegree < desiredAvgDegree ? 1 : 0;
+            double ratio = min(2.0, max((double) desiredAvgDegree / averageDegree - 1, averageDegree / (double) desiredAvgDegree - 1));
+            int delta = 1650 * ratio * sign; // 16.5% is half of 33%
             insertionProb = 3300 + delta; 
             removalProb = 3300 - delta;
-            clearProb = min(0.0, max(1.0, delta / 3300.0));
+            clearProb = min(0.0, max(1.0, (double) delta / 3300.0)) * 100;
             lookupProb = 10000 - insertionProb - removalProb - clearProb;
+            std::cout << "sign(" << sign << "), ratio(" << ratio << "), delta(" << delta << ")" << std::endl;
             std::cout << "(" << insertionProb / 100.0 << "," << removalProb / 100.0 << "," << lookupProb / 100.0 << "," << clearProb / 100.0 << ")" << std::endl;
         }
 
@@ -116,12 +118,16 @@ class GraphTest : public Test {
                 }
                 int rng = dist(gen_p);
                 if (rng <= insertionProb) {
+                    // std::cout << "rng(" << rng << ") is add_edge <= " << insertionProb << std::endl; 
                     g->add_edge(distv(gen_v), distv(gen_v), -1);
                 } else if (rng <= insertionProb + removalProb) {
+                    // std::cout << "rng(" << rng << ") is remove_any_edge <= " << insertionProb + removalProb << std::endl; 
                     g->remove_any_edge(distv(gen_v));
                 } else if (rng <= insertionProb + removalProb + lookupProb) {
+                    // std::cout << "rng(" << rng << ") is has_edge <= " << insertionProb + removalProb + lookupProb << std::endl; 
                     g->has_edge(distv(gen_v), distv(gen_v));
                 } else {
+                    // std::cout << "rng(" << rng << ") is remove_vertex..."; 
                     g->remove_vertex(distv(gen_v));
                 }
             }
