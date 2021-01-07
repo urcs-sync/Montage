@@ -170,9 +170,6 @@ class TGraph : public RGraph{
             }
             
 
-            Relation r(src,dest,weight);
-            auto& srcSet = source(src);
-            auto& destSet = destination(dest);
             
             // Note: We do not create a vertex if one is not found
             // also we do not add an edge even if it is found some of the time
@@ -185,6 +182,10 @@ class TGraph : public RGraph{
                 assert(has_relation(destSet, &r));
                 goto exitEarly;
             }
+            
+            Relation r(src,dest,weight);
+            auto& srcSet = source(src);
+            auto& destSet = destination(dest);
 
             {
                 Relation *out = new Relation(src, dest, weight);
@@ -327,7 +328,7 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
-                    if (!(idxToVertex[_vid] != nullptr || get_seq(vid) != seq)) {
+                    if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
                             if (r->dest == _vid)
                             std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
@@ -336,6 +337,7 @@ startOver:
                             if (r->src == _vid)
                             std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
                         }
+                        std::abort();
                     }
                 }
 
