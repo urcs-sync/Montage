@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
 {
 	GlobalTestConfig gtc;
 	const size_t numVertices = 1024;
-	const size_t meanEdgesPerVertex = 20;
+	const size_t meanEdgesPerVertex = 128;
 	const size_t vertexLoad = 50;
 
 	/* queues */
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
-	gtc.addTestOption(new GraphTest(1000000,numVertices, meanEdgesPerVertex), "GraphTest:1m:i33r33l33:c1");
+	gtc.addTestOption(new GraphTest(1024,numVertices, meanEdgesPerVertex), "GraphTest:1m:i33r33l33:c1");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");

@@ -51,23 +51,6 @@ class GraphTest : public Test {
             total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree) {
         }
 
-        // New ratio is based on delta = averageDegree - desiredAvgDegree
-        // When delta = 0, it defaults to (33%,33%,33%,1%), but we adjust based on delta such that:
-        // 1) insertProb (33% + delta) + removalProb (33% - delta) = 66%
-        // 2) clearProb = min(0, max(1, delta / 33%))
-        // 3) lookupProb = 100% - insertProb  - removalProb - clearProb
-        void update_ratio(double averageDegree) {
-            int sign = averageDegree > desiredAvgDegree ? -1 : averageDegree < desiredAvgDegree ? 1 : 0;
-            double ratio = min(2.0, max((double) desiredAvgDegree / averageDegree - 1, averageDegree / (double) desiredAvgDegree - 1));
-            int delta = 1650 * ratio * sign; // 16.5% is half of 33%
-            insertionProb = 3300 + delta; 
-            removalProb = 3300 - delta;
-            clearProb = min(0.0, max(1.0, (double) delta / 3300.0)) * 100;
-            lookupProb = 10000 - insertionProb - removalProb - clearProb;
-            std::cout << "sign(" << sign << "), ratio(" << ratio << "), delta(" << delta << ")" << std::endl;
-            std::cout << "(" << insertionProb / 100.0 << "," << removalProb / 100.0 << "," << lookupProb / 100.0 << "," << clearProb / 100.0 << ")" << std::endl;
-        }
-
         void init(GlobalTestConfig *gtc) {
             uint64_t new_ops = total_ops / gtc->task_num;
             thd_ops = new uint64_t[gtc->task_num];
@@ -88,7 +71,10 @@ class GraphTest : public Test {
             gtc->interval = numeric_limits<double>::max();
             auto stats = g->grab_stats();
             std::apply(print_stats, stats);
-            update_ratio(std::get<2>(stats));
+            insertionProb = 3300;
+            removalProb = 3300;
+            lookupProb = 1650;
+            clearProb = 1650;
             workingThreads = gtc->task_num;
             threadsDone = 0;
         }
@@ -99,33 +85,17 @@ class GraphTest : public Test {
             std::mt19937_64 gen_v(ltc->seed + 1);
             std::uniform_int_distribution<> dist(0,9999);
             std::uniform_int_distribution<> distv(0,max_verts-1);
-            for (size_t i = 0; i < thd_ops[ltc->tid]; i++) {
-                if ((i+1) % 1000 == 0) {
-                    threadsDone++;
-                    while (threadsDone != workingThreads) {
-                        pthread_yield();
-                    }
-                    if (tid == 0) {
-                        auto stats = g->grab_stats();
-                        std::apply(print_stats, stats);
-                        update_ratio(std::get<2>(stats));
-                        threadsDone = 0;
-                    } else {
-                        while (threadsDone == workingThreads) {
-                            pthread_yield();
-                        }
-                    }
-                }
-                int rng = dist(gen_p);
+            int rng = dist(gen_p);
+            for (size_t i = 0; i < thd_ops[tid]; i++) {
                 if (rng <= insertionProb) {
                     // std::cout << "rng(" << rng << ") is add_edge <= " << insertionProb << std::endl; 
                     g->add_edge(distv(gen_v), distv(gen_v), -1);
                 } else if (rng <= insertionProb + removalProb) {
                     // std::cout << "rng(" << rng << ") is remove_any_edge <= " << insertionProb + removalProb << std::endl; 
-                    g->remove_any_edge(distv(gen_v));
+                    g->remove_edge(distv(gen_v), distv(gen_v));
                 } else if (rng <= insertionProb + removalProb + lookupProb) {
                     // std::cout << "rng(" << rng << ") is has_edge <= " << insertionProb + removalProb + lookupProb << std::endl; 
-                    g->has_edge(distv(gen_v), distv(gen_v));
+                    g->add_vertex(distv(gen_v));
                 } else {
                     // std::cout << "rng(" << rng << ") is remove_vertex..."; 
                     g->remove_vertex(distv(gen_v));
@@ -135,6 +105,8 @@ class GraphTest : public Test {
         }
 
         void cleanup(GlobalTestConfig *gtc) {
+            auto stats = g->grab_stats();
+            std::apply(print_stats, stats);
             delete g;
         }
 

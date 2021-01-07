@@ -36,29 +36,11 @@ class TGraph : public RGraph{
         // 'deleter' function to control whether or not it will try to delete the wrapped pointer below
         // https://stackoverflow.com/a/17853770/4111188
 
-        template<class T>
-        struct maybe_deleter {
-            bool _delete;
-            explicit maybe_deleter(bool doIt = true) : _delete(doIt){}
-
-            void operator()(T *p) {
-                if (_delete) delete p;
-            }
-        };
-
-        template <class T>
-        using set_shared_ptr = std::shared_ptr<T>;
-
-        template <class T>
-        set_shared_ptr<T> make_find_ptr(T *raw) {
-            return set_shared_ptr<T>(raw, maybe_deleter<T>(false));
-        }
-
         class Relation;
         class Vertex {
             public:
-                std::unordered_set<set_shared_ptr<Relation>> adjacency_list;
-                std::unordered_set<set_shared_ptr<Relation>> dest_list;
+                std::unordered_set<Relation*> adjacency_list;
+                std::unordered_set<Relation*> dest_list;
                 int id;
                 int lbl;
                 Vertex(int id, int lbl): id(id), lbl(lbl){}
@@ -93,6 +75,7 @@ class TGraph : public RGraph{
 
         // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
+            srand(time(NULL));
             this->idxToVertex = new Vertex*[numVertices];
             this->vertexLocks = new std::atomic<bool>[numVertices];
             this->vertexSeqs = new uint32_t[numVertices];
@@ -115,16 +98,17 @@ class TGraph : public RGraph{
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                for (int i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
-                    if (idxToVertex[i] == nullptr) continue;
-                    int j = verticesRNG(gen);
-                    while (j == i) {
-                        j = verticesRNG(gen);
+                if (idxToVertex[i] == nullptr) continue;
+                for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
+                    int k = verticesRNG(gen);
+                    while (k == i) {
+                        k = verticesRNG(gen);
                     }
-                    if (idxToVertex[j] != nullptr) {
-                        auto r = make_shared<Relation>(i,j,-1);
-                        source(i).insert(r);
-                        destination(j).insert(r);
+                    if (idxToVertex[k] != nullptr) {
+                        Relation *in = new Relation(i, k, -1);
+                        Relation *out = new Relation(i, k, -1);
+                        source(i).insert(in);
+                        destination(k).insert(out);
                     }
                 }
             }
@@ -185,16 +169,17 @@ class TGraph : public RGraph{
                 lock(dest);
             }
             
-            if (idxToVertex[src] == nullptr) {
-                idxToVertex[src] = new Vertex(src, src);
-            }
-            if (idxToVertex[dest] == nullptr) {
-                idxToVertex[dest] = new Vertex(dest, dest);
-            }
 
             Relation r(src,dest,weight);
             auto& srcSet = source(src);
             auto& destSet = destination(dest);
+            
+            // Note: We do not create a vertex if one is not found
+            // also we do not add an edge even if it is found some of the time
+            // to enable even constant load factor
+            if (idxToVertex[src] == nullptr || idxToVertex[dest] == nullptr) {
+                goto exitEarly;
+            }
             if (has_relation(srcSet, &r)) {
                 // Sanity check
                 assert(has_relation(destSet, &r));
@@ -202,9 +187,10 @@ class TGraph : public RGraph{
             }
 
             {
-                std::shared_ptr<Relation> rel = std::make_shared<Relation>(src, dest, weight);
-                srcSet.insert(rel);
-                destSet.insert(rel);
+                Relation *out = new Relation(src, dest, weight);
+                Relation *in = new Relation(src, dest, weight);
+                srcSet.insert(out);
+                destSet.insert(in);
                 inc_seq(src);
                 inc_seq(dest);
                 retval = true;
@@ -272,36 +258,49 @@ class TGraph : public RGraph{
             return true;
         }
 
-        bool remove_any_edge(int vid) {
-            lock(vid);
-            int src = -1;
-            int dest = -1;
-            
-            if (idxToVertex[vid] != nullptr) {
-                // Check source first
-                auto search = source(vid).begin();
-                if (search == source(vid).end()) {
-                    // Then destination
-                    search = destination(vid).begin();
-                    if (search == destination(vid).end()) {
-                        goto failure;
-                    }
+        bool add_vertex(int vid) {
+            std::mt19937_64 vertexGen;
+            std::uniform_int_distribution<> uniformVertex(0,numVertices);
+            bool retval = true;
+            // Randomly sample vertices...
+            std::vector<int> vec(meanEdgesPerVertex);
+            for (size_t i = 0; i < meanEdgesPerVertex; i++) {
+                int u = uniformVertex(vertexGen);
+                while (u == i) {
+                    u = uniformVertex(vertexGen);
                 }
-                std::shared_ptr<Relation> r = *search;
-                src = r->src;
-                dest = r->dest;
+                vec.push_back(u);
             }
-            
-        failure:
-            unlock(vid);
-            if (src == -1 || dest == -1) {
-                return false;
+            vec.push_back(vid);
+            std::sort(vec.begin(), vec.end()); 
+            vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+
+            for (int u : vec) {
+                lock(u);
+            }
+
+            if (idxToVertex[vid] == nullptr) {
+                idxToVertex[vid] = new Vertex(vid, vid);
+                for (int u : vec) {
+                    if (idxToVertex[u] == nullptr) continue;
+                    if (u == vid) continue;
+                    Relation *in = new Relation(vid, u, -1);
+                    Relation *out = new Relation(vid, u, -1);
+                    source(vid).insert(in);
+                    destination(u).insert(out);
+                }
             } else {
-                return remove_edge(src, dest);
+                retval = false;
             }
+
+            std::reverse(vec.begin(), vec.end());
+            for (int u : vec) {
+                if (idxToVertex[vid] != nullptr && idxToVertex[u] != nullptr) inc_seq(u);
+                unlock(u);
+            }
+            return retval;
         }
 
-        
         bool remove_vertex(int vid) {
 startOver:
             {
@@ -328,6 +327,16 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
+                    if (!(idxToVertex[_vid] != nullptr || get_seq(vid) != seq)) {
+                        for (auto r : source(vid)) {
+                            if (r->dest == _vid)
+                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                        }
+                        for (auto r : destination(vid)) {
+                            if (r->src == _vid)
+                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                        }
+                    }
                 }
 
                 // Has vertex been changed? Start over
@@ -344,25 +353,20 @@ startOver:
                 // vertices that relate to this vertex
                 for (int other : vertices) {
                     if (other == vid) continue;
-                    std::vector<Relation*> toRemoveList;
 
-                    Relation src(other, vid, -1);
-                    Relation dst(vid, other, -1);
-                    remove_relation(source(other), &src);
-                    remove_relation(destination(other), &dst);
-
-                    // Last relation, delete this vertex
-                    if (source(other).size() == 0 && destination(other).size() == 0) {
-                        destroy(other);
-                    }
-                }
+                    Relation src(vid, other, -1);
+                    Relation dest(other, vid, -1);
+                    remove_relation(source(other), &dest);
+                    remove_relation(destination(other), &src);
+                }                
                 
-                // Step 4: Delete edges, clear set of src and dest edges, then delete the vertex itself
-                source(vid).clear();
-                destination(vid).clear();
+                std::vector<Relation*> toDelete(source(vid).size() + destination(vid).size());
+                for (auto r : source(vid)) toDelete.push_back(r);
+                for (auto r : destination(vid)) toDelete.push_back(r);
                 destroy(vid);
+                for (auto r : toDelete) delete r;
                 
-                // Step 5: Release in reverse order
+                // Step 4: Release in reverse order
                 std::reverse(vertices.begin(), vertices.end());
                 for (int _vid : vertices) {
                     inc_seq(_vid);
@@ -370,26 +374,6 @@ startOver:
                 }
             }
             return true;
-        }
-        
-        void for_each_outgoing(int vid, std::function<bool(int)> fn) {
-            lock(vid);
-            for (auto r : source(vid)) {
-                if (!fn(r->dest)) {
-                    break;
-                }
-            }
-            unlock(vid);
-        }
-
-        void for_each_incoming(int vid, std::function<bool(int)> fn) {
-            lock(vid);
-            for (auto r : destination(vid)) {
-                if (!fn(r->src)) {
-                    break;
-                }
-            }
-            unlock(vid);
         }
         
     private:
@@ -421,24 +405,27 @@ startOver:
         }
 
         // Incoming edges
-        std::unordered_set<set_shared_ptr<Relation>>& source(int idx) {
+        std::unordered_set<Relation*>& source(int idx) {
             return idxToVertex[idx]->adjacency_list;
+
         }
 
         // Outgoing edges
-        std::unordered_set<set_shared_ptr<Relation>>& destination(int idx) {
+        std::unordered_set<Relation*>& destination(int idx) {
             return idxToVertex[idx]->dest_list;
         }
 
-        bool has_relation(std::unordered_set<set_shared_ptr<Relation>>& set, Relation *r) {
-            auto search = set.find(make_find_ptr(r));
+        bool has_relation(std::unordered_set<Relation*>& set, Relation *r) {
+            auto search = set.find(r);
             return search != set.end();
         }
 
-        void remove_relation(std::unordered_set<set_shared_ptr<Relation>>& set, Relation *r) {
-            auto search = set.find(make_find_ptr(r));
+        void remove_relation(std::unordered_set<Relation*>& set, Relation *r) {
+            auto search = set.find(r);
             if (search != set.end()) {
+                Relation *tmp = *search;
                 set.erase(search);
+                delete tmp;
             }
         }
 };

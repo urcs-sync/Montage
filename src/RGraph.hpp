@@ -17,6 +17,8 @@ public:
      */
     virtual bool add_edge(int src, int dest, int weight) = 0;
 
+    virtual bool add_vertex(int vid) = 0;
+
     virtual bool has_edge(int v1, int v2) = 0;
 
     /**
@@ -26,15 +28,6 @@ public:
      * @return True if the edge exists
      */
     virtual bool remove_edge(int src, int dest) = 0;
-
-    /**
-     * @brief Removes any edge from the selected vertex.
-     * 
-     * @param src The integer id of the source node.
-     * @return true If an edge can be removed.
-     * @return false If an edge cannot be removed, i.e. non-allocated vertex
-     */
-    virtual bool remove_any_edge(int src) = 0;
     
     /**
      * @brief Removes vertex from graph, along with the incoming and outgoing edges.
@@ -48,33 +41,7 @@ public:
      * @return false Vertex was already removed from the map.
      */
     virtual bool remove_vertex(int vid) = 0;
-
-    /**
-     * @brief Calls function fn on vertex of each outgoing edge
-     * 
-     * Calls the function fn on the vertex of each outgoing edge. This is to implement something
-     * similar to a for-each loop, but in an implementation-defined way. Will run over all outgoing
-     * edges or until fn returns 'false' indicating no further processing is required. This acquires the
-     * lock on vid, and so users should be cautious of deadlock.
-     * 
-     * @param vid Identifier of the vertex
-     * @param fn Predicate function that performs work on outgoing edge and returns whether or not to continue processing.
-     */
-    virtual void for_each_outgoing(int vid, std::function<bool(int)> fn) = 0;
-
-    /**
-     * @brief Calls function fn on vertex of each outgoing edge
-     * 
-     * Calls the function fn on the vertex of each outgoing edge. This is to implement something
-     * similar to a for-each loop, but in an implementation-defined way. Will run over all outgoing
-     * edges or until fn returns 'false' indicating no further processing is required. This acquires the
-     * lock on vid, and so users should be cautious of deadlock.
-     * 
-     * @param vid Identifier of the vertex
-     * @param fn Predicate function that performs work on outgoing edge and returns whether or not to continue processing.
-     */
-    virtual void for_each_incoming(int vid, std::function<bool(int)> fn) = 0;
-
+ 
     /**
      * @brief Obtains statistics including (|V|, |E|, average degree, vertex degrees, vertex degrees length)
      * 
