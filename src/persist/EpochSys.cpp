@@ -217,7 +217,6 @@ namespace pds{
 
     // TODO: put epoch advancing logic into epoch advancers.
     void EpochSys::advance_epoch_dedicated(){
-        std::lock_guard<std::mutex> lock(dedicated_epoch_advancer_lock);
         uint64_t c = global_epoch->load(std::memory_order_relaxed);
         // Free all retired blocks from 2 epochs ago
         to_be_freed->help_free(c-2);
@@ -225,10 +224,10 @@ namespace pds{
         while(!trans_tracker->no_active(c-1)){}
         // Persist all modified blocks from 1 epoch ago
         to_be_persisted->persist_epoch(c-1);
-        // persist_func::sfence(); // given the length of current epoch, we may not need this.
+        persist_func::sfence();
         // Actually advance the epoch
         // global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
-        global_epoch->store(c+1, std::memory_order_relaxed);
+        global_epoch->store(c+1, std::memory_order_seq_cst);
 
         //if (c % 10000 == 0){
         //    std::cout<<"epoch:"<<c<<std::endl;

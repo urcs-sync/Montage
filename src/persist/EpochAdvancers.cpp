@@ -75,7 +75,8 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         // wait for sync_signal to fire or timeout
         std::unique_lock<std::mutex> lk(sync_signal.bell);
         sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
-            [&]{return (sync_signal.target_epoch > curr_epoch);});
+            [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+        lk.unlock();
         if (curr_epoch == sync_signal.target_epoch){
             // no sync singal. advance epoch once.
             sync_signal.target_epoch++;
@@ -89,8 +90,14 @@ void DedicatedEpochAdvancer::advancer(int task_num){
 }
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
-    uint64_t target_epoch = (c == NULL_EPOCH)? esys->get_epoch()+2 : c+2;
+    // sync must NOT be called in an operation.
+    assert(c == NULL_EPOCH);
+    uint64_t target_epoch = esys->get_epoch()+2;
     std::unique_lock<std::mutex> lk(sync_signal.bell);
+    if (target_epoch < sync_signal.target_epoch-2){
+        // current epoch is already persisted.
+        return;
+    }
     sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
     sync_signal.advancer_ring.notify_all();
     sync_signal.worker_ring.wait(lk, [&]{return (esys->get_epoch() >= target_epoch);});
