@@ -74,8 +74,13 @@ void DedicatedEpochAdvancer::advancer(int task_num){
     while(started.load()){
         // wait for sync_signal to fire or timeout
         std::unique_lock<std::mutex> lk(sync_signal.bell);
-        sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
-            [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+        if (epoch_length > 0){
+            sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
+                [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+        } else {
+            sync_signal.advancer_ring.wait(lk,
+                [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+        }
         lk.unlock();
         if (curr_epoch == sync_signal.target_epoch){
             // no sync singal. advance epoch once.

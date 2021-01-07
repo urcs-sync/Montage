@@ -95,21 +95,14 @@ void BufferedWB::PerThreadDedicatedWait::persister_main(int worker_id){
         persister_affinities[worker_id]->cpuset,HWLOC_CPUBIND_THREAD);
     // spin until signaled to destruct.
     int last_signal = 0;
-    int curr_signal = 0;
-    uint64_t curr_epoch = NULL_EPOCH;
-
-    while(!exit){
+    while(!exit.load(std::memory_order_acquire)){
         // wait on worker (tid == worker_id) thread's signal.
         std::unique_lock<std::mutex> lck(signals[worker_id].bell);
-        while(last_signal == curr_signal && !exit){
-            curr_signal = signals[worker_id].curr;
-            signals[worker_id].ring.wait(lck);
-            curr_epoch = signals[worker_id].epoch;
-        }
-        last_signal = curr_signal;
+        signals[worker_id].ring.wait(lck, [&]{return (last_signal != signals[worker_id].curr);});
+        last_signal = signals[worker_id].curr;
         // dumps
         for (int i = 0; i < con->dump_size; i++){
-            con->container->try_pop_local(&do_persist, worker_id, curr_epoch);
+            con->container->try_pop_local(&do_persist, worker_id, signals[worker_id].epoch);
         }
     }
 }

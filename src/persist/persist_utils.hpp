@@ -178,87 +178,116 @@ public:
     }
 };
 
-// a single-prod-single-con fixed-sized circular buffer.
+// a fixed-sized circular buffer.
+// single producer, multiple consumer.
+// concurrent consumers may pop the same entry multiple times.
 template<typename T>
 class FixedCircBuffer{
-    int cap = 0;
+    size_t cap;
+    paddedAtomic<size_t> pushed;
+    paddedAtomic<size_t> popped;
     padded<T>* payloads = nullptr;
-    paddedAtomic<int> head;
-    paddedAtomic<int> tail;
-    int size = 0;
-    bool allow_wait = false;
-    int next(int ptr){
-        return (ptr+1) % cap;
-    }
 public:
-    FixedCircBuffer(int _cap, bool _allow_wait = false) : 
-            cap(_cap), allow_wait(_allow_wait) {
-        payloads = new padded<T>[cap+1];
-        head.ui = 0;
-        tail.ui = 0;
+    FixedCircBuffer(size_t _cap) : 
+            cap(_cap){
+        payloads = new padded<T>[cap];
+        pushed.ui = 0;
+        popped.ui = 0;
     }
     ~FixedCircBuffer(){
         delete(payloads);
     }
-    void push(T x){
-        int curr_tail = tail.ui.load(std::memory_order_acquire);
-        // push x into tail
-        payloads[curr_tail].ui = x;
-        // try advance tail to tail+1.
-        if (allow_wait) {
-            // busy waiting when buffer is full.
-            while(full());
-        } else {
-            if (full()){
-                errexit("FixedCircBuffer full.");
-            }
-        }
-        tail.ui.store(next(tail), std::memory_order_release);
-        size++;
-    }
     bool try_push(T x){
-        int curr_tail = tail.ui.load(std::memory_order_acquire);
-        if (full()){
+        size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+        size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+        assert(curr_pushed <= curr_popped + cap);
+        if (curr_pushed == curr_popped + cap){
             // full, return false
             return false;
         } else {
-            // push x into tail
-            payloads[curr_tail].ui = x;
-            // advance tail to tail+1.
-            tail.ui.store(next(tail), std::memory_order_release);
-            size++;
+            // push x
+            payloads[curr_pushed%cap].ui = x;
+            // advance pushed counter.
+            pushed.ui.store(curr_pushed+1, std::memory_order_release);
             return true;
         }
     }
     bool try_pop(const std::function<void(T& x)>& func){
-        int curr_head = head.ui.load(std::memory_order_acquire);
-        if (tail.ui.load(std::memory_order_acquire) == curr_head){
-            // empty.
+        size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+        size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+        assert(curr_popped <= curr_pushed);
+        if (curr_popped == curr_pushed){
+            // empty
             return false;
         }
-        func(payloads[curr_head].ui);
-        head.ui.store(next(curr_head), std::memory_order_release);
-        size--;
+        // consume the to-be-popped entry.
+        func(payloads[curr_popped%cap].ui);
+        // try to pop the next unpopped entry
+        while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
+            curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            assert(curr_popped <= curr_pushed);
+            if (curr_popped == curr_pushed){
+                // empty
+                return false;
+            }
+        }
+        // successfully popped.
         return true;
     }
     bool try_pop(T& x){
-        int curr_head = head.ui.load(std::memory_order_acquire);
-        if (tail.ui.load(std::memory_order_acquire) == curr_head){
-            // empty.
+        size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+        size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+        assert(curr_popped <= curr_pushed);
+        if (curr_popped == pushed.ui.load(std::memory_order_acquire)){
+            // empty
             return false;
         }
-        x = payloads[curr_head].ui;
-        head.ui.store(next(curr_head), std::memory_order_release);
-        size--;
+        // consume the to-be-popped entry.
+        x = payloads[curr_popped%cap].ui;
+        // try to pop the next unpopped entry
+        while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
+            curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            assert(curr_popped <= curr_pushed);
+            if (curr_popped == curr_pushed){
+                // empty
+                return false;
+            }
+        }
+        // successfully popped.
         return true;
     }
-    bool full(){
-        return next(tail.ui.load(std::memory_order_acquire)) == head.ui.load(std::memory_order_acquire);
+    void pop_all(const std::function<void(T& x)>& func){
+        while (true){
+            size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+            size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            assert(curr_popped <= curr_pushed);
+            if (curr_popped == curr_pushed){
+                // empty
+                return;
+            }
+            // consume all entries.
+            size_t i = curr_popped % cap;
+            size_t end = (i + (curr_pushed - curr_popped)) % cap;
+            if (end <= i){ // wrap around.
+                while(i < cap){
+                    func(payloads[i].ui);
+                    i++;
+                }
+                i = 0;
+            }
+            while(i < end){
+                func(payloads[i].ui);
+                i++;
+            }
+            // try to CAS the container to empty. If faild, try over.
+            if (popped.ui.compare_exchange_strong(curr_popped, curr_pushed, std::memory_order_acq_rel)){
+                return;
+            }
+        }
     }
     void clear(){
-        size = 0;
-        head.ui = 0;
-        tail.ui = 0;
+        pushed.ui = 0;
+        popped.ui = 0;
     }
 }__attribute__((aligned(CACHE_LINE_SIZE)));
 
@@ -272,7 +301,7 @@ class PerThreadFixedCircBuffer{
     int count;
     padded<FixedCircBuffer<T>*>* buffers;
 public:
-    PerThreadFixedCircBuffer(int task_num, int cap){
+    PerThreadFixedCircBuffer(int task_num, size_t cap){
         count = task_num;
         // init the buffers.
         buffers = new padded<FixedCircBuffer<T>*>[count];
@@ -286,26 +315,20 @@ public:
         }
         delete buffers;
     }
-    void push(T x, int tid){
-        buffers[tid].ui->push(x);
-    }
     bool try_push(T x, int tid){
         return buffers[tid].ui->try_push(x);
     }
     void pop_all(const std::function<void(T& x)>& func){
         // std::cout<<"pop_all called"<<std::endl;
         for (int i = 0; i < count; i++){
-            while(buffers[i].ui->try_pop(func)){}
+            buffers[i].ui->pop_all(func);
         }
     }
     void pop_all_local(const std::function<void(T& x)>& func, int tid){
-        while(buffers[tid].ui->try_pop(func)){}
+        buffers[tid].ui->pop_all(func);
     }
     bool try_pop_local(const std::function<void(T& x)>& func, int tid){
         return buffers[tid].ui->try_pop(func);
-    }
-    bool full_local(int tid){
-        return buffers[tid].ui->full();
     }
     void clear(){
         for (int i = 0; i < count; i++){
