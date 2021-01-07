@@ -224,7 +224,7 @@ public:
         func(payloads[curr_popped%cap].ui);
         // try to pop the next unpopped entry
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
-            size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
             if (curr_popped == curr_pushed){
                 // empty
@@ -236,6 +236,8 @@ public:
     }
     bool try_pop(T& x){
         size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+        size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+        assert(curr_popped <= curr_pushed);
         if (curr_popped == pushed.ui.load(std::memory_order_acquire)){
             // empty
             return false;
@@ -244,7 +246,7 @@ public:
         x = payloads[curr_popped%cap].ui;
         // try to pop the next unpopped entry
         while(!popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel)){
-            size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            curr_pushed = pushed.ui.load(std::memory_order_acquire);
             assert(curr_popped <= curr_pushed);
             if (curr_popped == curr_pushed){
                 // empty
@@ -258,6 +260,7 @@ public:
         while (true){
             size_t curr_popped = popped.ui.load(std::memory_order_acquire);
             size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+            assert(curr_popped <= curr_pushed);
             if (curr_popped == curr_pushed){
                 // empty
                 return;
