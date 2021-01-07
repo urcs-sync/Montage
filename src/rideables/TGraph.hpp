@@ -35,12 +35,21 @@ class TGraph : public RGraph{
         // on the stack if and only if it is also wrapped into a smart pointer. We create a custom
         // 'deleter' function to control whether or not it will try to delete the wrapped pointer below
         // https://stackoverflow.com/a/17853770/4111188
+        
+
 
         class Relation;
+
+        struct RelationHash {
+            std::size_t operator()(const Relation *r) const {
+                return std::hash<int>()(r->src) ^ std::hash<int>()(r->dest);
+            }
+        };
+
         class Vertex {
             public:
-                std::unordered_set<Relation*> adjacency_list;
-                std::unordered_set<Relation*> dest_list;
+                std::unordered_set<Relation*,RelationHash> adjacency_list;
+                std::unordered_set<Relation*,RelationHash> dest_list;
                 int id;
                 int lbl;
                 Vertex(int id, int lbl): id(id), lbl(lbl){}
@@ -70,6 +79,10 @@ class TGraph : public RGraph{
                 }
                 int get_weight() {
                     return weight;
+                }
+
+                bool operator==(const Relation *other) const {
+                    return this->src == other->src && this->dest == other->dest;
                 }
         };
 
@@ -171,6 +184,9 @@ class TGraph : public RGraph{
             
 
             
+            Relation r(src,dest,weight);
+            auto& srcSet = source(src);
+            auto& destSet = destination(dest);
             // Note: We do not create a vertex if one is not found
             // also we do not add an edge even if it is found some of the time
             // to enable even constant load factor
@@ -183,9 +199,6 @@ class TGraph : public RGraph{
                 goto exitEarly;
             }
             
-            Relation r(src,dest,weight);
-            auto& srcSet = source(src);
-            auto& destSet = destination(dest);
 
             {
                 Relation *out = new Relation(src, dest, weight);
@@ -328,16 +341,28 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
-                    if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
-                        for (auto r : source(vid)) {
-                            if (r->dest == _vid)
-                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                    // if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
+                    //     for (auto r : source(vid)) {
+                    //         if (r->dest == _vid)
+                    //         std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                    //     }
+                    //     for (auto r : destination(vid)) {
+                    //         if (r->src == _vid)
+                    //         std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                    //     }
+                    //     std::abort();
+                    // }
+                }
+                
+                for (auto v : vertices) {
+                    Relation r1(vid,v,-1);
+                    Relation r2(v,vid,-1);
+                    if (!has_relation(source(vid), &r1) || !has_relation(destination(vid), &r2)) {
+                        std::reverse(vertices.begin(), vertices.end());
+                        for (int _vid : vertices) {
+                            unlock(_vid);
                         }
-                        for (auto r : destination(vid)) {
-                            if (r->src == _vid)
-                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
-                        }
-                        std::abort();
+                        goto startOver;
                     }
                 }
 
@@ -407,22 +432,22 @@ startOver:
         }
 
         // Incoming edges
-        std::unordered_set<Relation*>& source(int idx) {
+        std::unordered_set<Relation*,RelationHash>& source(int idx) {
             return idxToVertex[idx]->adjacency_list;
 
         }
 
         // Outgoing edges
-        std::unordered_set<Relation*>& destination(int idx) {
+        std::unordered_set<Relation*,RelationHash>& destination(int idx) {
             return idxToVertex[idx]->dest_list;
         }
 
-        bool has_relation(std::unordered_set<Relation*>& set, Relation *r) {
+        bool has_relation(std::unordered_set<Relation*,RelationHash>& set, Relation *r) {
             auto search = set.find(r);
             return search != set.end();
         }
 
-        void remove_relation(std::unordered_set<Relation*>& set, Relation *r) {
+        void remove_relation(std::unordered_set<Relation*,RelationHash>& set, Relation *r) {
             auto search = set.find(r);
             if (search != set.end()) {
                 Relation *tmp = *search;

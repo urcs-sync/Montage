@@ -209,8 +209,8 @@ LDFLAGS := $(WARNING_FLAGS) $(foreach d, $(LDIRS), -Xlinker -rpath -Xlinker $(d)
 
 ifeq ($(BUILD),graph-rec)
 # -ftree-vectorize crashes Mnemosyne
-CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O0 #-DNDEBUG
-CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O0 #-DNDEBUG
+CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
+CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
 # we can add additional release customization here
 # e.g. link against different libraries, 
 # define enviroment vars, etc.
