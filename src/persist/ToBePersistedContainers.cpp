@@ -11,7 +11,7 @@ void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
     hwloc_set_cpubind(gtc->topology, 
         persister_affinities[worker_id]->cpuset,HWLOC_CPUBIND_THREAD);
     // spin until signaled to destruct.
-    int curr_epoch = INIT_EPOCH;
+    uint64_t curr_epoch = INIT_EPOCH;
     while(!exit){
         // wait on worker (tid == worker_id) thread's signal.
         // NOTE: lock here provides an sfence for epoch boundary

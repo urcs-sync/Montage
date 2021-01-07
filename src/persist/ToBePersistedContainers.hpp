@@ -62,7 +62,7 @@ class PerEpoch : public ToBePersistContainer{
             std::mutex bell;
             std::condition_variable ring;
             uint64_t epoch = INIT_EPOCH;
-            std::atomic<uint64_t> finish_counter;
+            std::atomic<int> finish_counter;
         }__attribute__((aligned(CACHE_LINE_SIZE)));
         
         GlobalTestConfig* gtc;
