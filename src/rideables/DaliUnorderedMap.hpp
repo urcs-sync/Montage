@@ -258,7 +258,7 @@ public:
         gc_threshold = 0x1ULL << 6; // TDOO: tune this.
     };
     ~DaliUnorderedMap(){
-        std::cout<<"current epoch: "<<epoch->load()<<std::endl;
+        // std::cout<<"current epoch: "<<epoch->load()<<std::endl;
         delete retired;
         Persistent::finalize();
     };

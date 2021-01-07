@@ -474,10 +474,10 @@ static inline unsigned int lock_idx_swap(unsigned int idx) {
  *   inside a transaction).
  */
 
-extern pthread_mutex_t tx_count_mutex;
-extern pthread_cond_t tx_reset;
-extern int tx_count;
-extern int tx_overflow;
+pthread_mutex_t tx_count_mutex;
+pthread_cond_t tx_reset;
+int tx_count;
+int tx_overflow;
 
 /*
  * Enter new transactional thread.
