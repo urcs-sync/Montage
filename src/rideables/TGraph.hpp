@@ -285,12 +285,12 @@ class TGraph : public RGraph{
         }
 
         bool add_vertex(int vid) {
-            std::mt19937_64 vertexGen;
+            std::mt19937_64 vertexGen(time(NULL));
             std::uniform_int_distribution<> uniformVertex(0,numVertices);
             bool retval = true;
             // Randomly sample vertices...
             std::vector<int> vec(meanEdgesPerVertex);
-            for (size_t i = 0; i < meanEdgesPerVertex; i++) {
+            for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
                 int u = uniformVertex(vertexGen);
                 while (u == i) {
                     u = uniformVertex(vertexGen);

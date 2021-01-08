@@ -87,10 +87,6 @@ class GraphTest : public Test {
             std::uniform_int_distribution<> distv(0,max_verts-1);
             int rng = dist(gen_p);
             for (size_t i = 0; i < thd_ops[tid]; i++) {
-                if ((i+1) % 10000 == 0) {
-                    auto stats = g->grab_stats();
-                    std::apply(print_stats, stats);
-                }
                 if (rng <= insertionProb) {
                     // std::cout << "rng(" << rng << ") is add_edge <= " << insertionProb << std::endl; 
                     g->add_edge(distv(gen_v), distv(gen_v), -1);
