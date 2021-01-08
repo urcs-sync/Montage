@@ -312,7 +312,7 @@ bool GlobalTestConfig::checkEnv(std::string key){
 	if(verbose){
 		std::cout <<"checkEnv: "<< key << "\n";
 	}
-	return environment[key]!="" && environment[key]!="0";
+	return environment[key]!="";
 }
 std::string GlobalTestConfig::getEnv(std::string key){
 	if(verbose){

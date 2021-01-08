@@ -58,7 +58,8 @@ public:
             
             this->operation(r, p, tid);
 
-            if (abs((long)gen_s())%fs == 0){
+            if (fs != 0 && abs((long)gen_s())%fs == 0){
+                // std::cout<<"sync called."<<std::endl;
                 rec->sync();
             }
             
