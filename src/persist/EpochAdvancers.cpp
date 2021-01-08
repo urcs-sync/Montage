@@ -111,6 +111,12 @@ void DedicatedEpochAdvancer::sync(uint64_t c){
 DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){
     // std::cout<<"terminating advancer_thread"<<std::endl;
     started.store(false);
+    // flush and quit dedicated epoch advancer
+    {
+        std::unique_lock<std::mutex> lk(sync_signal.bell);
+        sync_signal.target_epoch += 4;
+    }
+    sync_signal.advancer_ring.notify_all();
     if (advancer_thread.joinable()){
         advancer_thread.join();
     }

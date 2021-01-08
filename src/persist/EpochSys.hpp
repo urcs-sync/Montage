@@ -164,11 +164,11 @@ public:
     ~EpochSys(){
         // std::cout<<"epochsys descructor called"<<std::endl;
         trans_tracker->finalize();
-        flush();
+        // flush(); // flush is done in epoch_advancer's destructor.
         if (epoch_advancer){
             delete epoch_advancer;
         }
-        // std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
+        std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
