@@ -75,7 +75,8 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
-LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
+# LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
+LIBS :=-lpthread -lhwloc -lralloc -lgomp -latomic
 LIBS+=-lnvmmalloc
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
@@ -209,8 +210,8 @@ LDFLAGS := $(WARNING_FLAGS) $(foreach d, $(LDIRS), -Xlinker -rpath -Xlinker $(d)
 
 ifeq ($(BUILD),graph-rec)
 # -ftree-vectorize crashes Mnemosyne
-CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
-CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
+CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O0 #-DNDEBUG
+CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O0 #-DNDEBUG
 # we can add additional release customization here
 # e.g. link against different libraries, 
 # define enviroment vars, etc.

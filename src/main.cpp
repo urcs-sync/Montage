@@ -86,8 +86,8 @@ using namespace std;
 int main(int argc, char *argv[])
 {
 	GlobalTestConfig gtc;
-	const size_t numVertices = 1024;
-	const size_t meanEdgesPerVertex = 128;
+	const size_t numVertices = 1024 * 1024;
+	const size_t meanEdgesPerVertex = 20;
 	const size_t vertexLoad = 50;
 
 	/* queues */

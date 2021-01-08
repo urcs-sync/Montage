@@ -37,7 +37,6 @@ class TGraph : public RGraph{
         // https://stackoverflow.com/a/17853770/4111188
         
 
-
         class Relation;
 
         struct RelationHash {
@@ -46,10 +45,18 @@ class TGraph : public RGraph{
             }
         };
 
+        struct RelationEqual {
+            bool operator()(const Relation *r1, const Relation *r2) const {
+                return r1->src == r2->src && r1->dest == r2->dest;
+            }
+        };
+
+        using Set = std::unordered_set<Relation*,RelationHash,RelationEqual>;
+
         class Vertex {
             public:
-                std::unordered_set<Relation*,RelationHash> adjacency_list;
-                std::unordered_set<Relation*,RelationHash> dest_list;
+                Set adjacency_list;
+                Set dest_list;
                 int id;
                 int lbl;
                 Vertex(int id, int lbl): id(id), lbl(lbl){}
@@ -89,10 +96,14 @@ class TGraph : public RGraph{
         // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
             srand(time(NULL));
+            size_t sz = numVertices;
             this->idxToVertex = new Vertex*[numVertices];
+            std::cout << "Allocated idxToVertex..." << std::endl;
             this->vertexLocks = new std::atomic<bool>[numVertices];
+            std::cout << "Allocated vertexLocks..." << std::endl;
             this->vertexSeqs = new uint32_t[numVertices];
-            std::mt19937_64 gen(0xDEADBEEF);
+            std::cout << "Allocated vertexSeqs..." << std::endl;
+            std::mt19937_64 gen(rand());
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
             std::cout << "Allocated core..." << std::endl;
@@ -158,11 +169,12 @@ class TGraph : public RGraph{
                 lock(i);
             }
             for (auto i = 0; i < numVertices; i++) {
-                for (Relation *r : idxToVertex[i]->adjacency_list) {
-                    delete r;
-                }
+                std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
+                for (auto r : source(i)) toDelete.push_back(r);
+                for (auto r : destination(i)) toDelete.push_back(r);
                 source(i).clear();
                 destination(i).clear();
+                for (auto r : toDelete) delete r;
             }
             for (int i = numVertices - 1; i >= 0; i--) {
                 destroy(i);
@@ -341,28 +353,16 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
-                    // if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
-                    //     for (auto r : source(vid)) {
-                    //         if (r->dest == _vid)
-                    //         std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
-                    //     }
-                    //     for (auto r : destination(vid)) {
-                    //         if (r->src == _vid)
-                    //         std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
-                    //     }
-                    //     std::abort();
-                    // }
-                }
-                
-                for (auto v : vertices) {
-                    Relation r1(vid,v,-1);
-                    Relation r2(v,vid,-1);
-                    if (!has_relation(source(vid), &r1) || !has_relation(destination(vid), &r2)) {
-                        std::reverse(vertices.begin(), vertices.end());
-                        for (int _vid : vertices) {
-                            unlock(_vid);
+                    if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
+                        for (auto r : source(vid)) {
+                            if (r->dest == _vid)
+                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
                         }
-                        goto startOver;
+                        for (auto r : destination(vid)) {
+                            if (r->src == _vid)
+                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                        }
+                        std::abort();
                     }
                 }
 
@@ -381,15 +381,41 @@ startOver:
                 for (int other : vertices) {
                     if (other == vid) continue;
 
-                    Relation src(vid, other, -1);
-                    Relation dest(other, vid, -1);
-                    remove_relation(source(other), &dest);
-                    remove_relation(destination(other), &src);
+                    Relation src(other, vid, -1);
+                    Relation dest(vid, other, -1);
+                    if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
+                        std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
+                        for (auto r : source(vid)) {
+                            if (r->dest == other)
+                            std::cout << "Us: (" << r->src << "," << r->dest << ")" << std::endl;
+                        }
+                        for (auto r : destination(other)) {
+                            if (r->src == vid) {
+                                std::cout << "Them: (" << r->src << "," << r->dest << ")" << std::endl;
+                            }
+                        }
+                        for (auto r : destination(vid)) {
+                            if (r->src == other) {
+                                std::cout << "Us: (" << r->src << "," << r->dest << ")" << std::endl;
+                            }
+                        }
+                        for (auto r : source(other)) {
+                            if (r->dest == vid) {
+                                std::cout << "Them: (" << r->src << "," << r->dest << ")" << std::endl;
+                            }
+                        }
+                        std::abort();
+                    }
+                    remove_relation(source(other), &src);
+                    remove_relation(destination(other), &dest);
+                    assert(!has_relation(source(other), &src) && !has_relation(destination(other), &dest));
                 }                
                 
                 std::vector<Relation*> toDelete(source(vid).size() + destination(vid).size());
                 for (auto r : source(vid)) toDelete.push_back(r);
                 for (auto r : destination(vid)) toDelete.push_back(r);
+                source(vid).clear();
+                destination(vid).clear();
                 destroy(vid);
                 for (auto r : toDelete) delete r;
                 
@@ -432,28 +458,30 @@ startOver:
         }
 
         // Incoming edges
-        std::unordered_set<Relation*,RelationHash>& source(int idx) {
+        Set& source(int idx) {
             return idxToVertex[idx]->adjacency_list;
 
         }
 
         // Outgoing edges
-        std::unordered_set<Relation*,RelationHash>& destination(int idx) {
+        Set& destination(int idx) {
             return idxToVertex[idx]->dest_list;
         }
 
-        bool has_relation(std::unordered_set<Relation*,RelationHash>& set, Relation *r) {
+        bool has_relation(Set& set, Relation *r) {
             auto search = set.find(r);
             return search != set.end();
         }
 
-        void remove_relation(std::unordered_set<Relation*,RelationHash>& set, Relation *r) {
+        bool remove_relation(Set& set, Relation *r) {
             auto search = set.find(r);
             if (search != set.end()) {
                 Relation *tmp = *search;
                 set.erase(search);
                 delete tmp;
+                return true;
             }
+            return false;
         }
 };
 
