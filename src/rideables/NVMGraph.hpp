@@ -22,11 +22,12 @@
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
-template <size_t numVertices = 1024>
+template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad=50>
 class NVMGraph : public RGraph {
 
     public:
 
+        class tVertex;
         class Vertex : public Persistent {
             int id;
             int lbl;
@@ -81,9 +82,10 @@ class NVMGraph : public RGraph {
                 Set adjacency_list;
                 Set dest_list;
                 Vertex* payload;
+                int id; // Immutable, so we can keep transient copy.
                 tVertex(int id, int lbl): id(id) {payload = new Vertex(id, lbl);}
-                tVertex(const Vertex& oth): id(oth.id) {payload = new Vertex(id, lbl);}
-                bool operator==(const Vertex& oth) const { return payload->id==oth->payload->id;}
+                tVertex(const tVertex& oth): id(oth.id) {payload = new Vertex(oth.id, oth.payload->get_lbl());}
+                bool operator==(const tVertex& oth) const { return payload->id==oth.payload->id;}
                 void set_lbl(int l) {
                     payload->set_lbl(l);
                 }
@@ -133,7 +135,7 @@ class NVMGraph : public RGraph {
                     }
                     if (idxToVertex[k] != nullptr) {
                         Relation *in = new Relation(i, k, -1);
-                        Relation *out = new tRelation(i, k, -1);
+                        Relation *out = new Relation(i, k, -1);
                         source(i).insert(in);
                         destination(k).insert(out);
                     }
