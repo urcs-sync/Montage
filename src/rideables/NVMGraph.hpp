@@ -132,7 +132,7 @@ class NVMGraph : public RGraph {
                         k = verticesRNG(gen);
                     }
                     if (idxToVertex[k] != nullptr) {
-                        tRelation *in = new tRelation(i, k, -1);
+                        Relation *in = new Relation(i, k, -1);
                         Relation *out = new tRelation(i, k, -1);
                         source(i).insert(in);
                         destination(k).insert(out);
