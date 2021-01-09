@@ -60,10 +60,11 @@ class DedicatedEpochAdvancer : public EpochAdvancer{
         std::condition_variable worker_ring;
         uint64_t target_epoch = INIT_EPOCH + 1;
     };
+    GlobalTestConfig* gtc;
     EpochSys* esys;
     std::thread advancer_thread;
     std::atomic<bool> started;
-    uint64_t epoch_length = 100*1000;
+    uint64_t epoch_length;
     SyncSignal sync_signal;
     void advancer(int task_num);
 public:

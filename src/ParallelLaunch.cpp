@@ -145,6 +145,7 @@ static void * thread_main (void *lp)
 		auto now = chrono::high_resolution_clock::now();
 		// update interval in case it's a test with undertermined length
 		gtc->interval = chrono::duration_cast<chrono::microseconds>(now - gtc->start).count()/1000000.0;
+		std::cout<<"interval:"<<gtc->interval<<std::endl;
 		if(gtc->interval <= 0.000001) {
 			gtc->interval = 0.000001;
 		}

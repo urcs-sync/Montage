@@ -62,14 +62,19 @@ public:
                 // std::cout<<"sync called."<<std::endl;
                 rec->sync();
             }
-            
+
             ops++;
             if (ops % 512 == 0){
                 now = std::chrono::high_resolution_clock::now();
             }
+
             // TODO: replace this with __rdtsc
             // or use hrtimer (high-resolution timer API in linux.)
         }
+        // printf("thread %d returning at %f.3",
+        //     ltc->tid, 
+        //     chrono::duration_cast<chrono::microseconds>(
+        //         chrono::high_resolution_clock::now()-gtc->start).count()/1000000.0);
         return ops;
     }
 };

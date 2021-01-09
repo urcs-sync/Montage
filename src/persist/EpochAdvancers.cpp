@@ -44,7 +44,7 @@ void GlobalCounterEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
 
 
 DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):
-    esys(es){
+    gtc(gtc), esys(es){
     if (gtc->checkEnv("EpochLength")){
         epoch_length = stoi(gtc->getEnv("EpochLength"));
     } else {
@@ -70,25 +70,46 @@ DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* 
 void DedicatedEpochAdvancer::advancer(int task_num){
     EpochSys::init_thread(task_num);// set tid to be the last
     uint64_t curr_epoch = INIT_EPOCH;
+    int64_t next_sleep = epoch_length; // unsigned to signed, but should be fine.
     while(!started.load()){}
     while(started.load()){
-        // wait for sync_signal to fire or timeout
-        std::unique_lock<std::mutex> lk(sync_signal.bell);
-        if (epoch_length > 0){
-            sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(epoch_length), 
-                [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+        if (next_sleep >= 0){
+            // wait for sync_signal to fire or timeout
+            std::unique_lock<std::mutex> lk(sync_signal.bell);
+            if (epoch_length > 0){
+                sync_signal.advancer_ring.wait_for(lk, std::chrono::microseconds(next_sleep), 
+                    [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+            } else {
+                sync_signal.advancer_ring.wait(lk,
+                    [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+            }
+            lk.unlock();
         } else {
-            sync_signal.advancer_ring.wait(lk,
-                [&]{return (sync_signal.target_epoch > curr_epoch || !started.load());});
+            if (gtc->verbose){
+                std::cout<<"warning: epoch is getting longer by "<<
+                    ((double)abs(next_sleep))/epoch_length << "%" <<std::endl;
+            }
         }
-        lk.unlock();
+        
         if (curr_epoch == sync_signal.target_epoch){
             // no sync singal. advance epoch once.
             sync_signal.target_epoch++;
         }
+        // measure the time used for write-back and reclamation, and deduct it from epoch_length.
+        auto wb_start = chrono::high_resolution_clock::now();
         for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
             esys->advance_epoch_dedicated();
+            if (gtc->verbose){
+                if (curr_epoch%1024 == 0){
+                    std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
+                }
+            }
         }
+        int64_t wb_length = chrono::duration_cast<chrono::microseconds>(
+            chrono::high_resolution_clock::now()-wb_start).count();
+        
+        next_sleep = epoch_length - wb_length;
+        // wake all threads waiting for sync() to finish.
         sync_signal.worker_ring.notify_all();
     }
     // std::cout<<"advancer_thread terminating..."<<std::endl;
