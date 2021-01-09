@@ -30,7 +30,7 @@ public:
 private:
     struct StackNode{
         MontageStack *ds = nullptr;
-        pds::atomic_lin_var<StackNode *> *next;
+        pds::atomic_lin_var<StackNode*> next;
         Payload *payload;
 
         StackNode(): next(nullptr), payload(nullptr){}
@@ -86,7 +86,7 @@ void MontageStack<T>::push(T v, int tid){
     {
         uint64_t s = global_sn.fetch_add(1);
         pds::lin_var old_node = top.load(this);
-        new_node->next->store(old_node);
+        new_node->next.store(old_node);
         new_node->set_sn(s);
         begin_op();
         if(top.CAS_verify(this, old_node, new_node)){
@@ -115,7 +115,7 @@ optional<T> MontageStack<T>::pop(int tid)
             return res;
         }
         begin_op();
-        StackNode* new_node = old_node.get_val<StackNode*>()->next->load_val(this);
+        StackNode* new_node = old_node.get_val<StackNode*>()->next.load_val(this);
         if (top.CAS_verify(this, old_node, new_node)){
             auto payload = old_node.get_val<StackNode*>()->payload;
             res = (T)payload->get_val(this);// old see new is impossible
