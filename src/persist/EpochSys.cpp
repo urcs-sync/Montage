@@ -229,10 +229,6 @@ namespace pds{
         // Actually advance the epoch
         // global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
         global_epoch->store(c+1, std::memory_order_seq_cst);
-
-        //if (c % 10000 == 0){
-        //    std::cout<<"epoch:"<<c<<std::endl;
-        //}
     }
 
     // TODO: figure out how/whether to do helping with existence of dedicated bookkeeping thread(s)

@@ -168,7 +168,9 @@ public:
         if (epoch_advancer){
             delete epoch_advancer;
         }
-        std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
+        if (gtc->verbose){
+            std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
+        }
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
