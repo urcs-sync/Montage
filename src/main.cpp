@@ -77,6 +77,7 @@
 #include "TGraphConstructionTest.hpp"
 #include "ToyTest.hpp"
 #endif /* !MNEMOSYNE */
+#include "AllocTest.hpp"
 #include "CustomTypes.hpp"
 
 using namespace std;
@@ -148,6 +149,9 @@ int main(int argc, char *argv[])
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");
 #endif /* !MNEMOSYNE */
+	gtc.addTestOption(new AllocTest(DO_JEMALLOC_ALLOC), "AllocTest-JEMalloc");
+	gtc.addTestOption(new AllocTest(DO_RALLOC_ALLOC), "AllocTest-Ralloc");
+	gtc.addTestOption(new AllocTest(DO_MONTAGE_ALLOC), "AllocTest-Montage");
 
 	gtc.parseCommandLine(argc, argv);
 	
