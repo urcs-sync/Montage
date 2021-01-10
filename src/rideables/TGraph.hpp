@@ -131,8 +131,13 @@ class TGraph : public RGraph{
                     if (vMeta[k].idxToVertex != nullptr) {
                         Relation *in = new Relation(i, k, -1);
                         Relation *out = new Relation(i, k, -1);
-                        source(i).insert(in);
+                        auto ret = source(i).insert(in);
                         destination(k).insert(out);
+                        if(ret.second==false){
+                            // relation exists, reclaiming
+                            delete in;
+                            delete out;
+                        }
                     }
                 }
             }

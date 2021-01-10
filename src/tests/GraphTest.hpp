@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <random>
 #include <chrono>
+#include <algorithm>
+#include <array>
 #include "RGraph.hpp"
 #include "Recoverable.hpp"
 #include <omp.h>
@@ -38,22 +40,24 @@ class GraphTest : public Test {
         uint64_t total_ops;
         uint64_t *thd_ops;
         uint64_t max_verts;
-        int insertionProb;
-        int removalProb;
-        int lookupProb;
-        int clearProb;
+        int addEdgeProb;
+        int remEdgeProb;
+        int addVerProb;
+        int remVerProb;
         int desiredAvgDegree;
+        int vertexLoad;
         std::atomic<int> workingThreads;
         std::atomic<int> threadsDone;
-	std::atomic<int> operations[4];
+        padded<std::array<int,4>>* operations;
 
 
-        GraphTest(uint64_t numOps, uint64_t max_verts, int desiredAvgDegree) :
-            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree) {
+        GraphTest(uint64_t numOps, uint64_t max_verts, int desiredAvgDegree, int vertexLoad) :
+            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad) {
         }
 
         void init(GlobalTestConfig *gtc) {
             uint64_t new_ops = total_ops / gtc->task_num;
+            operations = new padded<std::array<int,4>>[gtc->task_num];
             thd_ops = new uint64_t[gtc->task_num];
             for (int i = 0; i<gtc->task_num; i++) {
                 thd_ops[i] = new_ops;
@@ -72,10 +76,17 @@ class GraphTest : public Test {
             gtc->interval = numeric_limits<double>::max();
             auto stats = g->grab_stats();
             std::apply(print_stats, stats);
-            insertionProb = 3300;
-            removalProb = 3300;
-            lookupProb = 1650;
-            clearProb = 1650;
+            int edge_op = 6666;
+            if(gtc->checkEnv("EdgeOp")){
+                edge_op = atoi((gtc->getEnv("EdgeOp")).c_str());
+                assert(edge_op>=0 && edge_op<=10000);
+            }
+            addEdgeProb = edge_op*desiredAvgDegree/(desiredAvgDegree+max_verts*vertexLoad/100);
+            remEdgeProb = std::min(1,edge_op-addEdgeProb);
+            addVerProb = (10000-edge_op)/2;
+            remVerProb = 10000-edge_op-addVerProb;
+            // Printing out real ratio of operations
+            std::cout<<"AddEdge:RemoveEdge:AddVertex:RemoveVertex="<<addEdgeProb<<":"<<remEdgeProb<<":"<<addVerProb<<":"<<remVerProb<<std::endl;
             workingThreads = gtc->task_num;
             threadsDone = 0;
         }
@@ -89,22 +100,22 @@ class GraphTest : public Test {
             std::uniform_int_distribution<> distv(0,max_verts-1);
             for (size_t i = 0; i < thd_ops[tid]; i++) {
             	int rng = dist(gen_p);
-                if (rng <= insertionProb) {
-                    // std::cout << "rng(" << rng << ") is add_edge <= " << insertionProb << std::endl; 
-                    g->add_edge(distv(gen_v), distv(gen_v), -1);
-		    operations[0]++;
-                } else if (rng <= insertionProb + removalProb) {
-                    // std::cout << "rng(" << rng << ") is remove_any_edge <= " << insertionProb + removalProb << std::endl; 
-                    g->remove_edge(distv(gen_v), distv(gen_v));
-		    operations[1]++;
-                } else if (rng <= insertionProb + removalProb + lookupProb) {
-                    // std::cout << "rng(" << rng << ") is has_edge <= " << insertionProb + removalProb + lookupProb << std::endl; 
-                    g->add_vertex(distv(gen_v));
-		    operations[2]++;
+                if (rng < addEdgeProb) {
+                    // std::cout << "rng(" << rng << ") is add_edge <= " << addEdgeProb << std::endl; 
+                    if(g->add_edge(distv(gen_v), distv(gen_v), -1))
+                        operations[tid].ui[0]++;
+                } else if (rng < addEdgeProb + remEdgeProb) {
+                    // std::cout << "rng(" << rng << ") is remove_any_edge <= " << addEdgeProb + remEdgeProb << std::endl; 
+                    if(g->remove_edge(distv(gen_v), distv(gen_v)))
+                        operations[tid].ui[1]++;
+                } else if (rng < addEdgeProb + remEdgeProb + addVerProb) {
+                    // std::cout << "rng(" << rng << ") is has_edge <= " << addEdgeProb + remEdgeProb + addVerProb << std::endl; 
+                    if(g->add_vertex(distv(gen_v)))
+                        operations[tid].ui[2]++;
                 } else {
                     // std::cout << "rng(" << rng << ") is remove_vertex..."; 
-                    g->remove_vertex(distv(gen_v));
-		    operations[3]++;
+                    if(g->remove_vertex(distv(gen_v)))
+                        operations[tid].ui[3]++;
                 }
             }
             return thd_ops[ltc->tid];
@@ -113,19 +124,24 @@ class GraphTest : public Test {
         void cleanup(GlobalTestConfig *gtc) {
             auto stats = g->grab_stats();
             std::apply(print_stats, stats);
-	    size_t total = operations[0] + operations[1] + operations[2] + operations[3];
-	    size_t insertion = operations[0];
-	    double insertionProp = insertion / (double) total;
-	    size_t removal = operations[1];
-	    double removalProp = removal / (double) total;
-	    size_t create = operations[2];
-	    double createProp = create / (double) total;
-	    size_t deletion = operations[3];
-	    double deletionProp = deletion / total;
-	    std::cout << "add_edge = " << insertion << " (" << insertionProp << "%)" << std::endl
-		   << ", remove_edge = " << removal << " (" << removalProp << "%)" << std::endl
-		   << ", add_vertex = " << create << " (" << createProp << "%)" << std::endl
-		   << ", remove_vertex = " << deletion << " (" << deletionProp << "%)" << std::endl;
+            size_t total=0,add_edge=0,rem_edge=0,add_ver=0,rem_ver=0;
+            for(int i=0;i<gtc->task_num;i++){
+                total += (operations[i].ui[0] + operations[i].ui[1] + operations[i].ui[2] + operations[i].ui[3]);
+                add_edge += operations[i].ui[0];
+                rem_edge += operations[i].ui[1];
+                add_ver += operations[i].ui[2];
+                rem_ver += operations[i].ui[3];
+            }
+            delete operations;
+	    double add_edge_prop = add_edge*100 / (double) total;
+	    double rem_edge_prop = rem_edge*100 / (double) total;
+	    double add_ver_prop = add_ver*100 / (double) total;
+	    double rem_ver_prop = rem_ver*100 / (double) total;
+        // Printing out ratio of successful operations
+	    std::cout << "add_edge = " << add_edge << " (" << add_edge_prop << "%)" << std::endl
+		   << ", remove_edge = " << rem_edge << " (" << rem_edge_prop << "%)" << std::endl
+		   << ", add_vertex = " << add_ver << " (" << add_ver_prop << "%)" << std::endl
+		   << ", remove_vertex = " << rem_ver << " (" << rem_ver_prop << "%)" << std::endl;
             delete g;
         }
 
