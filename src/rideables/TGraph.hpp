@@ -99,7 +99,7 @@ class TGraph : public RGraph{
             size_t sz = numVertices;
             this->idxToVertex = new Vertex*[numVertices];
             std::cout << "Allocated idxToVertex..." << std::endl;
-            this->vertexLocks = new std::atomic<bool>[numVertices];
+            this->vertexLocks = new std::mutex[numVertices];
             std::cout << "Allocated vertexLocks..." << std::endl;
             this->vertexSeqs = new uint32_t[numVertices];
             std::cout << "Allocated vertexSeqs..." << std::endl;
@@ -114,7 +114,6 @@ class TGraph : public RGraph{
                 } else {
                     idxToVertex[i] = nullptr;
                 }
-                vertexLocks[i] = false;
                 vertexSeqs[i] = 0;
             }
 
@@ -160,7 +159,7 @@ class TGraph : public RGraph{
         }
 
         Vertex** idxToVertex; // Transient set of transient vertices to index map
-        std::atomic<bool> *vertexLocks; // Transient locks for transient vertices
+        std::mutex *vertexLocks; // Transient locks for transient vertices
         uint32_t *vertexSeqs; // Transient sequence numbers for transactional operations on vertices
 
         // Thread-safe and does not leak edges
@@ -431,17 +430,12 @@ startOver:
         
     private:
         void lock(size_t idx) {
-            std::atomic<bool>& lck = vertexLocks[idx];
-            bool expect = false;
-            while (lck.load() == true || lck.compare_exchange_strong(expect, true) == false) {
-                expect = false;
-            }
-        }
+        	vertexLocks[idx].lock();
+	}
 
         void unlock(size_t idx) {
-            std::atomic<bool>& lck = vertexLocks[idx];
-            lck.store(false);
-        }
+        	vertexLocks[idx].unlock();
+	}
 
         // Lock must be owned for next operations...
         void inc_seq(size_t idx) {

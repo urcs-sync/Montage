@@ -45,6 +45,7 @@ class GraphTest : public Test {
         int desiredAvgDegree;
         std::atomic<int> workingThreads;
         std::atomic<int> threadsDone;
+	std::atomic<int> operations[4];
 
 
         GraphTest(uint64_t numOps, uint64_t max_verts, int desiredAvgDegree) :
@@ -81,24 +82,29 @@ class GraphTest : public Test {
 
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             int tid = ltc->tid;
-            std::mt19937_64 gen_p(ltc->seed);
+            if (tid == 0) std::cout << "Starting test now..." << std::endl;
+	    std::mt19937_64 gen_p(ltc->seed);
             std::mt19937_64 gen_v(ltc->seed + 1);
             std::uniform_int_distribution<> dist(0,9999);
             std::uniform_int_distribution<> distv(0,max_verts-1);
-            int rng = dist(gen_p);
             for (size_t i = 0; i < thd_ops[tid]; i++) {
+            	int rng = dist(gen_p);
                 if (rng <= insertionProb) {
                     // std::cout << "rng(" << rng << ") is add_edge <= " << insertionProb << std::endl; 
                     g->add_edge(distv(gen_v), distv(gen_v), -1);
+		    operations[0]++;
                 } else if (rng <= insertionProb + removalProb) {
                     // std::cout << "rng(" << rng << ") is remove_any_edge <= " << insertionProb + removalProb << std::endl; 
                     g->remove_edge(distv(gen_v), distv(gen_v));
+		    operations[1]++;
                 } else if (rng <= insertionProb + removalProb + lookupProb) {
                     // std::cout << "rng(" << rng << ") is has_edge <= " << insertionProb + removalProb + lookupProb << std::endl; 
                     g->add_vertex(distv(gen_v));
+		    operations[2]++;
                 } else {
                     // std::cout << "rng(" << rng << ") is remove_vertex..."; 
                     g->remove_vertex(distv(gen_v));
+		    operations[3]++;
                 }
             }
             return thd_ops[ltc->tid];
@@ -107,6 +113,19 @@ class GraphTest : public Test {
         void cleanup(GlobalTestConfig *gtc) {
             auto stats = g->grab_stats();
             std::apply(print_stats, stats);
+	    size_t total = operations[0] + operations[1] + operations[2] + operations[3];
+	    size_t insertion = operations[0];
+	    double insertionProp = insertion / (double) total;
+	    size_t removal = operations[1];
+	    double removalProp = removal / (double) total;
+	    size_t create = operations[2];
+	    double createProp = create / (double) total;
+	    size_t deletion = operations[3];
+	    double deletionProp = deletion / total;
+	    std::cout << "add_edge = " << insertion << " (" << insertionProp << "%)" << std::endl
+		   << ", remove_edge = " << removal << " (" << removalProp << "%)" << std::endl
+		   << ", add_vertex = " << create << " (" << createProp << "%)" << std::endl
+		   << ", remove_vertex = " << deletion << " (" << deletionProp << "%)" << std::endl;
             delete g;
         }
 
