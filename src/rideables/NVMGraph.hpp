@@ -105,6 +105,7 @@ class NVMGraph : public RGraph {
 
         // Allocates data structures and pre-loads the graph
         NVMGraph(GlobalTestConfig* gtc) {
+            Persistent::init();
             srand(time(NULL));
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
@@ -146,6 +147,14 @@ class NVMGraph : public RGraph {
                 }
             }
             std::cout << "Filled mean edges per vertex" << std::endl;
+        }
+
+        ~NVMGraph() {
+            Persistent::finalize();
+        }
+
+        void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+            Persistent::init_thread(gtc, ltc);
         }
 
         // Obtain statistics of graph (|V|, |E|, average degree, vertex degrees)
