@@ -49,7 +49,7 @@ class AllocTest : public Test {
         uint64_t *thd_ops;
         enum AllocTestType allocType;
 
-        AllocTest(enum AllocTestType allocType) : allocType(allocType) {}
+        AllocTest(uint64_t ops, enum AllocTestType allocType) : total_ops(ops), allocType(allocType) {}
 
         void init(GlobalTestConfig *gtc) {
             uint64_t new_ops = total_ops / gtc->task_num;
