@@ -318,10 +318,9 @@ class TGraph : public RGraph{
                 retval = false;
             }
 
-            std::reverse(vec.begin(), vec.end());
-            for (int u : vec) {
-                if (idxToVertex[vid] != nullptr && idxToVertex[u] != nullptr) inc_seq(u);
-                unlock(u);
+            for (auto u = vec.rbegin(); u != vec.rend(); u++) {
+                if (idxToVertex[vid] != nullptr && idxToVertex[*u] != nullptr) inc_seq(*u);
+                unlock(*u);
             }
             return retval;
         }
@@ -367,9 +366,8 @@ startOver:
 
                 // Has vertex been changed? Start over
                 if (get_seq(vid) != seq) {
-                    std::reverse(vertices.begin(), vertices.end());
-                    for (int _vid : vertices) {
-                        unlock(_vid);
+                    for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                        unlock(*_vid);
                     }
                     goto startOver;
                 }
@@ -419,10 +417,9 @@ startOver:
                 for (auto r : toDelete) delete r;
                 
                 // Step 4: Release in reverse order
-                std::reverse(vertices.begin(), vertices.end());
-                for (int _vid : vertices) {
-                    inc_seq(_vid);
-                    unlock(_vid);
+                for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                    inc_seq(*_vid);
+                    unlock(*_vid);
                 }
             }
             return true;

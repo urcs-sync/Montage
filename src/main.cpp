@@ -3,7 +3,6 @@
 #include <thread>
 #include <random>
 #include <time.h>
-#include <ratio>
 #include <sys/time.h>
 
 #include "ConcurrentPrimitives.hpp"
