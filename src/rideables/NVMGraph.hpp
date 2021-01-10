@@ -37,9 +37,9 @@ class NVMGraph : public RGraph {
             Vertex(const Vertex& oth): id(oth.id), lbl(oth.lbl) {}
             bool operator==(const Vertex& oth) const { return id==oth.id;}
             void set_lbl(int lbl) { this->lbl = lbl; }
-            int get_lbl() { return this->lbl; }
+            int get_lbl() const { return this->lbl; }
             void set_id(int id) { this->id = id; }
-            int get_id() { return this->id; }
+            int get_id() const { return this->id; }
             void persist();
         };
 
@@ -49,15 +49,14 @@ class NVMGraph : public RGraph {
             int dest;
             public:
             Relation(){}
-            Relation(Vertex* src, Vertex* dest, int weight): weight(weight), src(src->id), dest(dest->id){}
-            Relation(tVertex *src, tVertex *dest, int weight): weight(weight), src(src->get_id()), dest(dest->get_id()){}
+            Relation(int src, int dest, int weight): weight(weight), src(src), dest(dest){}
             Relation(const Relation& oth): weight(oth.weight), src(oth.src), dest(oth.dest){}
             void set_weight(int weight) { this->weight = weight; }
-            int get_weight() { return this->weight; }
-            int get_src() { return this->src; }
-            int get_dest() { return this->dest; }
+            int get_weight() const { return this->weight; }
+            int get_src() const { return this->src; }
+            int get_dest() const { return this->dest; }
             bool operator==(const Relation* other) const {
-                return this->src == other->src && this->dest == other->dest;
+                return this->get_src() == other->get_src() && this->get_dest() == other->get_dest();
             }
 
             void persist(){}
@@ -65,13 +64,13 @@ class NVMGraph : public RGraph {
 
         struct RelationHash {
             std::size_t operator()(const Relation *r) const {
-                return std::hash<int>()(r->src) ^ std::hash<int>()(r->dest);
+                return std::hash<int>()(r->get_src()) ^ std::hash<int>()(r->get_dest());
             }
         };
 
         struct RelationEqual {
             bool operator()(const Relation *r1, const Relation *r2) const {
-                return r1->src == r2->src && r1->dest == r2->dest;
+                return r1->get_src() == r2->get_src() && r1->get_dest() == r2->get_dest();
             }
         };
 
@@ -314,7 +313,7 @@ class NVMGraph : public RGraph {
             }
 
             if (vertex(vid) == nullptr) {
-                vertex(vid) = new Vertex(vid, vid);
+                vertex(vid) = new tVertex(vid, vid);
                 for (int u : vec) {
                     if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
@@ -346,10 +345,10 @@ startOver:
                 }
                 uint32_t seq = get_seq(vid);
                 for (auto r : source(vid)) {
-                    vertices.push_back(r->dest);
+                    vertices.push_back(r->get_dest());
                 }
                 for (auto r : destination(vid)) {
-                    vertices.push_back(r->src);
+                    vertices.push_back(r->get_src());
                 }
                 
                 vertices.push_back(vid);
@@ -362,12 +361,12 @@ startOver:
                     lock(_vid);
                     if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
-                            if (r->dest == _vid)
-                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_dest() == _vid)
+                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                         }
                         for (auto r : destination(vid)) {
-                            if (r->src == _vid)
-                            std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_src() == _vid)
+                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                         }
                         std::abort();
                     }
@@ -392,22 +391,22 @@ startOver:
                     if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
                         std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
                         for (auto r : source(vid)) {
-                            if (r->dest == other)
-                            std::cout << "Us: (" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_dest() == other)
+                            std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                         }
                         for (auto r : destination(other)) {
-                            if (r->src == vid) {
-                                std::cout << "Them: (" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_src() == vid) {
+                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : destination(vid)) {
-                            if (r->src == other) {
-                                std::cout << "Us: (" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_src() == other) {
+                                std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : source(other)) {
-                            if (r->dest == vid) {
-                                std::cout << "Them: (" << r->src << "," << r->dest << ")" << std::endl;
+                            if (r->get_dest() == vid) {
+                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                             }
                         }
                         std::abort();

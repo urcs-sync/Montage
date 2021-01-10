@@ -44,7 +44,7 @@
 #include "NatarajanTree.hpp"
 
 #include "TGraph.hpp"
-// #include "NVMGraph.hpp"
+#include "NVMGraph.hpp"
 // #include "DLGraph.hpp"
 // #include "MontageGraph.hpp"
 #endif
@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 
 	/* graphs */
 	gtc.addRideableOption(new TGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "TGraph");
-	// gtc.addRideableOption(new NVMGraphFactory<numVertices>(), "NVMGraph");
+	gtc.addRideableOption(new NVMGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "NVMGraph");
 	// gtc.addRideableOption(new DLGraphFactory<numVertices>(), "DLGraph");
 	// gtc.addRideableOption(new MontageGraphFactory<numVertices>(), "MontageGraph");
 
