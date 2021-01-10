@@ -61,7 +61,8 @@ class AllocTest : public Test {
                 thd_ops[0] += (total_ops - new_ops * gtc->task_num);
             }
             dummy = new MontageDummy(gtc);
-            
+	
+            if (allocType == DO_RALLOC_ALLOC) Persistent::init();	    
             /* set interval to inf so this won't be killed by timeout */
             gtc->interval = numeric_limits<double>::max();
         }
