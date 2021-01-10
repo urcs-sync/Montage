@@ -111,9 +111,9 @@ class TGraph : public RGraph{
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
-                    vMeta[i].idxToVertex = new Vertex(i,i);
+                    vertex(i) = new Vertex(i,i);
                 } else {
-                    vMeta[i].idxToVertex = nullptr;
+                    vertex(i) = nullptr;
                 }
                 vMeta[i].vertexSeqs = 0;
             }
@@ -122,13 +122,13 @@ class TGraph : public RGraph{
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex == nullptr) continue;
+                if (vertex(i) == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
                     while (k == i) {
                         k = verticesRNG(gen);
                     }
-                    if (vMeta[k].idxToVertex != nullptr) {
+                    if (vertex(k) != nullptr) {
                         Relation *in = new Relation(i, k, -1);
                         Relation *out = new Relation(i, k, -1);
                         auto ret = source(i).insert(in);
@@ -152,7 +152,7 @@ class TGraph : public RGraph{
             int *degrees = new int[numVertices];
             double averageEdgeDegree = 0;
             for (auto i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex != nullptr) {
+                if (vertex(i) != nullptr) {
                     numV++;
                     numE += source(i).size();
                     degrees[i] = source(i).size() + destination(i).size();
@@ -172,6 +172,7 @@ class TGraph : public RGraph{
                 lock(i);
             }
             for (auto i = 0; i < numVertices; i++) {
+                if (vertex(i) == nullptr) continue;
                 std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
                 for (auto r : source(i)) toDelete.push_back(r);
                 for (auto r : destination(i)) toDelete.push_back(r);
@@ -195,9 +196,7 @@ class TGraph : public RGraph{
             } else {
                 lock(src);
                 lock(dest);
-            }
-            
-
+            }  
             
             Relation r(src,dest,weight);
             auto& srcSet = source(src);
@@ -205,7 +204,7 @@ class TGraph : public RGraph{
             // Note: We do not create a vertex if one is not found
             // also we do not add an edge even if it is found some of the time
             // to enable even constant load factor
-            if (vMeta[src].idxToVertex == nullptr || vMeta[dest].idxToVertex == nullptr) {
+            if (vertex(src) == nullptr || vertex(dest) == nullptr) {
                 goto exitEarly;
             }
             if (has_relation(srcSet, &r)) {
@@ -242,7 +241,7 @@ class TGraph : public RGraph{
             
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
             lock(src);
-            if (vMeta[src].idxToVertex == nullptr) {
+            if (vertex(src) == nullptr) {
                 unlock(src);
                 return false;
             }
@@ -269,7 +268,7 @@ class TGraph : public RGraph{
                 lock(dest);
             }
             
-            if (vMeta[src].idxToVertex != nullptr && vMeta[dest].idxToVertex != nullptr) {
+            if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 Relation r(src, dest, -1);
                 remove_relation(source(src), &r);
                 remove_relation(destination(dest), &r);
@@ -308,10 +307,10 @@ class TGraph : public RGraph{
                 lock(u);
             }
 
-            if (vMeta[vid].idxToVertex == nullptr) {
-                vMeta[vid].idxToVertex = new Vertex(vid, vid);
+            if (vertex(vid) == nullptr) {
+                vertex(vid) = new Vertex(vid, vid);
                 for (int u : vec) {
-                    if (vMeta[u].idxToVertex == nullptr) continue;
+                    if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
                     Relation *in = new Relation(vid, u, -1);
                     Relation *out = new Relation(vid, u, -1);
@@ -323,7 +322,7 @@ class TGraph : public RGraph{
             }
 
             for (auto u = vec.rbegin(); u != vec.rend(); u++) {
-                if (vMeta[vid].idxToVertex != nullptr && vMeta[*u].idxToVertex != nullptr) inc_seq(*u);
+                if (vertex(vid) != nullptr && vertex(*u) != nullptr) inc_seq(*u);
                 unlock(*u);
             }
             return retval;
@@ -335,7 +334,7 @@ startOver:
                 // Step 1: Acquire vertex and collect neighbors...
                 std::vector<int> vertices;
                 lock(vid);
-                if (vMeta[vid].idxToVertex == nullptr) {
+                if (vertex(vid) == nullptr) {
                     unlock(vid);
                     return false;
                 }
@@ -355,7 +354,7 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
-                    if (vMeta[_vid].idxToVertex == nullptr && get_seq(vid) == seq) {
+                    if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
                             if (r->dest == _vid)
                             std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
@@ -430,13 +429,17 @@ startOver:
         }
         
     private:
+        Vertex *& vertex(size_t idx) {
+            return vMeta[idx].idxToVertex;
+        }
+
         void lock(size_t idx) {
         	vMeta[idx].vertexLocks.lock();
-	}
+	    }
 
         void unlock(size_t idx) {
         	vMeta[idx].vertexLocks.unlock();
-	}
+    	}
 
         // Lock must be owned for next operations...
         void inc_seq(size_t idx) {
@@ -448,20 +451,20 @@ startOver:
         }
 
         void destroy(size_t idx) {
-            assert(vMeta[idx].idxToVertex!=nullptr);
-            delete vMeta[idx].idxToVertex;
-            vMeta[idx].idxToVertex = nullptr;
+            assert(vertex(idx)!=nullptr);
+            delete vertex(idx);
+            vertex(idx) = nullptr;
         }
 
         // Incoming edges
         Set& source(int idx) {
-            return vMeta[idx].idxToVertex->adjacency_list;
+            return vertex(idx)->adjacency_list;
 
         }
 
         // Outgoing edges
         Set& destination(int idx) {
-            return vMeta[idx].idxToVertex->dest_list;
+            return vertex(idx)->dest_list;
         }
 
         bool has_relation(Set& set, Relation *r) {

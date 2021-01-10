@@ -97,17 +97,18 @@ class NVMGraph : public RGraph {
                 }
         };
 
+        struct alignas(64) VertexMeta {
+            tVertex* idxToVertex;// Transient set of transient vertices to index map
+            std::mutex vertexLocks;// Transient locks for transient vertices
+            uint32_t vertexSeqs;// Transient sequence numbers for transactional operations on vertices
+        };
+
 
         // Allocates data structures and pre-loads the graph
         NVMGraph(GlobalTestConfig* gtc) {
             srand(time(NULL));
             size_t sz = numVertices;
-            this->idxToVertex = new tVertex*[numVertices];
-            std::cout << "Allocated idxToVertex..." << std::endl;
-            this->vertexLocks = new std::atomic<bool>[numVertices];
-            std::cout << "Allocated vertexLocks..." << std::endl;
-            this->vertexSeqs = new uint32_t[numVertices];
-            std::cout << "Allocated vertexSeqs..." << std::endl;
+            this->vMeta = new VertexMeta[numVertices];
             std::mt19937_64 gen(rand());
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
@@ -115,29 +116,33 @@ class NVMGraph : public RGraph {
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
-                    idxToVertex[i] = new Vertex(i,i);
+                    vMeta[i].idxToVertex = new tVertex(i,i);
                 } else {
-                    idxToVertex[i] = nullptr;
+                    vMeta[i].idxToVertex = nullptr;
                 }
-                vertexLocks[i] = false;
-                vertexSeqs[i] = 0;
+                vMeta[i].vertexSeqs = 0;
             }
 
             std::cout << "Filled vertexLoad" << std::endl;
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                if (idxToVertex[i] == nullptr) continue;
+                if (vMeta[i].idxToVertex == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
                     while (k == i) {
                         k = verticesRNG(gen);
                     }
-                    if (idxToVertex[k] != nullptr) {
+                    if (vMeta[k].idxToVertex != nullptr) {
                         Relation *in = new Relation(i, k, -1);
                         Relation *out = new Relation(i, k, -1);
-                        source(i).insert(in);
+                        auto ret = source(i).insert(in);
                         destination(k).insert(out);
+                        if(ret.second==false){
+                            // relation exists, reclaiming
+                            delete in;
+                            delete out;
+                        }
                     }
                 }
             }
@@ -152,7 +157,7 @@ class NVMGraph : public RGraph {
             int *degrees = new int[numVertices];
             double averageEdgeDegree = 0;
             for (auto i = 0; i < numVertices; i++) {
-                if (idxToVertex[i] != nullptr) {
+                if (vMeta[i].idxToVertex != nullptr) {
                     numV++;
                     numE += source(i).size();
                     degrees[i] = source(i).size() + destination(i).size();
@@ -164,9 +169,7 @@ class NVMGraph : public RGraph {
             return std::make_tuple(numV, numE, averageEdgeDegree, degrees, numVertices);
         }
 
-        tVertex** idxToVertex; // Transient set of transient vertices to index map
-        std::atomic<bool> *vertexLocks; // Transient locks for transient vertices
-        uint32_t *vertexSeqs; // Transient sequence numbers for transactional operations on vertices
+        VertexMeta* vMeta;
 
         // Thread-safe and does not leak edges
         void clear() {
@@ -174,6 +177,7 @@ class NVMGraph : public RGraph {
                 lock(i);
             }
             for (auto i = 0; i < numVertices; i++) {
+                if (vertex(i) == nullptr) continue;
                 std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
                 for (auto r : source(i)) toDelete.push_back(r);
                 for (auto r : destination(i)) toDelete.push_back(r);
@@ -197,9 +201,7 @@ class NVMGraph : public RGraph {
             } else {
                 lock(src);
                 lock(dest);
-            }
-            
-
+            }  
             
             Relation r(src,dest,weight);
             auto& srcSet = source(src);
@@ -207,7 +209,7 @@ class NVMGraph : public RGraph {
             // Note: We do not create a vertex if one is not found
             // also we do not add an edge even if it is found some of the time
             // to enable even constant load factor
-            if (idxToVertex[src] == nullptr || idxToVertex[dest] == nullptr) {
+            if (vertex(src) == nullptr || vertex(dest) == nullptr) {
                 goto exitEarly;
             }
             if (has_relation(srcSet, &r)) {
@@ -239,12 +241,13 @@ class NVMGraph : public RGraph {
         }
 
 
+
         bool has_edge(int src, int dest) {
             bool retval = false;
             
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
             lock(src);
-            if (idxToVertex[src] == nullptr) {
+            if (vertex(src) == nullptr) {
                 unlock(src);
                 return false;
             }
@@ -271,7 +274,7 @@ class NVMGraph : public RGraph {
                 lock(dest);
             }
             
-            if (idxToVertex[src] != nullptr && idxToVertex[dest] != nullptr) {
+            if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 Relation r(src, dest, -1);
                 remove_relation(source(src), &r);
                 remove_relation(destination(dest), &r);
@@ -310,10 +313,10 @@ class NVMGraph : public RGraph {
                 lock(u);
             }
 
-            if (idxToVertex[vid] == nullptr) {
-                idxToVertex[vid] = new tVertex(vid, vid);
+            if (vertex(vid) == nullptr) {
+                vertex(vid) = new Vertex(vid, vid);
                 for (int u : vec) {
-                    if (idxToVertex[u] == nullptr) continue;
+                    if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
                     Relation *in = new Relation(vid, u, -1);
                     Relation *out = new Relation(vid, u, -1);
@@ -324,10 +327,9 @@ class NVMGraph : public RGraph {
                 retval = false;
             }
 
-            std::reverse(vec.begin(), vec.end());
-            for (int u : vec) {
-                if (idxToVertex[vid] != nullptr && idxToVertex[u] != nullptr) inc_seq(u);
-                unlock(u);
+            for (auto u = vec.rbegin(); u != vec.rend(); u++) {
+                if (vertex(vid) != nullptr && vertex(*u) != nullptr) inc_seq(*u);
+                unlock(*u);
             }
             return retval;
         }
@@ -338,7 +340,7 @@ startOver:
                 // Step 1: Acquire vertex and collect neighbors...
                 std::vector<int> vertices;
                 lock(vid);
-                if (idxToVertex[vid] == nullptr) {
+                if (vertex(vid) == nullptr) {
                     unlock(vid);
                     return false;
                 }
@@ -358,7 +360,7 @@ startOver:
                 unlock(vid);
                 for (int _vid : vertices) {
                     lock(_vid);
-                    if (idxToVertex[_vid] == nullptr && get_seq(vid) == seq) {
+                    if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
                             if (r->dest == _vid)
                             std::cout << "(" << r->src << "," << r->dest << ")" << std::endl;
@@ -373,9 +375,8 @@ startOver:
 
                 // Has vertex been changed? Start over
                 if (get_seq(vid) != seq) {
-                    std::reverse(vertices.begin(), vertices.end());
-                    for (int _vid : vertices) {
-                        unlock(_vid);
+                    for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                        unlock(*_vid);
                     }
                     goto startOver;
                 }
@@ -425,52 +426,51 @@ startOver:
                 for (auto r : toDelete) delete r;
                 
                 // Step 4: Release in reverse order
-                std::reverse(vertices.begin(), vertices.end());
-                for (int _vid : vertices) {
-                    inc_seq(_vid);
-                    unlock(_vid);
+                for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                    inc_seq(*_vid);
+                    unlock(*_vid);
                 }
             }
             return true;
         }
         
     private:
-        void lock(size_t idx) {
-            std::atomic<bool>& lck = vertexLocks[idx];
-            bool expect = false;
-            while (lck.load() == true || lck.compare_exchange_strong(expect, true) == false) {
-                expect = false;
-            }
+        tVertex *& vertex(size_t idx) {
+            return vMeta[idx].idxToVertex;
         }
 
+        void lock(size_t idx) {
+        	vMeta[idx].vertexLocks.lock();
+	    }
+
         void unlock(size_t idx) {
-            std::atomic<bool>& lck = vertexLocks[idx];
-            lck.store(false);
-        }
+        	vMeta[idx].vertexLocks.unlock();
+    	}
 
         // Lock must be owned for next operations...
         void inc_seq(size_t idx) {
-            vertexSeqs[idx]++;
+            vMeta[idx].vertexSeqs++;
         }
             
         uint64_t get_seq(size_t idx) {
-            return vertexSeqs[idx];
+            return vMeta[idx].vertexSeqs;
         }
 
         void destroy(size_t idx) {
-            delete idxToVertex[idx];
-            idxToVertex[idx] = nullptr;
+            assert(vertex(idx)!=nullptr);
+            delete vertex(idx);
+            vertex(idx) = nullptr;
         }
 
         // Incoming edges
         Set& source(int idx) {
-            return idxToVertex[idx]->adjacency_list;
+            return vertex(idx)->adjacency_list;
 
         }
 
         // Outgoing edges
         Set& destination(int idx) {
-            return idxToVertex[idx]->dest_list;
+            return vertex(idx)->dest_list;
         }
 
         bool has_relation(Set& set, Relation *r) {
