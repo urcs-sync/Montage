@@ -31,18 +31,17 @@ class MontageGraph : public RGraph, public Recoverable{
 
         class tVertex;
         class BasePayload : public pds::PBlk {
-        protected:
-            GENERATE_FIELD(int, tag, BasePayload);
         public:
+            GENERATE_FIELD(int, tag, BasePayload);
             BasePayload(){}
             BasePayload(const BasePayload& oth): pds::PBlk(oth){}
             void persist();
 
         };
         class Vertex : public BasePayload {
+        public:
             GENERATE_FIELD(int, id, Vertex);
             GENERATE_FIELD(int, lbl, Vertex);
-        public:
             Vertex(){this->m_tag = 0;}
             Vertex(int id, int lbl): m_id(id), m_lbl(lbl){this->m_tag = 0;}
             Vertex(const Vertex& oth): BasePayload(oth), m_id(oth.m_id), m_lbl(oth.m_lbl) {this->m_tag = 0;}
@@ -50,24 +49,30 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         class Relation : public BasePayload {
+        public:
             GENERATE_FIELD(int, weight, Relation);
             GENERATE_FIELD(int, src, Relation);
             GENERATE_FIELD(int, dest, Relation);
-        public:
             Relation(){this->m_tag = 1;}
             Relation(int src, int dest, int weight): m_weight(weight), m_src(src), m_dest(dest){this->m_tag = 1;}
             Relation(const Relation& oth): BasePayload(oth), m_weight(oth.m_weight), m_src(oth.m_src), m_dest(oth.m_dest){this->m_tag = 1;}
-        };
+            int src() const {
+		return m_src;
+	    }
+	    int dest() const {
+		return m_dest;
+	    }
+	};
 
         struct RelationHash {
             std::size_t operator()(const Relation *r) const {
-                return std::hash<int>()(r->get_src()) ^ std::hash<int>()(r->get_dest());
+                return std::hash<int>()(r->src()) ^ std::hash<int>()(r->src());
             }
         };
 
         struct RelationEqual {
             bool operator()(const Relation *r1, const Relation *r2) const {
-                return r1->get_src() == r2->get_src() && r1->get_dest() == r2->get_dest();
+                return r1->src() == r2->src() && r1->dest() == r2->dest();
             }
         };
 
@@ -78,8 +83,8 @@ class MontageGraph : public RGraph, public Recoverable{
                 MontageGraph* ds;
                 Vertex *payload = nullptr;
                 int id; // cached id
-                std::unordered_set<Relation*> adjacency_list;
-                std::unordered_set<Relation*> dest_list;
+                Set adjacency_list;
+                Set dest_list;
 
                 tVertex(MontageGraph* ds_, int id, int lbl): ds(ds_) {
                     payload = ds->pnew<Vertex>(id, lbl);
@@ -121,7 +126,6 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc) {
-            MontageOpHolder _holder(this);
             srand(time(NULL));
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
@@ -132,7 +136,7 @@ class MontageGraph : public RGraph, public Recoverable{
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
-                    vMeta[i].idxToVertex = new tVertex(i,i);
+                    vMeta[i].idxToVertex = new tVertex(this, i,i);
                 } else {
                     vMeta[i].idxToVertex = nullptr;
                 }
@@ -166,6 +170,26 @@ class MontageGraph : public RGraph, public Recoverable{
         }
 
         ~MontageGraph() {}
+        
+	// Obtain statistics of graph (|V|, |E|, average degree, vertex degrees)
+        // Not concurrent safe...
+        std::tuple<int, int, double, int *, int> grab_stats() {
+            int numV = 0;
+            int numE = 0;
+            int *degrees = new int[numVertices];
+            double averageEdgeDegree = 0;
+            for (auto i = 0; i < numVertices; i++) {
+                if (vMeta[i].idxToVertex != nullptr) {
+                    numV++;
+                    numE += source(i).size();
+                    degrees[i] = source(i).size() + destination(i).size();
+                } else {
+                    degrees[i] = 0;
+                }
+            }
+            averageEdgeDegree = numE / ((double) numV);
+            return std::make_tuple(numV, numE, averageEdgeDegree, degrees, numVertices);
+        }
 
         void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
             Recoverable::init_thread(gtc, ltc);
@@ -389,8 +413,8 @@ class MontageGraph : public RGraph, public Recoverable{
             //     #pragma omp for
             //     for (size_t i = 0; i < relationVector.size(); ++i) {
             //         Relation *e = relationVector[i];
-            //         int id1 = e->get_unsafe_src(this);
-            //         int id2 = e->get_unsafe_dest(this);
+            //         int id1 = e->m_src(this);
+            //         int id2 = e->m_dest(this);
             //         RelationWrapper item = { id1, id2, e };
             //         if (id1 < 0 || (size_t) id1 >= numVertices || id2 < 0 ||  (size_t) id2 >= numVertices) {
             //             std::cerr << "Found a relation with a bad edge: (" << id1 << "," << id2 << ")" << std::endl;
@@ -454,7 +478,52 @@ class MontageGraph : public RGraph, public Recoverable{
 
             // delete recovered;
             // return block_cnt;
+            return false;
+	}
+
+        bool add_vertex(int vid) {
+            std::mt19937_64 vertexGen(time(NULL));
+            std::uniform_int_distribution<> uniformVertex(0,numVertices);
+            bool retval = true;
+            // Randomly sample vertices...
+            std::vector<int> vec(meanEdgesPerVertex);
+            for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
+                int u = uniformVertex(vertexGen);
+                while (u == i) {
+                    u = uniformVertex(vertexGen);
+                }
+                vec.push_back(u);
+            }
+            vec.push_back(vid);
+            std::sort(vec.begin(), vec.end()); 
+            vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+
+            for (int u : vec) {
+                lock(u);
+            }
+
+            if (vertex(vid) == nullptr) {
+		MontageOpHolder _holder(this);
+                vertex(vid) = new tVertex(this, vid, vid);
+                for (int u : vec) {
+                    if (vertex(u) == nullptr) continue;
+                    if (u == vid) continue;
+                    Relation *in = pnew<Relation>(vid, u, -1);
+                    Relation *out = pnew<Relation>(vid, u, -1);
+                    source(vid).insert(in);
+                    destination(u).insert(out);
+                }
+            } else {
+                retval = false;
+            }
+
+            for (auto u = vec.rbegin(); u != vec.rend(); u++) {
+                if (vertex(vid) != nullptr && vertex(*u) != nullptr) inc_seq(*u);
+                unlock(*u);
+            }
+            return retval;
         }
+
 
         bool remove_vertex(int vid) {
 startOver:
@@ -468,10 +537,10 @@ startOver:
                 }
                 uint32_t seq = get_seq(vid);
                 for (auto r : source(vid)) {
-                    vertices.push_back(r->get_dest());
+                    vertices.push_back(r->dest());
                 }
                 for (auto r : destination(vid)) {
-                    vertices.push_back(r->get_src());
+                    vertices.push_back(r->src());
                 }
                 
                 vertices.push_back(vid);
@@ -485,12 +554,12 @@ startOver:
                     lock(_vid);
                     if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
-                            if (r->get_dest() == _vid)
-                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->dest() == _vid)
+                            std::cout << "(" << r->src() << "," << r->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(vid)) {
-                            if (r->get_src() == _vid)
-                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->src() == _vid)
+                            std::cout << "(" << r->src() << "," << r->dest() << ")" << std::endl;
                         }
                         std::abort();
                     }
@@ -516,22 +585,22 @@ startOver:
                     if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
                         std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
                         for (auto r : source(vid)) {
-                            if (r->get_dest() == other)
-                            std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->dest() == other)
+                            std::cout << "Us: (" << r->src() << "," << r->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(other)) {
-                            if (r->get_src() == vid) {
-                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->src() == vid) {
+                                std::cout << "Them: (" << r->src() << "," << r->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : destination(vid)) {
-                            if (r->get_src() == other) {
-                                std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->src() == other) {
+                                std::cout << "Us: (" << r->src() << "," << r->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : source(other)) {
-                            if (r->get_dest() == vid) {
-                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            if (r->dest() == vid) {
+                                std::cout << "Them: (" << r->src() << "," << r->dest() << ")" << std::endl;
                             }
                         }
                         std::abort();

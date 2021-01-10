@@ -46,7 +46,7 @@
 #include "TGraph.hpp"
 #include "NVMGraph.hpp"
 // #include "DLGraph.hpp"
-// #include "MontageGraph.hpp"
+#include "MontageGraph.hpp"
 #endif
 
 #ifdef MNEMOSYNE
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new TGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "TGraph");
 	gtc.addRideableOption(new NVMGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "NVMGraph");
 	// gtc.addRideableOption(new DLGraphFactory<numVertices>(), "DLGraph");
-	// gtc.addRideableOption(new MontageGraphFactory<numVertices>(), "MontageGraph");
+	gtc.addRideableOption(new MontageGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "MontageGraph");
 
     // gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
     gtc.addRideableOption(new TGraphFactory<3076727, 0, 100>(), "TransientOrkut");
