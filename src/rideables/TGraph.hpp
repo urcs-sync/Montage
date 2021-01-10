@@ -384,7 +384,7 @@ startOver:
 
                     Relation src(other, vid, -1);
                     Relation dest(vid, other, -1);
-                    if (!has_relation(source(other), &src) || !has_relation(destination(other), &dest)) {
+                    if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
                         std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
                         for (auto r : source(vid)) {
                             if (r->dest == other)
