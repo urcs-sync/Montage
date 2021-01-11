@@ -8,6 +8,7 @@ cd ..
 outfile_dir="data"
 THREADS=(1 2 4 8 16 32 64)
 REPEAT_NUM=3 # number of trials
+STRATEGY="-dPersistStrat=PerEpoch -dPersister=Advancer -dContainer=Vector"
 
 delete_heap_file(){
     rm -rf /mnt/pmem/${USER}* /mnt/pmem/savitar.cat
@@ -24,11 +25,13 @@ graph_thread_execute(){
     graph_thread_init
     for ((i=1; i<=REPEAT_NUM; ++i)); do
         for threads in "${THREADS[@]}"; do
-            for rideable in {16..18}; do
-                for test in {9..10}; do
+            for test in {10..11}; do
+                for rideable in {16..17}; do
                     delete_heap_file
-                    bin/main -r $rideable -m $test -t $threads | tee -a $outfile_dir/graph_thread.csv
+                    bin/main -r $rideable -m $test -t $threads -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
                 done
+                delete_heap_file
+                bin/main -r 17 -m $test -t $threads $STRATEGY | tee -a $outfile_dir/graph_thread.csv
             done
         done
     done
