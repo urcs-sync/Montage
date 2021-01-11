@@ -188,6 +188,8 @@ class TGraph : public RGraph{
         bool add_edge(int src, int dest, int weight) {
             bool retval = false;
             if (src == dest) return false; // Loops not allowed
+            Relation *out = new Relation(src, dest, weight);
+            Relation *in = new Relation(src, dest, weight);
             if (src > dest) {
                 lock(dest);
                 lock(src);
@@ -213,8 +215,6 @@ class TGraph : public RGraph{
             
 
             {
-                Relation *out = new Relation(src, dest, weight);
-                Relation *in = new Relation(src, dest, weight);
                 srcSet.insert(out);
                 destSet.insert(in);
                 inc_seq(src);
@@ -223,6 +223,10 @@ class TGraph : public RGraph{
             }
 
             exitEarly:
+                if (!retval){
+                    delete out;
+                    delete in;
+                }
                 if (src > dest) {
                     unlock(src);
                     unlock(dest);
