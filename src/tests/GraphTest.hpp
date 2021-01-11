@@ -46,13 +46,14 @@ class GraphTest : public Test {
         int remVerProb;
         int desiredAvgDegree;
         int vertexLoad;
+        int edge_op;
         std::atomic<int> workingThreads;
         std::atomic<int> threadsDone;
         padded<std::array<int,4>>* operations;
 
 
-        GraphTest(uint64_t numOps, int max_verts, int desiredAvgDegree, int vertexLoad) :
-            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad) {
+        GraphTest(uint64_t numOps, int max_verts, int desiredAvgDegree, int vertexLoad, int edge_op) :
+            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad), edge_op(edge_op) {
         }
 
         void init(GlobalTestConfig *gtc) {
@@ -75,29 +76,20 @@ class GraphTest : public Test {
             /* set interval to inf so this won't be killed by timeout */
             gtc->interval = numeric_limits<double>::max();
             auto stats = g->grab_stats();
-            std::apply(print_stats, stats);
-            int edge_op = 6666;
-            if(gtc->checkEnv("EdgeOp")){
-                edge_op = atoi((gtc->getEnv("EdgeOp")).c_str());
-                assert(edge_op>=0 && edge_op<=10000);
-            }
-            // addEdgeProb = std::max(1,(int)edge_op*desiredAvgDegree*100/(max_verts*vertexLoad));
-            // remEdgeProb = std::max(1,edge_op-addEdgeProb);
-            // (FIXME) Wentao: I don't know why 3:1 is the ratio for being
-            // stable. Find the root cause and solve it later.
-            addEdgeProb = edge_op*3/4;
-            remEdgeProb = edge_op/4;
+            if(gtc->verbose) std::apply(print_stats, stats);
+            addEdgeProb = std::max(1,(int)edge_op*desiredAvgDegree*100/(max_verts*vertexLoad));
+            remEdgeProb = std::max(1,edge_op-addEdgeProb);
             addVerProb = (10000-edge_op)/2;
             remVerProb = 10000-edge_op-addVerProb;
             // Printing out real ratio of operations
-            std::cout<<"AddEdge:RemoveEdge:AddVertex:RemoveVertex="<<addEdgeProb<<":"<<remEdgeProb<<":"<<addVerProb<<":"<<remVerProb<<std::endl;
+            if(gtc->verbose) std::cout<<"AddEdge:RemoveEdge:AddVertex:RemoveVertex="<<addEdgeProb<<":"<<remEdgeProb<<":"<<addVerProb<<":"<<remVerProb<<std::endl;
             workingThreads = gtc->task_num;
             threadsDone = 0;
         }
 
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             int tid = ltc->tid;
-            if (tid == 0) std::cout << "Starting test now..." << std::endl;
+            if (tid == 0) if(gtc->verbose) std::cout << "Starting test now..." << std::endl;
             std::mt19937_64 gen_p(ltc->seed);
             std::mt19937_64 gen_v(ltc->seed + 1);
             std::uniform_int_distribution<> dist(0,9999);
@@ -127,7 +119,7 @@ class GraphTest : public Test {
 
         void cleanup(GlobalTestConfig *gtc) {
             auto stats = g->grab_stats();
-            std::apply(print_stats, stats);
+            if(gtc->verbose) std::apply(print_stats, stats);
             size_t total=0,add_edge=0,rem_edge=0,add_ver=0,rem_ver=0;
             for(int i=0;i<gtc->task_num;i++){
                 total += (operations[i].ui[0] + operations[i].ui[1] + operations[i].ui[2] + operations[i].ui[3]);
@@ -137,16 +129,16 @@ class GraphTest : public Test {
                 rem_ver += operations[i].ui[3];
             }
             delete operations;
-	    double add_edge_prop = add_edge*100 / (double) total;
-	    double rem_edge_prop = rem_edge*100 / (double) total;
-	    double add_ver_prop = add_ver*100 / (double) total;
-	    double rem_ver_prop = rem_ver*100 / (double) total;
-        // Printing out ratio of successful operations
-	    std::cout << "add_edge = " << add_edge << " (" << add_edge_prop << "%)" << std::endl
-		   << ", remove_edge = " << rem_edge << " (" << rem_edge_prop << "%)" << std::endl
-		   << ", add_vertex = " << add_ver << " (" << add_ver_prop << "%)" << std::endl
-		   << ", remove_vertex = " << rem_ver << " (" << rem_ver_prop << "%)" << std::endl;
-            delete g;
+            double add_edge_prop = add_edge*100 / (double) total;
+            double rem_edge_prop = rem_edge*100 / (double) total;
+            double add_ver_prop = add_ver*100 / (double) total;
+            double rem_ver_prop = rem_ver*100 / (double) total;
+            // Printing out ratio of successful operations
+            if(gtc->verbose) std::cout << "add_edge = " << add_edge << " (" << add_edge_prop << "%)" << std::endl
+                << ", remove_edge = " << rem_edge << " (" << rem_edge_prop << "%)" << std::endl
+                << ", add_vertex = " << add_ver << " (" << add_ver_prop << "%)" << std::endl
+                << ", remove_vertex = " << rem_ver << " (" << rem_ver_prop << "%)" << std::endl;
+                delete g;
         }
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {

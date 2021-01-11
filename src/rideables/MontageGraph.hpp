@@ -57,16 +57,16 @@ class MontageGraph : public RGraph, public Recoverable{
             Relation(int src, int dest, int weight): m_weight(weight), m_src(src), m_dest(dest){this->m_tag = 1;}
             Relation(const Relation& oth): BasePayload(oth), m_weight(oth.m_weight), m_src(oth.m_src), m_dest(oth.m_dest){this->m_tag = 1;}
             int src() const {
-		return m_src;
-	    }
-	    int dest() const {
-		return m_dest;
-	    }
+                return m_src;
+            }
+            int dest() const {
+                return m_dest;
+            }
 	};
 
         struct RelationHash {
             std::size_t operator()(const Relation *r) const {
-                return std::hash<int>()(r->src()) ^ std::hash<int>()(r->src());
+                return std::hash<int>()(r->src()) ^ std::hash<int>()(r->dest());
             }
         };
 
@@ -83,8 +83,8 @@ class MontageGraph : public RGraph, public Recoverable{
                 MontageGraph* ds;
                 Vertex *payload = nullptr;
                 int id; // cached id
-                Set adjacency_list;
-                Set dest_list;
+                Set adjacency_list;//only relations in this list is reclaimed
+                Set dest_list;// relations in this list is a duplication of those in some adjacency list
 
                 tVertex(MontageGraph* ds_, int id, int lbl): ds(ds_) {
                     payload = ds->pnew<Vertex>(id, lbl);
@@ -126,13 +126,12 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc) {
-            srand(time(NULL));
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
-            std::mt19937_64 gen(rand());
+            std::mt19937_64 gen(time(NULL));
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
-            std::cout << "Allocated core..." << std::endl;
+            if(gtc->verbose) std::cout << "Allocated core..." << std::endl;
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
@@ -142,31 +141,29 @@ class MontageGraph : public RGraph, public Recoverable{
                 }
                 vMeta[i].vertexSeqs = 0;
             }
-
-            std::cout << "Filled vertexLoad" << std::endl;
+            if(gtc->verbose) std::cout << "Filled vertexLoad" << std::endl;
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
                 if (vMeta[i].idxToVertex == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
-                    while (k == i) {
-                        k = verticesRNG(gen);
+                    if (k == i) {
+                        continue;
                     }
                     if (vMeta[k].idxToVertex != nullptr) {
-                        Relation *in = pnew<Relation>(i, k, -1);
-                        Relation *out = pnew<Relation>(i, k, -1);
-                        auto ret = source(i).insert(in);
-                        destination(k).insert(out);
-                        if(ret.second==false){
+                        Relation *r = pnew<Relation>(i, k, -1);
+                        auto ret1 = source(i).insert(r);
+                        auto ret2 = destination(k).insert(r);
+                        assert(ret1.second==ret2.second);
+                        if(ret1.second==false){
                             // relation exists, reclaiming
-                            pdelete(in);
-                            pdelete(out);
+                            pdelete(r);
                         }
                     }
                 }
             }
-            std::cout << "Filled mean edges per vertex" << std::endl;
+            if(gtc->verbose) std::cout << "Filled mean edges per vertex" << std::endl;
         }
 
         ~MontageGraph() {}
@@ -199,23 +196,24 @@ class MontageGraph : public RGraph, public Recoverable{
         
         // Thread-safe and does not leak edges
         void clear() {
-            for (auto i = 0; i < numVertices; i++) {
-                lock(i);
-            }
-            for (auto i = 0; i < numVertices; i++) {
-                if (vertex(i) == nullptr) continue;
-                std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
-                for (auto r : source(i)) toDelete.push_back(r);
-                for (auto r : destination(i)) toDelete.push_back(r);
-                source(i).clear();
-                destination(i).clear();
-                for (auto r : toDelete) delete r;
-            }
-            for (int i = numVertices - 1; i >= 0; i--) {
-                destroy(i);
-                inc_seq(i);
-                unlock(i);
-            }
+            assert(0&&"clear() not implemented!");
+            // for (auto i = 0; i < numVertices; i++) {
+            //     lock(i);
+            // }
+            // for (auto i = 0; i < numVertices; i++) {
+            //     if (vertex(i) == nullptr) continue;
+            //     std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
+            //     for (auto r : source(i)) toDelete.push_back(r);
+            //     for (auto r : destination(i)) toDelete.push_back(r);
+            //     source(i).clear();
+            //     destination(i).clear();
+            //     for (auto r : toDelete) delete r;
+            // }
+            // for (int i = numVertices - 1; i >= 0; i--) {
+            //     destroy(i);
+            //     inc_seq(i);
+            //     unlock(i);
+            // }
         }
 
         /**
@@ -226,8 +224,7 @@ class MontageGraph : public RGraph, public Recoverable{
          */
         bool add_edge(int src, int dest, int weight) {
             bool retval = false;
-            Relation *out = pnew<Relation>(src,dest,weight);
-            Relation *in = pnew<Relation>(src,dest,weight);
+            Relation *r = pnew<Relation>(src,dest,weight);
             if (src == dest) return false; // Loops not allowed
             if (src > dest) {
                 lock(dest);
@@ -244,20 +241,22 @@ class MontageGraph : public RGraph, public Recoverable{
             }
 
             {
-                
                 MontageOpHolder _holder(this);
-                
-                srcSet.insert(out);
-                destSet.insert(in);
-                inc_seq(src);
-                inc_seq(dest);
-                retval = true;
+                auto ret1 = srcSet.insert(r);
+                auto ret2 = destSet.insert(r);
+                assert(ret1.second == ret2.second);
+                if(ret1.second){
+                    inc_seq(src);
+                    inc_seq(dest);
+                    retval = true;
+                }else{
+                    retval = false;
+                }
             }
             
             exitEarly:
                 if (!retval){
-                    pdelete(out);
-                    pdelete(in);
+                    pdelete(r);
                 }
                 if (src > dest) {
                     unlock(src);
@@ -276,7 +275,7 @@ class MontageGraph : public RGraph, public Recoverable{
             if (vertex(src) == nullptr) {
                 unlock(src);
                 return false;
-            }        
+            }
 
             {
                 MontageOpHolder _holder(this);
@@ -302,14 +301,19 @@ class MontageGraph : public RGraph, public Recoverable{
                 lock(src);
                 lock(dest);
             }
-            
+            bool ret = false;
             if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 MontageOpHolder _holder(this);
                 Relation r(src, dest, -1);
-                remove_relation(source(src), &r);
-                remove_relation(destination(dest), &r);
-                inc_seq(src);
-                inc_seq(dest);
+                auto ret1 = remove_relation(source(src), &r);
+                auto ret2 = remove_relation(destination(dest), &r);
+                assert(ret1==ret2);
+                ret = (ret1!=nullptr);
+                if(ret){
+                    pdelete(ret1);
+                    inc_seq(src);
+                    inc_seq(dest);
+                }
             }
             
             if (src > dest) {
@@ -319,10 +323,11 @@ class MontageGraph : public RGraph, public Recoverable{
                 unlock(dest);
                 unlock(src);
             }
-            return true;
+            return ret;
         }
         
         int recover(bool simulated) {
+            assert(0&&"recover() not implemented!");
             // if (simulated) {
             //     recover_mode();
             //     delete idxToVertex;
@@ -491,11 +496,11 @@ class MontageGraph : public RGraph, public Recoverable{
             std::uniform_int_distribution<> uniformVertex(0,numVertices);
             bool retval = true;
             // Randomly sample vertices...
-            std::vector<int> vec(meanEdgesPerVertex);
+            std::vector<int> vec;
             for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
                 int u = uniformVertex(vertexGen);
-                while (u == i) {
-                    u = uniformVertex(vertexGen);
+                if (u == i) {
+                    continue;
                 }
                 vec.push_back(u);
             }
@@ -503,20 +508,20 @@ class MontageGraph : public RGraph, public Recoverable{
             std::sort(vec.begin(), vec.end()); 
             vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
 
+            auto new_v = new tVertex(this, vid, vid);
             for (int u : vec) {
                 lock(u);
             }
 
             if (vertex(vid) == nullptr) {
-		MontageOpHolder _holder(this);
-                vertex(vid) = new tVertex(this, vid, vid);
+                MontageOpHolder _holder(this);
+                vertex(vid) = new_v;
                 for (int u : vec) {
                     if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
-                    Relation *in = pnew<Relation>(vid, u, -1);
-                    Relation *out = pnew<Relation>(vid, u, -1);
-                    source(vid).insert(in);
-                    destination(u).insert(out);
+                    Relation *r = pnew<Relation>(vid, u, -1);
+                    source(vid).insert(r);
+                    destination(u).insert(r);
                 }
             } else {
                 retval = false;
@@ -525,6 +530,9 @@ class MontageGraph : public RGraph, public Recoverable{
             for (auto u = vec.rbegin(); u != vec.rend(); u++) {
                 if (vertex(vid) != nullptr && vertex(*u) != nullptr) inc_seq(*u);
                 unlock(*u);
+            }
+            if(retval==false){
+                delete(new_v);
             }
             return retval;
         }
@@ -548,13 +556,13 @@ startOver:
                     vertices.push_back(r->src());
                 }
                 
+                unlock(vid);
                 vertices.push_back(vid);
                 std::sort(vertices.begin(), vertices.end()); 
                 vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
 
 
-                // Step 2: Release lock, then acquire lock-order...
-                unlock(vid);
+                // Step 2: Acquire lock-order...
                 for (int _vid : vertices) {
                     lock(_vid);
                     if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
@@ -612,18 +620,24 @@ startOver:
                         std::abort();
                     }
                     
-                    remove_relation(source(other), &src);
-                    remove_relation(destination(other), &dest);
+                    auto ret1 = remove_relation(source(other), &src); // this may fail
+                    auto ret2 = remove_relation(destination(other), &dest);// this may fail
+                    if(ret1!=nullptr){
+                        pdelete(ret1);// only deallocate relation removed from source
+                    }
                     assert(!has_relation(source(other), &src) && !has_relation(destination(other), &dest));
-                }                
+                }
                 
-                std::vector<Relation*> toDelete(source(vid).size() + destination(vid).size());
+                std::vector<Relation*> toDelete;
+                toDelete.reserve(source(vid).size());
                 for (auto r : source(vid)) toDelete.push_back(r);
-                for (auto r : destination(vid)) toDelete.push_back(r);
                 source(vid).clear();
                 destination(vid).clear();
                 destroy(vid);
-                for (auto r : toDelete) if (r != nullptr) pdelete(r);
+                for (auto r : toDelete) {
+                    assert (r != nullptr);
+                    pdelete(r);
+                }
                 }
                 
                 // Step 4: Release in reverse order
@@ -679,15 +693,16 @@ startOver:
                 return search != set.end();
             }
 
-            bool remove_relation(Set& set, Relation *r) {
+            Relation* remove_relation(Set& set, Relation *r) {
+                // remove relation from set but NOT deallocate it
+                // return Relation* in the set
                 auto search = set.find(r);
                 if (search != set.end()) {
                     Relation *tmp = *search;
                     set.erase(search);
-                    pdelete(tmp);
-                    return true;
+                    return tmp;
                 }
-                return false;
+                return nullptr;
             }
 
 };

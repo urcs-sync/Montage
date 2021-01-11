@@ -6,7 +6,7 @@
 #ifndef NVMGRAPH_HPP
 #define NVMGRAPH_HPP
 
-
+#if 0
 #include "TestConfig.hpp"
 #include "CustomTypes.hpp"
 #include "ConcurrentPrimitives.hpp"
@@ -78,8 +78,8 @@ class NVMGraph : public RGraph {
 
         class tVertex {
             public:
-                Set adjacency_list;
-                Set dest_list;
+                Set adjacency_list;//only relations in this list is reclaimed
+                Set dest_list;// relations in this list is a duplication of those in some adjacency list
                 Vertex* payload;
                 int id; // Immutable, so we can keep transient copy.
                 tVertex(int id, int lbl): id(id) {payload = new Vertex(id, lbl);}
@@ -106,10 +106,9 @@ class NVMGraph : public RGraph {
         // Allocates data structures and pre-loads the graph
         NVMGraph(GlobalTestConfig* gtc) {
             Persistent::init();
-            srand(time(NULL));
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
-            std::mt19937_64 gen(rand());
+            std::mt19937_64 gen(time(NULL));
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
             std::cout << "Allocated core..." << std::endl;
@@ -130,8 +129,8 @@ class NVMGraph : public RGraph {
                 if (vMeta[i].idxToVertex == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
-                    while (k == i) {
-                        k = verticesRNG(gen);
+                    if (k == i) {
+                        continue;
                     }
                     if (vMeta[k].idxToVertex != nullptr) {
                         Relation *in = new Relation(i, k, -1);
@@ -181,23 +180,24 @@ class NVMGraph : public RGraph {
 
         // Thread-safe and does not leak edges
         void clear() {
-            for (auto i = 0; i < numVertices; i++) {
-                lock(i);
-            }
-            for (auto i = 0; i < numVertices; i++) {
-                if (vertex(i) == nullptr) continue;
-                std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
-                for (auto r : source(i)) toDelete.push_back(r);
-                for (auto r : destination(i)) toDelete.push_back(r);
-                source(i).clear();
-                destination(i).clear();
-                for (auto r : toDelete) delete r;
-            }
-            for (int i = numVertices - 1; i >= 0; i--) {
-                destroy(i);
-                inc_seq(i);
-                unlock(i);
-            }
+            assert(0&&"clear() not implemented!");
+            // for (auto i = 0; i < numVertices; i++) {
+            //     lock(i);
+            // }
+            // for (auto i = 0; i < numVertices; i++) {
+            //     if (vertex(i) == nullptr) continue;
+            //     std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
+            //     for (auto r : source(i)) toDelete.push_back(r);
+            //     for (auto r : destination(i)) toDelete.push_back(r);
+            //     source(i).clear();
+            //     destination(i).clear();
+            //     for (auto r : toDelete) delete r;
+            // }
+            // for (int i = numVertices - 1; i >= 0; i--) {
+            //     destroy(i);
+            //     inc_seq(i);
+            //     unlock(i);
+            // }
         }
 
         bool add_edge(int src, int dest, int weight) {
@@ -230,7 +230,6 @@ class NVMGraph : public RGraph {
             
 
             {
-                
                 srcSet.insert(out);
                 destSet.insert(in);
                 inc_seq(src);
@@ -286,13 +285,17 @@ class NVMGraph : public RGraph {
                 lock(src);
                 lock(dest);
             }
-            
+            bool ret = false;
             if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 Relation r(src, dest, -1);
-                remove_relation(source(src), &r);
-                remove_relation(destination(dest), &r);
-                inc_seq(src);
-                inc_seq(dest);
+                auto ret1 = remove_relation(source(src), &r);
+                auto ret2 = remove_relation(destination(dest), &r);
+                assert(ret1==ret2);
+                ret = ret1;
+                if(ret){
+                    inc_seq(src);
+                    inc_seq(dest);
+                }
             }
 
             if (src > dest) {
@@ -302,7 +305,7 @@ class NVMGraph : public RGraph {
                 unlock(dest);
                 unlock(src);
             }
-            return true;
+            return ret;
         }
 
         bool add_vertex(int vid) {
@@ -313,8 +316,8 @@ class NVMGraph : public RGraph {
             std::vector<int> vec(meanEdgesPerVertex);
             for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
                 int u = uniformVertex(vertexGen);
-                while (u == i) {
-                    u = uniformVertex(vertexGen);
+                if (u == i) {
+                    continue;
                 }
                 vec.push_back(u);
             }
@@ -491,15 +494,16 @@ startOver:
             return search != set.end();
         }
 
-        bool remove_relation(Set& set, Relation *r) {
+        Relation* remove_relation(Set& set, Relation *r) {
+            // remove relation from set but NOT deallocate it
+            // return Relation* in the set
             auto search = set.find(r);
             if (search != set.end()) {
                 Relation *tmp = *search;
                 set.erase(search);
-                delete tmp;
-                return true;
+                return tmp;
             }
-            return false;
+            return nullptr;
         }
 };
 
@@ -510,5 +514,5 @@ class NVMGraphFactory : public RideableFactory{
     }
 };
 // #pragma GCC reset_options
-
+#endif //if 0
 #endif

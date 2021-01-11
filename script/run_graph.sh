@@ -6,7 +6,7 @@ cd "$( dirname "${BASH_SOURCE[0]}" )"
 cd ..
 
 outfile_dir="data"
-THREADS=(1 4 8 12 16 20 24 32 36 40 48 62 72 80 90)
+THREADS=(1 2 4 8 16 32 64)
 REPEAT_NUM=3 # number of trials
 STRATEGY="-dPersistStrat=PerEpoch -dPersister=Advancer -dContainer=Vector"
 
