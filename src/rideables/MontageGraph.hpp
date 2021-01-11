@@ -163,6 +163,7 @@ class MontageGraph : public RGraph, public Recoverable{
                     }
                 }
             }
+            MontageOpHolder _holder(this);// clearing pending_allocs and persisting payloads
             if(gtc->verbose) std::cout << "Filled mean edges per vertex" << std::endl;
         }
 
@@ -590,6 +591,8 @@ startOver:
                 // Step 3: Remove edges from all other
                 // vertices that relate to this vertex
                 {
+                std::vector<Relation*> toDelete;
+                toDelete.reserve(source(vid).size()+destination(vid).size());
                 MontageOpHolder _holder(this);
                 for (int other : vertices) {
                     if (other == vid) continue;
@@ -623,13 +626,11 @@ startOver:
                     auto ret1 = remove_relation(source(other), &src); // this may fail
                     auto ret2 = remove_relation(destination(other), &dest);// this may fail
                     if(ret1!=nullptr){
-                        pdelete(ret1);// only deallocate relation removed from source
+                        toDelete.push_back(ret1);// only deallocate relation removed from source
                     }
                     assert(!has_relation(source(other), &src) && !has_relation(destination(other), &dest));
                 }
                 
-                std::vector<Relation*> toDelete;
-                toDelete.reserve(source(vid).size());
                 for (auto r : source(vid)) toDelete.push_back(r);
                 source(vid).clear();
                 destination(vid).clear();
