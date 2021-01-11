@@ -576,6 +576,7 @@ startOver:
                 // Has not changed, continue...
                 // Step 3: Remove edges from all other
                 // vertices that relate to this vertex
+                {
                 MontageOpHolder _holder(this);
                 for (int other : vertices) {
                     if (other == vid) continue;
@@ -618,6 +619,7 @@ startOver:
                 destination(vid).clear();
                 destroy(vid);
                 for (auto r : toDelete) pdelete(r);
+                }
                 
                 // Step 4: Release in reverse order
                 for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
