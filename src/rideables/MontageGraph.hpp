@@ -154,8 +154,8 @@ class MontageGraph : public RGraph, public Recoverable{
                         k = verticesRNG(gen);
                     }
                     if (vMeta[k].idxToVertex != nullptr) {
-                        Relation *in = new Relation(i, k, -1);
-                        Relation *out = new Relation(i, k, -1);
+                        Relation *in = pnew<Relation>(i, k, -1);
+                        Relation *out = pnew<Relation>(i, k, -1);
                         auto ret = source(i).insert(in);
                         destination(k).insert(out);
                         if(ret.second==false){
@@ -618,7 +618,7 @@ startOver:
                 source(vid).clear();
                 destination(vid).clear();
                 destroy(vid);
-                for (auto r : toDelete) pdelete(r);
+                for (auto r : toDelete) if (r != nullptr) pdelete(r);
                 }
                 
                 // Step 4: Release in reverse order
