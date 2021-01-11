@@ -111,6 +111,9 @@ private:
 	void buildSingleAffinity_helper(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj);
 	void buildSingleAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff, unsigned pu, hwloc_obj_t obj);
+	void buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff);
+	void buildInterleavedAffinity_traversePackages(std::vector<std::vector<hwloc_obj_t>>& thread_per_package, hwloc_obj_t obj);
+	void buildInterleavedPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
 
 	std::map<std::string,void*> arguments;
 	
