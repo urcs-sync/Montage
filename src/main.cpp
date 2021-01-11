@@ -45,7 +45,7 @@
 
 #include "TGraph.hpp"
 #include "NVMGraph.hpp"
-#include "DLGraph.hpp"
+// #include "DLGraph.hpp"
 #include "MontageGraph.hpp"
 #endif
 
@@ -73,18 +73,22 @@
 #include "SyncTest.hpp"
 #ifndef MNEMOSYNE
 #include "RecoverVerifyTest.hpp"
-#include "GraphRecoveryTest.hpp"
+// #include "GraphRecoveryTest.hpp"
 #include "TGraphConstructionTest.hpp"
 #include "ToyTest.hpp"
 #endif /* !MNEMOSYNE */
+#include "AllocTest.hpp"
 #include "CustomTypes.hpp"
 
 using namespace std;
 
+
 int main(int argc, char *argv[])
 {
-	const size_t numVertices = 1024 * 1024;
 	GlobalTestConfig gtc;
+	const int numVertices = 1024 * 1024;
+	const int meanEdgesPerVertex = 128;
+	const int vertexLoad = 50;
 
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
@@ -111,13 +115,13 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new MontageNatarajanTreeFactory<string>(), "MontageNataTree");
 
 	/* graphs */
-	gtc.addRideableOption(new TGraphFactory<numVertices>(), "TGraph");
-	gtc.addRideableOption(new NVMGraphFactory<numVertices>(), "NVMGraph");
+	gtc.addRideableOption(new TGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "TGraph");
+	gtc.addRideableOption(new NVMGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "NVMGraph");
 	// gtc.addRideableOption(new DLGraphFactory<numVertices>(), "DLGraph");
-	gtc.addRideableOption(new MontageGraphFactory<numVertices>(), "MontageGraph");
+	gtc.addRideableOption(new MontageGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "MontageGraph");
 
-    gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
-    gtc.addRideableOption(new TGraphFactory<3076727>(), "TransientOrkut");
+    // gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
+    gtc.addRideableOption(new TGraphFactory<3076727, 0, 100>(), "TransientOrkut");
 #endif /* !defined(MNEMOSYNE) and !defined(PRONTO) */
 #ifdef MNEMOSYNE
 	gtc.addRideableOption(new MneQueueFactory<string>(), "MneQueue");
@@ -140,12 +144,14 @@ int main(int argc, char *argv[])
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
-	gtc.addTestOption(new GraphTest(1000000,numVertices,33,33,33, 1), "GraphTest:1m:i33r33l33:c1");
-	gtc.addTestOption(new GraphTest(1000000,numVertices,25,25,25,25), "GraphTest:1m:i25r25l25:c25");
-	gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
+	gtc.addTestOption(new GraphTest(1024 * 1024,numVertices, meanEdgesPerVertex,vertexLoad), "GraphTest:1m:i33r33l33:c1");
+	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");
 #endif /* !MNEMOSYNE */
+	gtc.addTestOption(new AllocTest(1024 * 1024, DO_JEMALLOC_ALLOC), "AllocTest-JEMalloc");
+	gtc.addTestOption(new AllocTest(1024 * 1024, DO_RALLOC_ALLOC), "AllocTest-Ralloc");
+	gtc.addTestOption(new AllocTest(1024 * 1024, DO_MONTAGE_ALLOC), "AllocTest-Montage");
 
 	gtc.parseCommandLine(argc, argv);
 	

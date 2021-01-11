@@ -22,13 +22,12 @@
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
-template <size_t numVertices = 1024>
+template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad=50>
 class NVMGraph : public RGraph {
 
     public:
 
         class tVertex;
-
         class Vertex : public Persistent {
             int id;
             int lbl;
@@ -38,9 +37,9 @@ class NVMGraph : public RGraph {
             Vertex(const Vertex& oth): id(oth.id), lbl(oth.lbl) {}
             bool operator==(const Vertex& oth) const { return id==oth.id;}
             void set_lbl(int lbl) { this->lbl = lbl; }
-            int get_lbl() { return this->lbl; }
+            int get_lbl() const { return this->lbl; }
             void set_id(int id) { this->id = id; }
-            int get_id() { return this->id; }
+            int get_id() const { return this->id; }
             void persist();
         };
 
@@ -50,36 +49,42 @@ class NVMGraph : public RGraph {
             int dest;
             public:
             Relation(){}
-            Relation(Vertex* src, Vertex* dest, int weight): weight(weight), src(src->id), dest(dest->id){}
-            Relation(tVertex *src, tVertex *dest, int weight): weight(weight), src(src->get_id()), dest(dest->get_id()){}
+            Relation(int src, int dest, int weight): weight(weight), src(src), dest(dest){}
             Relation(const Relation& oth): weight(oth.weight), src(oth.src), dest(oth.dest){}
             void set_weight(int weight) { this->weight = weight; }
-            int get_weight() { return this->weight; }
-            int get_src() { return this->src; }
-            int get_dest() { return this->dest; }
+            int get_weight() const { return this->weight; }
+            int get_src() const { return this->src; }
+            int get_dest() const { return this->dest; }
+            bool operator==(const Relation* other) const {
+                return this->get_src() == other->get_src() && this->get_dest() == other->get_dest();
+            }
+
             void persist(){}
         };
 
+        struct RelationHash {
+            std::size_t operator()(const Relation *r) const {
+                return std::hash<int>()(r->get_src()) ^ std::hash<int>()(r->get_dest());
+            }
+        };
+
+        struct RelationEqual {
+            bool operator()(const Relation *r1, const Relation *r2) const {
+                return r1->get_src() == r2->get_src() && r1->get_dest() == r2->get_dest();
+            }
+        };
+
+        using Set = std::unordered_set<Relation*,RelationHash,RelationEqual>;
+
         class tVertex {
             public:
-                Vertex *payload;
-
-                int id; // cached id
-                uint64_t seqNumber;
-
-                std::unordered_set<Relation*> adjacency_list;
-
-                std::unordered_set<Relation*> dest_list;
-
-                std::mutex lck;
-
-                tVertex(int id, int lbl) {
-                    payload = new Vertex(id, lbl);
-                    this->id = id;
-                }
-
-                ~tVertex() { delete payload; }
-
+                Set adjacency_list;
+                Set dest_list;
+                Vertex* payload;
+                int id; // Immutable, so we can keep transient copy.
+                tVertex(int id, int lbl): id(id) {payload = new Vertex(id, lbl);}
+                tVertex(const tVertex& oth): id(oth.id) {payload = new Vertex(oth.id, oth.payload->get_lbl());}
+                bool operator==(const tVertex& oth) const { return payload->id==oth.payload->id;}
                 void set_lbl(int l) {
                     payload->set_lbl(l);
                 }
@@ -89,30 +94,62 @@ class NVMGraph : public RGraph {
                 int get_id() {
                     return id;
                 }
-
-                Vertex *payload_ptr() {
-                    return payload;
-                }
-                
-                void lock() {
-                    lck.lock();
-                }
-
-                void unlock() {
-                    lck.unlock();
-                }
         };
 
+        struct alignas(64) VertexMeta {
+            tVertex* idxToVertex;// Transient set of transient vertices to index map
+            std::mutex vertexLocks;// Transient locks for transient vertices
+            uint32_t vertexSeqs;// Transient sequence numbers for transactional operations on vertices
+        };
+
+
+        // Allocates data structures and pre-loads the graph
         NVMGraph(GlobalTestConfig* gtc) {
             Persistent::init();
-            idxToVertex = new tVertex*[numVertices];
-            // Initialize...
-            for (size_t i = 0; i < numVertices; i++) {
-                idxToVertex[i] = new tVertex(i, -1);
+            srand(time(NULL));
+            size_t sz = numVertices;
+            this->vMeta = new VertexMeta[numVertices];
+            std::mt19937_64 gen(rand());
+            std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
+            std::uniform_int_distribution<> coinflipRNG(0, 100);
+            std::cout << "Allocated core..." << std::endl;
+            // Fill to vertexLoad
+            for (int i = 0; i < numVertices; i++) {
+                if (coinflipRNG(gen) <= vertexLoad) {
+                    vMeta[i].idxToVertex = new tVertex(i,i);
+                } else {
+                    vMeta[i].idxToVertex = nullptr;
+                }
+                vMeta[i].vertexSeqs = 0;
             }
+
+            std::cout << "Filled vertexLoad" << std::endl;
+
+            // Fill to mean edges per vertex
+            for (int i = 0; i < numVertices; i++) {
+                if (vMeta[i].idxToVertex == nullptr) continue;
+                for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
+                    int k = verticesRNG(gen);
+                    while (k == i) {
+                        k = verticesRNG(gen);
+                    }
+                    if (vMeta[k].idxToVertex != nullptr) {
+                        Relation *in = new Relation(i, k, -1);
+                        Relation *out = new Relation(i, k, -1);
+                        auto ret = source(i).insert(in);
+                        destination(k).insert(out);
+                        if(ret.second==false){
+                            // relation exists, reclaiming
+                            delete in;
+                            delete out;
+                        }
+                    }
+                }
+            }
+            std::cout << "Filled mean edges per vertex" << std::endl;
         }
 
-        ~NVMGraph(){
+        ~NVMGraph() {
             Persistent::finalize();
         }
 
@@ -120,79 +157,112 @@ class NVMGraph : public RGraph {
             Persistent::init_thread(gtc, ltc);
         }
 
-        tVertex** idxToVertex; // Transient set of transient vertices to index map
+        // Obtain statistics of graph (|V|, |E|, average degree, vertex degrees)
+        // Not concurrent safe...
+        std::tuple<int, int, double, int *, int> grab_stats() {
+            int numV = 0;
+            int numE = 0;
+            int *degrees = new int[numVertices];
+            double averageEdgeDegree = 0;
+            for (auto i = 0; i < numVertices; i++) {
+                if (vMeta[i].idxToVertex != nullptr) {
+                    numV++;
+                    numE += source(i).size();
+                    degrees[i] = source(i).size() + destination(i).size();
+                } else {
+                    degrees[i] = 0;
+                }
+            }
+            averageEdgeDegree = numE / ((double) numV);
+            return std::make_tuple(numV, numE, averageEdgeDegree, degrees, numVertices);
+        }
+
+        VertexMeta* vMeta;
 
         // Thread-safe and does not leak edges
         void clear() {
-            // BEGIN_OP_AUTOEND();
-            for (size_t i = 0; i < numVertices; i++) {
-                idxToVertex[i]->lock();
+            for (auto i = 0; i < numVertices; i++) {
+                lock(i);
             }
-            for (size_t i = 0; i < numVertices; i++) {
-                for (Relation *r : idxToVertex[i]->adjacency_list) {
-                    delete r;
-                }
-                idxToVertex[i]->adjacency_list.clear();
-                idxToVertex[i]->dest_list.clear();
+            for (auto i = 0; i < numVertices; i++) {
+                if (vertex(i) == nullptr) continue;
+                std::vector<Relation*> toDelete(source(i).size() + destination(i).size());
+                for (auto r : source(i)) toDelete.push_back(r);
+                for (auto r : destination(i)) toDelete.push_back(r);
+                source(i).clear();
+                destination(i).clear();
+                for (auto r : toDelete) delete r;
             }
-            for (size_t i = numVertices - 1; i >= 0; i--) {
-                idxToVertex[i]->seqNumber++;
-                idxToVertex[i]->unlock();
+            for (int i = numVertices - 1; i >= 0; i--) {
+                destroy(i);
+                inc_seq(i);
+                unlock(i);
             }
         }
 
-        /**
-         * Adds an edge to the graph, given two node IDs
-         * @param src A pointer to the source node
-         * @param dest A pointer to the destination node
-         * @return Whether or not adding the edge was successful
-         */
         bool add_edge(int src, int dest, int weight) {
+            bool retval = false;
             if (src == dest) return false; // Loops not allowed
-            tVertex *v1 = idxToVertex[src];
-            tVertex *v2 = idxToVertex[dest];
-            // allocate before critical section, assuming accessing
-            // tVertex's id without lock is safe
-            Relation* r = new Relation(v1, v2, weight);
             if (src > dest) {
-                v2->lock();
-                v1->lock();
+                lock(dest);
+                lock(src);
             } else {
-                v1->lock();
-                v2->lock();
+                lock(src);
+                lock(dest);
+            }  
+            
+            Relation r(src,dest,weight);
+            auto& srcSet = source(src);
+            auto& destSet = destination(dest);
+            // Note: We do not create a vertex if one is not found
+            // also we do not add an edge even if it is found some of the time
+            // to enable even constant load factor
+            if (vertex(src) == nullptr || vertex(dest) == nullptr) {
+                goto exitEarly;
+            }
+            if (has_relation(srcSet, &r)) {
+                // Sanity check
+                assert(has_relation(destSet, &r));
+                goto exitEarly;
             }
             
+
             {
-                v1->adjacency_list.insert(r);
-                v2->dest_list.insert(r);
+                Relation *out = new Relation(src, dest, weight);
+                Relation *in = new Relation(src, dest, weight);
+                srcSet.insert(out);
+                destSet.insert(in);
+                inc_seq(src);
+                inc_seq(dest);
+                retval = true;
             }
-            
-            v1->seqNumber++;
-            v2->seqNumber++;
-            if (src > dest) {
-                v1->unlock();
-                v2->unlock();
-            } else {
-                v2->unlock();
-                v1->unlock();
-            }
-            return true;
+
+            exitEarly:
+                if (src > dest) {
+                    unlock(src);
+                    unlock(dest);
+                } else {
+                    unlock(dest);
+                    unlock(src);
+                }
+                return retval;
         }
 
-        bool has_edge(int v1, int v2) {
+
+
+        bool has_edge(int src, int dest) {
             bool retval = false;
-            tVertex *v = idxToVertex[v1];
             
             // We utilize `get_unsafe` API because the Relation destination and vertex id will not change at all.
-            v->lock();            
-            {
-                if (std::any_of(v->adjacency_list.begin(), v->adjacency_list.end(), 
-                            [=] (Relation *r) { return r->get_dest() == v2; })) {
-                    retval = true;
-                }
+            lock(src);
+            if (vertex(src) == nullptr) {
+                unlock(src);
+                return false;
             }
-            v->unlock();
-            
+            Relation r(src, dest, -1);
+            retval = has_relation(source(src), &r);
+            unlock(src);
+
             return retval;
         }
 
@@ -204,101 +274,117 @@ class NVMGraph : public RGraph {
          */
         bool remove_edge(int src, int dest) {
             if (src == dest) return false;
-            tVertex *v1 = idxToVertex[src];
-            tVertex *v2 = idxToVertex[dest];
             if (src > dest) {
-                v2->lock();
-                v1->lock();
+                lock(dest);
+                lock(src);
             } else {
-                v1->lock();
-                v2->lock();
+                lock(src);
+                lock(dest);
             }
             
-            {
-                // Scan v1 for an edge containing v2 in its adjacency list...
-                Relation *rdel = nullptr;
-                for (Relation *r : v1->adjacency_list) {
-                    if (r->get_dest() == v2->get_id()) {
-                        rdel = r;
-                        v1->adjacency_list.erase(r);
-                        break;
-                    }
-                }
-            
-                if (rdel){
-                    v2->dest_list.erase(rdel);
-                    delete rdel;
-                }
+            if (vertex(src) != nullptr && vertex(dest) != nullptr) {
+                Relation r(src, dest, -1);
+                remove_relation(source(src), &r);
+                remove_relation(destination(dest), &r);
+                inc_seq(src);
+                inc_seq(dest);
             }
-            
-            v1->seqNumber++;
-            v2->seqNumber++;
+
             if (src > dest) {
-                v1->unlock();
-                v2->unlock();
+                unlock(src);
+                unlock(dest);
             } else {
-                v2->unlock();
-                v1->unlock();
+                unlock(dest);
+                unlock(src);
             }
             return true;
         }
 
-        /**
-         * Sets the label for a node to a specific value
-         * @param id The id the node whose weight to set
-         * @param l The new label for the node
-         */
-        bool set_lbl(int id, int l) {
-            tVertex *v = idxToVertex[id]; 
-            v->lock();
-            v->set_lbl(l);
-            v->unlock();
-            return true;
-        }
+        bool add_vertex(int vid) {
+            std::mt19937_64 vertexGen(time(NULL));
+            std::uniform_int_distribution<> uniformVertex(0,numVertices);
+            bool retval = true;
+            // Randomly sample vertices...
+            std::vector<int> vec(meanEdgesPerVertex);
+            for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
+                int u = uniformVertex(vertexGen);
+                while (u == i) {
+                    u = uniformVertex(vertexGen);
+                }
+                vec.push_back(u);
+            }
+            vec.push_back(vid);
+            std::sort(vec.begin(), vec.end()); 
+            vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
 
-        /**
-         * Sets the weight for an edge to a specific value. If the edge does not exist, this does not break, but does
-         * unnecessary computation.
-         * @param src the integer id of the source of the edge to set the weight for
-         * @param dest the integer id of the dest of the edge to set the weight for
-         * @param w the new weight value
-         */
-        bool set_weight(int src, int dest, int w) {
-            bool retval = false;
-            // Unimplemented because MontageGraph can't 
+            for (int u : vec) {
+                lock(u);
+            }
+
+            if (vertex(vid) == nullptr) {
+                vertex(vid) = new tVertex(vid, vid);
+                for (int u : vec) {
+                    if (vertex(u) == nullptr) continue;
+                    if (u == vid) continue;
+                    Relation *in = new Relation(vid, u, -1);
+                    Relation *out = new Relation(vid, u, -1);
+                    source(vid).insert(in);
+                    destination(u).insert(out);
+                }
+            } else {
+                retval = false;
+            }
+
+            for (auto u = vec.rbegin(); u != vec.rend(); u++) {
+                if (vertex(vid) != nullptr && vertex(*u) != nullptr) inc_seq(*u);
+                unlock(*u);
+            }
             return retval;
         }
 
-        bool clear_vertex(int id) {
+        bool remove_vertex(int vid) {
 startOver:
             {
                 // Step 1: Acquire vertex and collect neighbors...
                 std::vector<int> vertices;
-                tVertex *v = idxToVertex[id];
-                v->lock();
-                uint64_t seq = v->seqNumber;
-                for (Relation *r : v->adjacency_list) {
+                lock(vid);
+                if (vertex(vid) == nullptr) {
+                    unlock(vid);
+                    return false;
+                }
+                uint32_t seq = get_seq(vid);
+                for (auto r : source(vid)) {
                     vertices.push_back(r->get_dest());
                 }
-                for (Relation *r : v->dest_list) {
+                for (auto r : destination(vid)) {
                     vertices.push_back(r->get_src());
                 }
                 
-                vertices.push_back(id);
+                vertices.push_back(vid);
                 std::sort(vertices.begin(), vertices.end()); 
                 vertices.erase(std::unique(vertices.begin(), vertices.end()), vertices.end());
 
                 // Step 2: Release lock, then acquire lock-order...
-                v->unlock();
+                unlock(vid);
                 for (int _vid : vertices) {
-                    idxToVertex[_vid]->lock();
+                    lock(_vid);
+                    if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
+                        for (auto r : source(vid)) {
+                            if (r->get_dest() == _vid)
+                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                        }
+                        for (auto r : destination(vid)) {
+                            if (r->get_src() == _vid)
+                            std::cout << "(" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                        }
+                        std::abort();
+                    }
                 }
 
                 // Has vertex been changed? Start over
-                if (v->seqNumber != seq) {
-                    std::reverse(vertices.begin(), vertices.end());
-                    for (int _vid : vertices) {
-                        idxToVertex[_vid]->unlock();
+                if (get_seq(vid) != seq) {
+                    for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                        unlock(*_vid);
                     }
                     goto startOver;
                 }
@@ -306,66 +392,118 @@ startOver:
                 // Has not changed, continue...
                 // Step 3: Remove edges from all other
                 // vertices that relate to this vertex
-                std::vector<Relation*> garbageList;
-                for (int _vid : vertices) {
-                    if (_vid == id) continue;
-                    tVertex *_v = idxToVertex[_vid];
-                    std::vector<Relation*> toRemoveList;
+                for (int other : vertices) {
+                    if (other == vid) continue;
 
-                    for (Relation *r : _v->adjacency_list) {
-                        if (r->get_src() == id) {
-                            toRemoveList.push_back(r);
+                    Relation src(other, vid, -1);
+                    Relation dest(vid, other, -1);
+                    if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
+                        std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
+                        for (auto r : source(vid)) {
+                            if (r->get_dest() == other)
+                            std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
                         }
-                    }
-                    for (Relation *r : toRemoveList) {
-                        _v->adjacency_list.erase(r);
-                        garbageList.push_back(r);
-                    }
-                    toRemoveList.clear();
-
-                    for (Relation *r : _v->dest_list) {
-                        if (r->get_dest() == id) {
-                            toRemoveList.push_back(r);
+                        for (auto r : destination(other)) {
+                            if (r->get_src() == vid) {
+                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            }
                         }
+                        for (auto r : destination(vid)) {
+                            if (r->get_src() == other) {
+                                std::cout << "Us: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            }
+                        }
+                        for (auto r : source(other)) {
+                            if (r->get_dest() == vid) {
+                                std::cout << "Them: (" << r->get_src() << "," << r->get_dest() << ")" << std::endl;
+                            }
+                        }
+                        std::abort();
                     }
-                    for (Relation *r : toRemoveList) {
-                        _v->dest_list.erase(r);
-                        garbageList.push_back(r);
-                    }
-                }
+                    remove_relation(source(other), &src);
+                    remove_relation(destination(other), &dest);
+                    assert(!has_relation(source(other), &src) && !has_relation(destination(other), &dest));
+                }                
                 
-                // Step 4: Delete edges, clear set of src and dest edges
-                v->adjacency_list.clear();
-                v->dest_list.clear();
-                for (Relation *r : garbageList) {
-                    delete r;
-                }
+                std::vector<Relation*> toDelete(source(vid).size() + destination(vid).size());
+                for (auto r : source(vid)) toDelete.push_back(r);
+                for (auto r : destination(vid)) toDelete.push_back(r);
+                source(vid).clear();
+                destination(vid).clear();
+                destroy(vid);
+                for (auto r : toDelete) delete r;
                 
-                // Step 5: Release in reverse order
-                std::reverse(vertices.begin(), vertices.end());
-                for (int _vid : vertices) {
-                    idxToVertex[_vid]->seqNumber++;
-                    idxToVertex[_vid]->unlock();
+                // Step 4: Release in reverse order
+                for (auto _vid = vertices.rbegin(); _vid != vertices.rend(); _vid++) {
+                    inc_seq(*_vid);
+                    unlock(*_vid);
                 }
             }
             return true;
         }
         
-        void for_each_edge(int v, std::function<bool(int)> fn) {
-            idxToVertex[v]->lock();
-            for (Relation *r : idxToVertex[v]->adjacency_list) {
-                if (!fn(r->get_dest())) {
-                    break;
-                }
+    private:
+        tVertex *& vertex(size_t idx) {
+            return vMeta[idx].idxToVertex;
+        }
+
+        void lock(size_t idx) {
+        	vMeta[idx].vertexLocks.lock();
+	    }
+
+        void unlock(size_t idx) {
+        	vMeta[idx].vertexLocks.unlock();
+    	}
+
+        // Lock must be owned for next operations...
+        void inc_seq(size_t idx) {
+            vMeta[idx].vertexSeqs++;
+        }
+            
+        uint64_t get_seq(size_t idx) {
+            return vMeta[idx].vertexSeqs;
+        }
+
+        void destroy(size_t idx) {
+            assert(vertex(idx)!=nullptr);
+            delete vertex(idx);
+            vertex(idx) = nullptr;
+        }
+
+        // Incoming edges
+        Set& source(int idx) {
+            return vertex(idx)->adjacency_list;
+
+        }
+
+        // Outgoing edges
+        Set& destination(int idx) {
+            return vertex(idx)->dest_list;
+        }
+
+        bool has_relation(Set& set, Relation *r) {
+            auto search = set.find(r);
+            return search != set.end();
+        }
+
+        bool remove_relation(Set& set, Relation *r) {
+            auto search = set.find(r);
+            if (search != set.end()) {
+                Relation *tmp = *search;
+                set.erase(search);
+                delete tmp;
+                return true;
             }
-            idxToVertex[v]->unlock();
+            return false;
         }
 };
 
-template <size_t numVertices = 1024>
+template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad = 50>
 class NVMGraphFactory : public RideableFactory{
     Rideable *build(GlobalTestConfig *gtc){
-        return new NVMGraph<numVertices>(gtc);
+        return new NVMGraph<numVertices, meanEdgesPerVertex, vertexLoad>(gtc);
     }
 };
+// #pragma GCC reset_options
+
 #endif
