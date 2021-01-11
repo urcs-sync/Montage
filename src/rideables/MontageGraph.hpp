@@ -146,6 +146,7 @@ class MontageGraph : public RGraph, public Recoverable{
             std::cout << "Filled vertexLoad" << std::endl;
 
             // Fill to mean edges per vertex
+            MontageOpHolder _holder(this);
             for (int i = 0; i < numVertices; i++) {
                 if (vMeta[i].idxToVertex == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
@@ -160,8 +161,8 @@ class MontageGraph : public RGraph, public Recoverable{
                         destination(k).insert(out);
                         if(ret.second==false){
                             // relation exists, reclaiming
-                            delete in;
-                            delete out;
+                            pdelete(in);
+                            pdelete(out);
                         }
                     }
                 }
