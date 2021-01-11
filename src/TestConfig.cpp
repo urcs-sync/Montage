@@ -281,7 +281,7 @@ void GlobalTestConfig::buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsig
 void GlobalTestConfig::buildInterleavedAffinity_traversePackages(
 		std::vector<std::vector<hwloc_obj_t>>& thread_per_package, hwloc_obj_t obj){
 	if (obj->type < HWLOC_OBJ_PACKAGE){
-		for (int i = 0; i < obj->arity; i++){
+		for (size_t i = 0; i < obj->arity; i++){
 			buildInterleavedAffinity_traversePackages(thread_per_package, obj->children[i]);
 		}
 	} else if (obj->type == HWLOC_OBJ_PACKAGE){
@@ -295,13 +295,12 @@ void GlobalTestConfig::buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff){
 	buildInterleavedAffinity_traversePackages(thread_per_package, hwloc_get_root_obj(topology));
 	// check if all sockets have the same amount of threads: (debug only)
 	assert(!thread_per_package.empty());
-	for (int i = 0; i < thread_per_package.size(); i++){
+	for (size_t i = 0; i < thread_per_package.size(); i++){
 		assert(thread_per_package[i].size() == thread_per_package[0].size());
 	}
 	// interleave all threads
-	for (int i = 0; i < thread_per_package[0].size(); i++){
-		for (int j = 0; j < thread_per_package.size(); j++){
-			std::cout<<"affinity pushed:"<<thread_per_package[j][i]->name<<std::endl;
+	for (size_t i = 0; i < thread_per_package[0].size(); i++){
+		for (size_t j = 0; j < thread_per_package.size(); j++){
 			aff.push_back(thread_per_package[j][i]);
 		}
 	}
@@ -309,8 +308,32 @@ void GlobalTestConfig::buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff){
 
 // Interleaved per-core affinity: the $pu$ thread of first core in each socket, then
 // the $pu$ thread of second core in each socket, and so on.
-void GlobalTestConfig::buildInterleavedPerCoreAfinity(std::vector<hwloc_obj_t>& aff, usigned pu){
-	// Under construction
+void GlobalTestConfig::buildInterleavedPerCoreAffinity_traversePackages(
+		std::vector<std::vector<hwloc_obj_t>>& thread_per_package, unsigned pu, hwloc_obj_t obj){
+	if (obj->type < HWLOC_OBJ_PACKAGE){
+		for (size_t i = 0; i < obj->arity; i++){
+			buildInterleavedPerCoreAffinity_traversePackages(thread_per_package, pu, obj->children[i]);
+		}
+	} else if (obj->type == HWLOC_OBJ_PACKAGE){
+		std::vector<hwloc_obj_t> curr_package;
+		buildPerCoreAffinity_helper(curr_package, pu, obj);
+		thread_per_package.push_back(curr_package);
+	}
+}
+void GlobalTestConfig::buildInterleavedPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu){
+	std::vector<std::vector<hwloc_obj_t>> thread_per_package;
+	buildInterleavedPerCoreAffinity_traversePackages(thread_per_package, pu, hwloc_get_root_obj(topology));
+	// check if all sockets have the same amount of threads: (debug only)
+	assert(!thread_per_package.empty());
+	for (size_t i = 0; i < thread_per_package.size(); i++){
+		assert(thread_per_package[i].size() == thread_per_package[0].size());
+	}
+	// interleave all threads
+	for (size_t i = 0; i < thread_per_package[0].size(); i++){
+		for (size_t j = 0; j < thread_per_package.size(); j++){
+			aff.push_back(thread_per_package[j][i]);
+		}
+	}
 }
 
 // reference:
