@@ -232,7 +232,8 @@ public:
             _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
         }
-        pending_allocs[pds::EpochSys::tid].ui.clear();
+        if(!pending_allocs[pds::EpochSys::tid].ui.empty()) 
+            pending_allocs[pds::EpochSys::tid].ui.clear();
     }
     void end_readonly_op(){
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
