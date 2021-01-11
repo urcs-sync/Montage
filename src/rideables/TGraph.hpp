@@ -94,17 +94,15 @@ class TGraph : public RGraph{
         };
 
         struct alignas(64) VertexMeta {
-            Vertex* idxToVertex;// Transient set of transient vertices to index map
+            Vertex* idxToVertex = nullptr;// Transient set of transient vertices to index map
             std::mutex vertexLocks;// Transient locks for transient vertices
-            uint32_t vertexSeqs;// Transient sequence numbers for transactional operations on vertices
+            uint32_t vertexSeqs = 0;// Transient sequence numbers for transactional operations on vertices
         };
 
         // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
-            srand(time(NULL));
-            size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
-            std::mt19937_64 gen(rand());
+            std::mt19937_64 gen(time(NULL));
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
             std::uniform_int_distribution<> coinflipRNG(0, 100);
             std::cout << "Allocated core..." << std::endl;
@@ -267,13 +265,17 @@ class TGraph : public RGraph{
                 lock(src);
                 lock(dest);
             }
-            
+            bool ret = true;
             if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 Relation r(src, dest, -1);
-                remove_relation(source(src), &r);
-                remove_relation(destination(dest), &r);
-                inc_seq(src);
-                inc_seq(dest);
+                auto ret1 = remove_relation(source(src), &r);
+                auto ret2 = remove_relation(destination(dest), &r);
+                assert(ret1==ret2);
+                ret = ret1;
+                if(ret){
+                    inc_seq(src);
+                    inc_seq(dest);
+                }
             }
 
             if (src > dest) {
@@ -283,7 +285,7 @@ class TGraph : public RGraph{
                 unlock(dest);
                 unlock(src);
             }
-            return true;
+            return ret;
         }
 
         bool add_vertex(int vid) {

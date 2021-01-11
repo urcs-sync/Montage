@@ -86,9 +86,9 @@ using namespace std;
 int main(int argc, char *argv[])
 {
 	GlobalTestConfig gtc;
-	const size_t numVertices = 1024 * 1024;
-	const size_t meanEdgesPerVertex = 128;
-	const size_t vertexLoad = 50;
+	const int numVertices = 1024 * 1024;
+	const int meanEdgesPerVertex = 128;
+	const int vertexLoad = 50;
 
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient

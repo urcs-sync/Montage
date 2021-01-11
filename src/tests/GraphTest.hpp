@@ -39,7 +39,7 @@ class GraphTest : public Test {
         RGraph *g;
         uint64_t total_ops;
         uint64_t *thd_ops;
-        uint64_t max_verts;
+        int max_verts;
         int addEdgeProb;
         int remEdgeProb;
         int addVerProb;
@@ -51,7 +51,7 @@ class GraphTest : public Test {
         padded<std::array<int,4>>* operations;
 
 
-        GraphTest(uint64_t numOps, uint64_t max_verts, int desiredAvgDegree, int vertexLoad) :
+        GraphTest(uint64_t numOps, int max_verts, int desiredAvgDegree, int vertexLoad) :
             total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad) {
         }
 
@@ -81,8 +81,12 @@ class GraphTest : public Test {
                 edge_op = atoi((gtc->getEnv("EdgeOp")).c_str());
                 assert(edge_op>=0 && edge_op<=10000);
             }
-            addEdgeProb = edge_op*desiredAvgDegree/(desiredAvgDegree+max_verts*vertexLoad/100);
-            remEdgeProb = std::min(1,edge_op-addEdgeProb);
+            // addEdgeProb = std::max(1,(int)edge_op*desiredAvgDegree*100/(max_verts*vertexLoad));
+            // remEdgeProb = std::max(1,edge_op-addEdgeProb);
+            // (FIXME) Wentao: I don't know why 3:1 is the ratio for being
+            // stable. Find the root cause and solve it later.
+            addEdgeProb = edge_op*3/4;
+            remEdgeProb = edge_op/4;
             addVerProb = (10000-edge_op)/2;
             remVerProb = 10000-edge_op-addVerProb;
             // Printing out real ratio of operations
@@ -94,7 +98,7 @@ class GraphTest : public Test {
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
             int tid = ltc->tid;
             if (tid == 0) std::cout << "Starting test now..." << std::endl;
-	    std::mt19937_64 gen_p(ltc->seed);
+            std::mt19937_64 gen_p(ltc->seed);
             std::mt19937_64 gen_v(ltc->seed + 1);
             std::uniform_int_distribution<> dist(0,9999);
             std::uniform_int_distribution<> distv(0,max_verts-1);
