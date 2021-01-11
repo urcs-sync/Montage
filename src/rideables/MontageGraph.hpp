@@ -226,6 +226,8 @@ class MontageGraph : public RGraph, public Recoverable{
          */
         bool add_edge(int src, int dest, int weight) {
             bool retval = false;
+            Relation *out = pnew<Relation>(src,dest,weight);
+            Relation *in = pnew<Relation>(src,dest,weight);
             if (src == dest) return false; // Loops not allowed
             if (src > dest) {
                 lock(dest);
@@ -244,8 +246,7 @@ class MontageGraph : public RGraph, public Recoverable{
             {
                 
                 MontageOpHolder _holder(this);
-                Relation *out = pnew<Relation>(src,dest,weight);
-                Relation *in = pnew<Relation>(src,dest,weight);
+                
                 srcSet.insert(out);
                 destSet.insert(in);
                 inc_seq(src);
@@ -254,6 +255,10 @@ class MontageGraph : public RGraph, public Recoverable{
             }
             
             exitEarly:
+                if (!retval){
+                    pdelete(out);
+                    pdelete(in);
+                }
                 if (src > dest) {
                     unlock(src);
                     unlock(dest);
