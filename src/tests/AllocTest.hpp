@@ -78,6 +78,7 @@ class AllocTest : public Test {
                     }
                     case DO_RALLOC_ALLOC: {
                         objs.push_back((DummyObject*) RP_malloc(sizeof(DummyObject)));
+			new (objs.back()) DummyObject();
                         break;
                     }
                     case DO_MONTAGE_ALLOC: {
@@ -107,6 +108,7 @@ class AllocTest : public Test {
         }
 
         void parInit(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
-        }
+             Persistent::init_thread(ltc->tid);
+	}
 };
 #endif
