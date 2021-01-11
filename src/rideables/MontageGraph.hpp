@@ -163,6 +163,7 @@ class MontageGraph : public RGraph, public Recoverable{
                     }
                 }
             }
+            MontageOpHolder _holder(this);// clearing pending_allocs and persisting payloads
             if(gtc->verbose) std::cout << "Filled mean edges per vertex" << std::endl;
         }
 
