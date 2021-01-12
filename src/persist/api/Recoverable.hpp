@@ -196,7 +196,7 @@ class Recoverable{
     // current epoch of each thread.
     padded<uint64_t>* epochs = nullptr;
     // containers for pending allocations
-    padded<std::unordered_set<pds::PBlk*>>* pending_allocs = nullptr;
+    padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
     // local descriptors for DCSS
     // TODO: maybe put this into a derived class for NB data structures?
     padded<pds::sc_desc_t>* local_descs = nullptr;
@@ -278,7 +278,7 @@ public:
     {
         pds::PBlk* ret = (pds::PBlk*)_esys->malloc_pblk(sz);
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
-            pending_allocs[pds::EpochSys::tid].ui.insert(ret);
+            pending_allocs[pds::EpochSys::tid].ui.push_back(ret);
         } else {
             _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
         }
@@ -289,7 +289,7 @@ public:
     {
         T* ret = _esys->new_pblk<T>(args...);
         if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
-            pending_allocs[pds::EpochSys::tid].ui.insert(ret);
+            pending_allocs[pds::EpochSys::tid].ui.push_back(ret);
         } else {
             _esys->register_alloc_pblk(ret, epochs[pds::EpochSys::tid].ui);
         }
@@ -309,8 +309,10 @@ public:
                 _esys->free_pblk(b, epochs[pds::EpochSys::tid].ui);
             } else {
                 if (((pds::PBlk*)b)->get_epoch() == NULL_EPOCH){
-                    assert(pending_allocs[pds::EpochSys::tid].ui.find(b) != pending_allocs[pds::EpochSys::tid].ui.end());
-                    pending_allocs[pds::EpochSys::tid].ui.erase(b);
+                    std::reverse_iterator pos = std::find(pending_allocs[pds::EpochSys::tid].ui.rbegin(),
+                        pending_allocs[pds::EpochSys::tid].ui.rend(), b);
+                    assert(pos != pending_allocs[pds::EpochSys::tid].ui.rend());
+                    pending_allocs[pds::EpochSys::tid].ui.erase((pos+1).base());
                 }
                 _esys->delete_pblk(b);
             }
