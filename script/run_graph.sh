@@ -8,7 +8,10 @@ cd ..
 outfile_dir="data"
 THREADS=(1 2 4 8 16 32 64)
 REPEAT_NUM=3 # number of trials
-STRATEGY="-dPersistStrat=PerEpoch -dPersister=Advancer -dContainer=Vector -dEpochLengthUnit=Microsecond -dEpochLength=10"
+TASK_LENGTH=30 # length of each workload in second
+EPOCH_LENGTH_UNIT="Millisecond"
+EPOCH_LENGTH=10
+STRATEGY="-dPersistStrat=BufferedWB -dPersister=Worker -dEpochLengthUnit=$EPOCH_LENGTH_UNIT -dEpochLength=$EPOCH_LENGTH"
 
 delete_heap_file(){
     rm -rf /mnt/pmem/${USER}* /mnt/pmem/savitar.cat
@@ -28,10 +31,10 @@ graph_thread_execute(){
             for test in {10..11}; do
                 for rideable in {16..17}; do
                     delete_heap_file
-                    bin/main -r $rideable -m $test -t $threads -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
+                    bin/main -r $rideable -m $test -t $threads -i $TASK_LENGTH -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
                 done
                 delete_heap_file
-                bin/main -r 18 -m $test -t $threads $STRATEGY | tee -a $outfile_dir/graph_thread.csv
+                bin/main -r 18 -m $test -t $threads -i $TASK_LENGTH $STRATEGY | tee -a $outfile_dir/graph_thread.csv
             done
         done
     done
@@ -80,5 +83,5 @@ graph_recovery_execute(){
 ###       Main       ###
 ########################
 graph_thread_execute
-graph_recovery_execute
+# graph_recovery_execute
 
