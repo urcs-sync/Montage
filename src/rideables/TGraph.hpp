@@ -101,6 +101,7 @@ class TGraph : public RGraph{
 
         // Allocates data structures and pre-loads the graph
         TGraph(GlobalTestConfig* gtc) {
+            Persistent::init();
             this->vMeta = new VertexMeta[numVertices];
             std::mt19937_64 gen(time(NULL));
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
