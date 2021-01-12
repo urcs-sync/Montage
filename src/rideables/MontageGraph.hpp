@@ -65,26 +65,26 @@ class MontageGraph : public RGraph, public Recoverable{
 	};
 
         struct RelationHash {
-            std::size_t operator()(const Relation *r) const {
-                return std::hash<int>()(r->src()) ^ std::hash<int>()(r->dest());
+            std::size_t operator()(const pair<int,int>& r) const {
+                return std::hash<int>()(r.first) ^ std::hash<int>()(r.second);
             }
         };
 
         struct RelationEqual {
-            bool operator()(const Relation *r1, const Relation *r2) const {
-                return r1->src() == r2->src() && r1->dest() == r2->dest();
+            bool operator()(const pair<int,int>& r1, const pair<int,int>& r2) const {
+                return r1.first == r2.first && r1.second == r2.second;
             }
         };
 
-        using Set = std::unordered_set<Relation*,RelationHash,RelationEqual>;
+        using Map = std::unordered_map<pair<int,int>,Relation*,RelationHash,RelationEqual>;
 
-        class tVertex {
+        class alignas(64) tVertex {
             public:
                 MontageGraph* ds;
                 Vertex *payload = nullptr;
                 int id; // cached id
-                Set adjacency_list;//only relations in this list is reclaimed
-                Set dest_list;// relations in this list is a duplication of those in some adjacency list
+                Map adjacency_list;//only relations in this list is reclaimed
+                Map dest_list;// relations in this list is a duplication of those in some adjacency list
 
                 tVertex(MontageGraph* ds_, int id, int lbl): ds(ds_) {
                     payload = ds->pnew<Vertex>(id, lbl);
@@ -153,8 +153,8 @@ class MontageGraph : public RGraph, public Recoverable{
                     }
                     if (vMeta[k].idxToVertex != nullptr) {
                         Relation *r = pnew<Relation>(i, k, -1);
-                        auto ret1 = source(i).insert(r);
-                        auto ret2 = destination(k).insert(r);
+                        auto ret1 = source(i).emplace(make_pair(i,k),r);
+                        auto ret2 = destination(k).emplace(make_pair(i,k),r);
                         assert(ret1.second==ret2.second);
                         if(ret1.second==false){
                             // relation exists, reclaiming
@@ -243,8 +243,8 @@ class MontageGraph : public RGraph, public Recoverable{
 
             {
                 MontageOpHolder _holder(this);
-                auto ret1 = srcSet.insert(r);
-                auto ret2 = destSet.insert(r);
+                auto ret1 = srcSet.emplace(make_pair(src,dest),r);
+                auto ret2 = destSet.emplace(make_pair(src,dest),r);
                 assert(ret1.second == ret2.second);
                 if(ret1.second){
                     inc_seq(src);
@@ -280,8 +280,8 @@ class MontageGraph : public RGraph, public Recoverable{
 
             {
                 MontageOpHolder _holder(this);
-                Relation r(src, dest, -1);
-                retval = has_relation(source(src), &r);
+                auto r = make_pair(src, dest);
+                retval = has_relation(source(src), r);
             }
             unlock(src);
             return retval;
@@ -305,9 +305,9 @@ class MontageGraph : public RGraph, public Recoverable{
             bool ret = false;
             if (vertex(src) != nullptr && vertex(dest) != nullptr) {
                 MontageOpHolder _holder(this);
-                Relation r(src, dest, -1);
-                auto ret1 = remove_relation(source(src), &r);
-                auto ret2 = remove_relation(destination(dest), &r);
+                auto r = make_pair(src, dest);
+                auto ret1 = remove_relation(source(src), r);
+                auto ret2 = remove_relation(destination(dest), r);
                 assert(ret1==ret2);
                 ret = (ret1!=nullptr);
                 if(ret){
@@ -521,8 +521,8 @@ class MontageGraph : public RGraph, public Recoverable{
                     if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
                     Relation *r = pnew<Relation>(vid, u, -1);
-                    source(vid).insert(r);
-                    destination(u).insert(r);
+                    source(vid).emplace(make_pair(vid, u),r);
+                    destination(u).emplace(make_pair(vid, u),r);
                 }
             } else {
                 retval = false;
@@ -551,10 +551,10 @@ startOver:
                 }
                 uint32_t seq = get_seq(vid);
                 for (auto r : source(vid)) {
-                    vertices.push_back(r->dest());
+                    vertices.push_back(r->second->dest());
                 }
                 for (auto r : destination(vid)) {
-                    vertices.push_back(r->src());
+                    vertices.push_back(r->second->src());
                 }
                 
                 unlock(vid);
@@ -568,12 +568,12 @@ startOver:
                     lock(_vid);
                     if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
-                            if (r->dest() == _vid)
-                            std::cout << "(" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->dest() == _vid)
+                            std::cout << "(" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(vid)) {
-                            if (r->src() == _vid)
-                            std::cout << "(" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->src() == _vid)
+                            std::cout << "(" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                         }
                         std::abort();
                     }
@@ -591,54 +591,48 @@ startOver:
                 // Step 3: Remove edges from all other
                 // vertices that relate to this vertex
                 {
-                std::vector<Relation*> toDelete;
-                toDelete.reserve(source(vid).size()+destination(vid).size());
                 MontageOpHolder _holder(this);
                 for (int other : vertices) {
                     if (other == vid) continue;
 
-                    Relation src(other, vid, -1);
-                    Relation dest(vid, other, -1);
-                    if (!has_relation(source(other), &src) && !has_relation(destination(other), &dest)) {
+                    auto src = make_pair(other, vid);
+                    auto dest = make_pair(vid, other);
+                    if (!has_relation(source(other), src) && !has_relation(destination(other), dest)) {
                         std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
                         for (auto r : source(vid)) {
-                            if (r->dest() == other)
-                            std::cout << "Us: (" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->dest() == other)
+                            std::cout << "Us: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(other)) {
-                            if (r->src() == vid) {
-                                std::cout << "Them: (" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->src() == vid) {
+                                std::cout << "Them: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : destination(vid)) {
-                            if (r->src() == other) {
-                                std::cout << "Us: (" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->src() == other) {
+                                std::cout << "Us: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : source(other)) {
-                            if (r->dest() == vid) {
-                                std::cout << "Them: (" << r->src() << "," << r->dest() << ")" << std::endl;
+                            if (r->second->dest() == vid) {
+                                std::cout << "Them: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
                             }
                         }
                         std::abort();
                     }
                     
-                    auto ret1 = remove_relation(source(other), &src); // this may fail
-                    auto ret2 = remove_relation(destination(other), &dest);// this may fail
+                    auto ret1 = remove_relation(source(other), src); // this may fail
+                    auto ret2 = remove_relation(destination(other), dest);// this may fail
                     if(ret1!=nullptr){
-                        toDelete.push_back(ret1);// only deallocate relation removed from source
+                        pdelete(ret1);// only deallocate relation removed from source
                     }
-                    assert(!has_relation(source(other), &src) && !has_relation(destination(other), &dest));
+                    assert(!has_relation(source(other), src) && !has_relation(destination(other), dest));
                 }
                 
-                for (auto r : source(vid)) toDelete.push_back(r);
+                for (auto r : source(vid)) pdelete(r);
                 source(vid).clear();
                 destination(vid).clear();
                 destroy(vid);
-                for (auto r : toDelete) {
-                    assert (r != nullptr);
-                    pdelete(r);
-                }
                 }
                 
                 // Step 4: Release in reverse order
@@ -679,27 +673,27 @@ startOver:
             }
 
             // Incoming edges
-            Set& source(int idx) {
+            Map& source(int idx) {
                 return vertex(idx)->adjacency_list;
 
             }
 
             // Outgoing edges
-            Set& destination(int idx) {
+            Map& destination(int idx) {
                 return vertex(idx)->dest_list;
             }
 
-            bool has_relation(Set& set, Relation *r) {
+            bool has_relation(Map& set, pair<int,int>& r) {
                 auto search = set.find(r);
                 return search != set.end();
             }
 
-            Relation* remove_relation(Set& set, Relation *r) {
+            Relation* remove_relation(Map& set, pair<int,int>& r) {
                 // remove relation from set but NOT deallocate it
                 // return Relation* in the set
                 auto search = set.find(r);
                 if (search != set.end()) {
-                    Relation *tmp = *search;
+                    Relation *tmp = search->second;
                     set.erase(search);
                     return tmp;
                 }

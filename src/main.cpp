@@ -86,7 +86,7 @@ using namespace std;
 int main(int argc, char *argv[])
 {
 	GlobalTestConfig gtc;
-	const int numVertices = 100000;
+	const int numVertices = 1000000;
 	const int meanEdgesPerVertex = 32;
 	const int vertexLoad = 50;
 
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
 	gtc.addTestOption(new GraphTest(1000000,numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:1m:80edge20vertex:degree32");
-	gtc.addTestOption(new GraphTest(1000000,numVertices, meanEdgesPerVertex,vertexLoad,9800), "GraphTest:1m:98edge2vertex:degree32");
+	gtc.addTestOption(new GraphTest(1000000,numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:1m:99.8edge.2vertex:degree32");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");

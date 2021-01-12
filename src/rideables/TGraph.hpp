@@ -53,7 +53,7 @@ class TGraph : public RGraph{
 
         using Set = std::unordered_set<Relation*,RelationHash,RelationEqual>;
 
-        class Vertex {
+        class alignas(64) Vertex {
             public:
                 Set adjacency_list;//only relations in this list is reclaimed
                 Set dest_list;// relations in this list is a duplication of those in some adjacency list
