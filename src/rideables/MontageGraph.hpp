@@ -153,8 +153,9 @@ class MontageGraph : public RGraph, public Recoverable{
                     }
                     if (vMeta[k].idxToVertex != nullptr) {
                         Relation *r = pnew<Relation>(i, k, -1);
-                        auto ret1 = source(i).emplace(make_pair(i,k),r);
-                        auto ret2 = destination(k).emplace(make_pair(i,k),r);
+                        auto p = make_pair(i,k);
+                        auto ret1 = source(i).emplace(p,r);
+                        auto ret2 = destination(k).emplace(p,r);
                         assert(ret1.second==ret2.second);
                         if(ret1.second==false){
                             // relation exists, reclaiming
@@ -226,6 +227,7 @@ class MontageGraph : public RGraph, public Recoverable{
         bool add_edge(int src, int dest, int weight) {
             bool retval = false;
             Relation *r = pnew<Relation>(src,dest,weight);
+            auto p = make_pair(src,dest);
             if (src == dest) return false; // Loops not allowed
             if (src > dest) {
                 lock(dest);
@@ -243,8 +245,8 @@ class MontageGraph : public RGraph, public Recoverable{
 
             {
                 MontageOpHolder _holder(this);
-                auto ret1 = srcSet.emplace(make_pair(src,dest),r);
-                auto ret2 = destSet.emplace(make_pair(src,dest),r);
+                auto ret1 = srcSet.emplace(p,r);
+                auto ret2 = destSet.emplace(p,r);
                 assert(ret1.second == ret2.second);
                 if(ret1.second){
                     inc_seq(src);
@@ -521,8 +523,9 @@ class MontageGraph : public RGraph, public Recoverable{
                     if (vertex(u) == nullptr) continue;
                     if (u == vid) continue;
                     Relation *r = pnew<Relation>(vid, u, -1);
-                    source(vid).emplace(make_pair(vid, u),r);
-                    destination(u).emplace(make_pair(vid, u),r);
+                    auto p = make_pair(vid, u);
+                    source(vid).emplace(p,r);
+                    destination(u).emplace(p,r);
                 }
             } else {
                 retval = false;

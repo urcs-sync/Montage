@@ -37,8 +37,6 @@ static void print_stats(int numV, int numE, double averageDegree, int *vertexDeg
 class GraphTest : public Test {
     public:
         RGraph *g;
-        uint64_t total_ops;
-        uint64_t *thd_ops;
         int max_verts;
         int addEdgeProb;
         int remEdgeProb;
@@ -52,29 +50,19 @@ class GraphTest : public Test {
         padded<std::array<int,4>>* operations;
 
 
-        GraphTest(uint64_t numOps, int max_verts, int desiredAvgDegree, int vertexLoad, int edge_op) :
-            total_ops(numOps), max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad), edge_op(edge_op) {
+        GraphTest(int max_verts, int desiredAvgDegree, int vertexLoad, int edge_op) :
+            max_verts(max_verts), desiredAvgDegree(desiredAvgDegree), vertexLoad(vertexLoad), edge_op(edge_op) {
         }
 
         void init(GlobalTestConfig *gtc) {
-            uint64_t new_ops = total_ops / gtc->task_num;
             operations = new padded<std::array<int,4>>[gtc->task_num];
-            thd_ops = new uint64_t[gtc->task_num];
-            for (int i = 0; i<gtc->task_num; i++) {
-                thd_ops[i] = new_ops;
-            }
-            if (new_ops * gtc->task_num != total_ops) {
-                thd_ops[0] += (total_ops - new_ops * gtc->task_num);
-            }
-            
+
             Rideable* ptr = gtc->allocRideable();
             g = dynamic_cast<RGraph*>(ptr);
             if(!g){
                 errexit("GraphTest must be run on RGraph type object.");
             }
-            
-            /* set interval to inf so this won't be killed by timeout */
-            gtc->interval = numeric_limits<double>::max();
+
             auto stats = g->grab_stats();
             if(gtc->verbose) std::apply(print_stats, stats);
             addEdgeProb = std::max(1,(int)edge_op*desiredAvgDegree*100/(max_verts*vertexLoad));
@@ -88,13 +76,16 @@ class GraphTest : public Test {
         }
 
         int execute(GlobalTestConfig *gtc, LocalTestConfig *ltc) {
+            auto time_up = gtc->finish;
+            int ops = 0;
             int tid = ltc->tid;
             if (tid == 0) if(gtc->verbose) std::cout << "Starting test now..." << std::endl;
             std::mt19937_64 gen_p(ltc->seed);
             std::mt19937_64 gen_v(ltc->seed + 1);
             std::uniform_int_distribution<> dist(0,9999);
             std::uniform_int_distribution<> distv(0,max_verts-1);
-            for (size_t i = 0; i < thd_ops[tid]; i++) {
+            auto now = std::chrono::high_resolution_clock::now();
+            while(std::chrono::duration_cast<std::chrono::microseconds>(time_up - now).count()>0){
             	int rng = dist(gen_p);
                 if (rng < addEdgeProb) {
                     // std::cout << "rng(" << rng << ") is add_edge <= " << addEdgeProb << std::endl; 
@@ -113,8 +104,12 @@ class GraphTest : public Test {
                     if(g->remove_vertex(distv(gen_v)))
                         operations[tid].ui[3]++;
                 }
+                ops++;
+                if (ops % 512 == 0){
+                    now = std::chrono::high_resolution_clock::now();
+                }
             }
-            return thd_ops[ltc->tid];
+            return ops;
         }
 
         void cleanup(GlobalTestConfig *gtc) {
