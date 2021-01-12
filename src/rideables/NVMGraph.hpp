@@ -115,7 +115,6 @@ class NVMGraph : public RGraph {
         // Allocates data structures and pre-loads the graph
         NVMGraph(GlobalTestConfig* gtc) {
             Persistent::init();
-            size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
             std::mt19937_64 gen(time(NULL));
             std::uniform_int_distribution<> verticesRNG(0, numVertices - 1);
@@ -135,13 +134,13 @@ class NVMGraph : public RGraph {
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex == nullptr) continue;
+                if (vertex(i) == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
                     if (k == i) {
                         continue;
                     }
-                    if (vMeta[k].idxToVertex != nullptr) {
+                    if (vertex(k) != nullptr) {
                         Relation *r = new Relation(i, k, -1);
                         auto p = make_pair(i,k);
                         auto ret1 = source(i).emplace(p,r);
@@ -165,7 +164,7 @@ class NVMGraph : public RGraph {
             int *degrees = new int[numVertices];
             double averageEdgeDegree = 0;
             for (auto i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex != nullptr) {
+                if (vertex(i) != nullptr) {
                     numV++;
                     numE += source(i).size();
                     degrees[i] = source(i).size() + destination(i).size();
