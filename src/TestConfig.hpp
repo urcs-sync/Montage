@@ -91,6 +91,7 @@ public:
 	// for affinity modifications
 	// TODO: make a general-purpose unit of this.
 	void buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
+	void buildInterleavedPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
 
 	// Run the test
 	void runTest();
@@ -111,6 +112,9 @@ private:
 	void buildSingleAffinity_helper(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj);
 	void buildSingleAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff, unsigned pu, hwloc_obj_t obj);
+	void buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff);
+	void buildInterleavedAffinity_traversePackages(std::vector<std::vector<hwloc_obj_t>>& thread_per_package, hwloc_obj_t obj);
+	void buildInterleavedPerCoreAffinity_traversePackages(std::vector<std::vector<hwloc_obj_t>>& thread_per_package, unsigned pu, hwloc_obj_t obj);
 
 	std::map<std::string,void*> arguments;
 	
