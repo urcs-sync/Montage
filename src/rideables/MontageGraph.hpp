@@ -551,10 +551,10 @@ startOver:
                 }
                 uint32_t seq = get_seq(vid);
                 for (auto r : source(vid)) {
-                    vertices.push_back(r->second->dest());
+                    vertices.push_back(r.second->dest());
                 }
                 for (auto r : destination(vid)) {
-                    vertices.push_back(r->second->src());
+                    vertices.push_back(r.second->src());
                 }
                 
                 unlock(vid);
@@ -568,12 +568,12 @@ startOver:
                     lock(_vid);
                     if (vertex(_vid) == nullptr && get_seq(vid) == seq) {
                         for (auto r : source(vid)) {
-                            if (r->second->dest() == _vid)
-                            std::cout << "(" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->dest() == _vid)
+                            std::cout << "(" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(vid)) {
-                            if (r->second->src() == _vid)
-                            std::cout << "(" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->src() == _vid)
+                            std::cout << "(" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                         }
                         std::abort();
                     }
@@ -600,22 +600,22 @@ startOver:
                     if (!has_relation(source(other), src) && !has_relation(destination(other), dest)) {
                         std::cout << "Observed pair (" << vid << "," << other << ") that was originally there but no longer is..." << std::endl;
                         for (auto r : source(vid)) {
-                            if (r->second->dest() == other)
-                            std::cout << "Us: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->dest() == other)
+                            std::cout << "Us: (" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                         }
                         for (auto r : destination(other)) {
-                            if (r->second->src() == vid) {
-                                std::cout << "Them: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->src() == vid) {
+                                std::cout << "Them: (" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : destination(vid)) {
-                            if (r->second->src() == other) {
-                                std::cout << "Us: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->src() == other) {
+                                std::cout << "Us: (" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                             }
                         }
                         for (auto r : source(other)) {
-                            if (r->second->dest() == vid) {
-                                std::cout << "Them: (" << r->second->src() << "," << r->second->dest() << ")" << std::endl;
+                            if (r.second->dest() == vid) {
+                                std::cout << "Them: (" << r.second->src() << "," << r.second->dest() << ")" << std::endl;
                             }
                         }
                         std::abort();
@@ -629,7 +629,7 @@ startOver:
                     assert(!has_relation(source(other), src) && !has_relation(destination(other), dest));
                 }
                 
-                for (auto r : source(vid)) pdelete(r);
+                for (auto r : source(vid)) pdelete(r.second);
                 source(vid).clear();
                 destination(vid).clear();
                 destroy(vid);
