@@ -27,10 +27,15 @@ void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
 PerEpoch::PerThreadDedicatedWait::PerThreadDedicatedWait(PerEpoch* _con, GlobalTestConfig* _gtc) :
     Persister(_con), gtc(_gtc) {
     // re-build worker thread affinity that pin current threads to individual cores
-    gtc->affinities.clear();
-    gtc->buildPerCoreAffinity(gtc->affinities, 0);
     // build affinities that pin persisters to hyperthreads of worker threads
-    gtc->buildPerCoreAffinity(persister_affinities, 1);
+    gtc->affinities.clear();
+    if (gtc->affinity.compare("interleaved") == 0){
+        gtc->buildInterleavedPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildInterleavedPerCoreAffinity(persister_affinities, 1);
+    } else {
+        gtc->buildPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildPerCoreAffinity(persister_affinities, 1);
+    }
     // init environment
     exit.store(false, std::memory_order_relaxed);
     // spawn threads
@@ -109,10 +114,16 @@ void BufferedWB::PerThreadDedicatedWait::persister_main(int worker_id){
 BufferedWB::PerThreadDedicatedWait::PerThreadDedicatedWait(BufferedWB* _con, GlobalTestConfig* _gtc) :
     Persister(_con), gtc(_gtc) {
     // re-build worker thread affinity that pin current threads to individual cores
-    gtc->affinities.clear();
-    gtc->buildPerCoreAffinity(gtc->affinities, 0);
     // build affinities that pin persisters to hyperthreads of worker threads
-    gtc->buildPerCoreAffinity(persister_affinities, 1);
+    gtc->affinities.clear();
+    if (gtc->affinity.compare("interleaved") == 0){
+        gtc->buildInterleavedPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildInterleavedPerCoreAffinity(persister_affinities, 1);
+    } else {
+        gtc->buildPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildPerCoreAffinity(persister_affinities, 1);
+    }
+    
     // init environment
     exit.store(false, std::memory_order_relaxed);
     signals = new Signal[gtc->task_num];
@@ -181,10 +192,15 @@ void BufferedWB::PerThreadDedicatedBusy::persister_main(int worker_id){
 BufferedWB::PerThreadDedicatedBusy::PerThreadDedicatedBusy(BufferedWB* _con, GlobalTestConfig* _gtc) :
     Persister(_con), gtc(_gtc) {
     // re-build worker thread affinity that pin current threads to individual cores
-    gtc->affinities.clear();
-    gtc->buildPerCoreAffinity(gtc->affinities, 0);
     // build affinities that pin persisters to hyperthreads of worker threads
-    gtc->buildPerCoreAffinity(persister_affinities, 1);
+    gtc->affinities.clear();
+    if (gtc->affinity.compare("interleaved") == 0){
+        gtc->buildInterleavedPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildInterleavedPerCoreAffinity(persister_affinities, 1);
+    } else {
+        gtc->buildPerCoreAffinity(gtc->affinities, 0);
+        gtc->buildPerCoreAffinity(persister_affinities, 1);
+    }
     // init environment
     exit.store(false, std::memory_order_relaxed);
     signals = new Signal[gtc->task_num];
