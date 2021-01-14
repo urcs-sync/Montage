@@ -253,8 +253,8 @@ public:
     level_meta *m = static_cast<level_meta *>(meta(my_pool_uuid));
 
     persistent_ptr<level_bucket> tmp = make_persistent<level_bucket>();
-    tmp->buckets = make_persistent<bucket[]>(pow(2, hashpower));
-    tmp->capacity = pow(2, hashpower);
+    tmp->buckets = make_persistent<bucket[]>(pow(2, hashpower.get_ro()));
+    tmp->capacity = pow(2, hashpower.get_ro());
     tmp->up = nullptr;
     m->first_level.off = tmp.raw().off;
 

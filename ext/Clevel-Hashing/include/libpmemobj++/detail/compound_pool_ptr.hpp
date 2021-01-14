@@ -1,6 +1,8 @@
 #ifndef LIBPMEMOBJ_CPP_COMPOUND_POOL_PTR_HPP
 #define LIBPMEMOBJ_CPP_COMPOUND_POOL_PTR_HPP
 
+#include <libpmemobj++/detail/specialization.hpp>
+
 namespace pmem
 {
 
