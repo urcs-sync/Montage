@@ -83,6 +83,7 @@ LIBS+=-lnvmmalloc
 # You should avoid this in general, but it's useful for building
 # external libraries which we depend on
 RECURSEDIRS := ext/ralloc $(PRONTO_PATH)/src $(NVM_MALLOC_DIR) $(MNEMOSYNE_PATH)/usermode
+RECURSEDIRS += ./ext/pmdk
 # root directories of sources.  Will be recursively
 # searched for .c and .cpp files.  All of them will
 # be built
@@ -147,6 +148,7 @@ WARNING_FLAGS:=-ftrapv -Wreturn-type -W -Wall \
 # Default build flags.  
 # CFLAGS:=-pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) 
 CFLAGS:=-fopnemp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm 
+# CFLAGS:=-fopenmp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm 
 
 # CXXFLAGS:= -pthread -std=c++11 -g -fpic $(WARNING_FLAGS) #-std=c++1y 
 CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -std=c++17 -mclwb -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm
