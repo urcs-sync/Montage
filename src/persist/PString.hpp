@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 
+#include "EpochSys.hpp"
 #include "pptr.hpp"
 
 namespace pds{

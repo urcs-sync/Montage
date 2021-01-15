@@ -109,6 +109,7 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new NVMSOFTHashTableFactory<string>(), "NVMSOFT");
 	gtc.addRideableOption(new MontageLfHashTableFactory<string>(), "MontageLfHashTable");
 	gtc.addRideableOption(new MontageNatarajanTreeFactory<string>(), "MontageNataTree");
+	gtc.addRideableOption(new CLevelHashFactory<string>, "clevel_hash");
 
 	/* graphs */
 	gtc.addRideableOption(new TGraphFactory<numVertices>(), "TGraph");

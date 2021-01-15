@@ -1,6 +1,7 @@
 #ifndef PERSISTENT_HPP
 #define PERSISTENT_HPP
 
+#include "Rideable.hpp"
 #include <cstdio>
 #include <cstring>
 #include <AllocatorMacro.hpp>

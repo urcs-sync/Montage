@@ -23,6 +23,8 @@ limitations under the License.
 
 // #include "sysextend.h"
 
+#include "ConcurrentPrimitives.hpp"
+#include <cstddef>
 namespace persist_func{
 	inline void clflush(void *p){
 		asm volatile ("clflush (%0)" :: "r"(p));
@@ -75,7 +77,6 @@ namespace persist_func{
 		clwb(p);
 		sfence();
 	}
-
 }
 
 #endif

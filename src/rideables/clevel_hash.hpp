@@ -1,6 +1,9 @@
 #ifndef PMEMOBJ_CLEVEL_HASH_HPP
 #define PMEMOBJ_CLEVEL_HASH_HPP
 
+#include "RMap.hpp"
+#include "Rideable.hpp"
+#include "TestConfig.hpp"
 #include <libpmemobj++/detail/common.hpp>
 #include <libpmemobj++/detail/compound_pool_ptr.hpp>
 #include <libpmemobj++/detail/template_helpers.hpp>
@@ -13,6 +16,7 @@
 #include <libpmemobj++/p.hpp>
 #include <libpmemobj++/persistent_ptr.hpp>
 #include <libpmemobj++/transaction.hpp>
+#include <optional>
 
 #if LIBPMEMOBJ_CPP_USE_TBB_RW_MUTEX
 #include "tbb/spin_rw_mutex.h"
@@ -75,7 +79,7 @@ using internal::shared_mutex_scoped_lock;
 
 template <typename Key, typename T, typename Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t HashPower = 14>
-class clevel_hash {
+class clevel_hash : public RMap<Key, T> {
 public:
   using key_type = Key;
   using mapped_type = T;
@@ -164,10 +168,13 @@ public:
     int8_t slot_idx;
     bool expanded;
     uint64_t capacity;
+    mapped_type found_value;
 
     ret(size_type _level_idx, difference_type _bucket_idx, size_type _slot_idx,
+	mapped_type fv,
         bool _expanded = false, uint64_t _cap = 0)
         : found(true), level_idx(_level_idx), bucket_idx(_bucket_idx),
+	  found_value(fv),
           slot_idx(_slot_idx), expanded(_expanded), capacity(_cap) {}
 
     ret(bool _expanded, uint64_t _cap)
@@ -236,7 +243,9 @@ public:
     return (partial_t)((uint64_t)hv >> shift_bits);
   }
 
-  clevel_hash() : meta(make_persistent<level_meta>().raw().off), thread_num(0) {
+  clevel_hash(GlobalTestConfig *gtc): clevel_hash(gtc->task_num) {}
+
+  clevel_hash(size_t tid = 0) : meta(make_persistent<level_meta>().raw().off), thread_num(tid) {
     std::cout << "clevel_hash constructor: HashPower = " << HashPower
               << std::endl;
 
@@ -308,7 +317,6 @@ public:
                                          const void *),
                      size_type thread_id, size_type id);
 
-  // mapped_type
   ret search(const key_type &key) const;
 
   ret erase(const key_type &key, size_type thread_id);
@@ -328,6 +336,36 @@ public:
                                          persistent_ptr<value_type> &,
                                          const void *),
                      size_type thread_id);
+
+  // Wrapper around search for RMap
+  // Because clevel hash non-blocking lookup, we don’t need tid
+  optional<T> get(key_type K, int tid) {
+    ret r = search(K);
+
+    if (r.found)
+      return r.found_value;
+    else
+      return {};
+  }
+
+  // Wrapper around insert 
+  optional<mapped_type> put(key_type k, mapped_type v, int tid) {
+  }
+
+  // Another wrapper around insert
+  bool insert(key_type k, mapped_type v, int tid) {
+    
+  }
+
+  // Wrapper around update
+  optional<mapped_type> replace(key_type key, mapped_type val, int tid) {
+    
+  }
+
+  // Wrapper around erase
+  optional<mapped_type> remove(key_type key, int tid) {
+    
+  }
 
   void clear();
 
@@ -484,9 +522,9 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::search(
       for (size_type j = 0; j < assoc_num; j++) {
         if (f_b.slots[j].x.partial == partial &&
             f_b.slots[j].p.get_offset() != 0) {
-          if (key_equal{}(f_b.slots[j].p.get_address(my_pool_uuid)->first,
-                          key)) {
-            return ret(i, f_idx, j);
+	  value_type *maybe_it = f_b.slots[j].p.get_address(my_pool_uuid);
+          if (key_equal{}(maybe_it->first, key)) {
+            return ret(i, f_idx, j, maybe_it->second);
           }
         }
       }
@@ -495,9 +533,10 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::search(
       for (size_type j = 0; j < assoc_num; j++) {
         if (s_b.slots[j].x.partial == partial &&
             s_b.slots[j].p.get_offset() != 0) {
-          if (key_equal{}(s_b.slots[j].p.get_address(my_pool_uuid)->first,
+	  value_type *maybe_it = s_b.slots[j].p.get_address(my_pool_uuid);
+          if (key_equal{}(maybe_it->first,
                           key)) {
-            return ret(i, s_idx, j);
+            return ret(i, s_idx, j, maybe_it->second);
           }
         }
       }
@@ -1368,6 +1407,13 @@ void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::clear() {
 } /* namespace experimental */
 } /* namespace obj */
 } /* namespace pmem */
+
+template<typename T>
+class CLevelHashFactory : public RideableFactory {
+  Rideable* build(GlobalTestConfig *gtc) {
+    return new pmem::obj::experimental::clevel_hash<T, T>(gtc);
+  }
+};
 
 // This macro is defined again in later rideables,
 // so I'm preventing it from leaking out
