@@ -66,7 +66,7 @@ LIBITM_PATH = ./ext/libitm
 IDIRS:=./src ./src/utils ./src/rideables ./src/tests ./src/persist ./src/persist/api
 IDIRS+=./ext/ralloc/src
 IDIRS+=$(IMMER_DIR) $(NVM_MALLOC_DIR)/src/ 
-IDIRS+=./ext/pmdk/src/include
+# IDIRS+=./ext/pmdk/src/include
 IDIRS+=./ext/Clevel-Hashing/include
 
 # directory to put build artifacts (e.g. .o, .d files)
@@ -78,12 +78,12 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
 LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
-LIBS+=-lnvmmalloc
+LIBS+=-lnvmmalloc -lpmemobj -lpmem
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
 # external libraries which we depend on
 RECURSEDIRS := ext/ralloc $(PRONTO_PATH)/src $(NVM_MALLOC_DIR) $(MNEMOSYNE_PATH)/usermode
-RECURSEDIRS += ./ext/pmdk
+# RECURSEDIRS += ./ext/pmdk
 # root directories of sources.  Will be recursively
 # searched for .c and .cpp files.  All of them will
 # be built
