@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/example-pman.dir/pman/pman.cpp.o  -o example-pman /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread -lncurses -ltinfo 

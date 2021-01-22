@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/string_libcxx_cons_pointer_alloc.dir/libcxx/basic_string/string.cons/pointer_alloc.pass.cpp.o  -o string_libcxx_cons_pointer_alloc /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

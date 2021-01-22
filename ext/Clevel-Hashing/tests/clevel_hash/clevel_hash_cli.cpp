@@ -1,4 +1,4 @@
-#include "unittest.hpp"
+#include "../common/unittest.hpp"
 
 #include <libpmemobj++/make_persistent.hpp>
 #include <libpmemobj++/p.hpp>

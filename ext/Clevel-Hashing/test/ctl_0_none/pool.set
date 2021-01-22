@@ -1,0 +1,3 @@
+PMEMPOOLSET
+OPTION SINGLEHDR
+16M /localdisk/rsanna/Montage/ext/Clevel-Hashing/test/ctl_0_none/testdir
