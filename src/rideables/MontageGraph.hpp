@@ -135,9 +135,9 @@ class MontageGraph : public RGraph, public Recoverable{
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
-                    vMeta[i].idxToVertex = new tVertex(this, i,i);
+                    vertex(i) = new tVertex(this, i,i);
                 } else {
-                    vMeta[i].idxToVertex = nullptr;
+                    vertex(i) = nullptr;
                 }
                 vMeta[i].vertexSeqs = 0;
             }
@@ -145,13 +145,13 @@ class MontageGraph : public RGraph, public Recoverable{
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex == nullptr) continue;
+                if (vertex(i) == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
                     if (k == i) {
                         continue;
                     }
-                    if (vMeta[k].idxToVertex != nullptr) {
+                    if (vertex(k) != nullptr) {
                         Relation *r = pnew<Relation>(i, k, -1);
                         auto p = make_pair(i,k);
                         auto ret1 = source(i).emplace(p,r);
@@ -178,7 +178,7 @@ class MontageGraph : public RGraph, public Recoverable{
             int *degrees = new int[numVertices];
             double averageEdgeDegree = 0;
             for (auto i = 0; i < numVertices; i++) {
-                if (vMeta[i].idxToVertex != nullptr) {
+                if (vertex(i) != nullptr) {
                     numV++;
                     numE += source(i).size();
                     degrees[i] = source(i).size() + destination(i).size();
