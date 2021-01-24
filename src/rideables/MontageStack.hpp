@@ -59,7 +59,10 @@ private:
 
 public:
 
-    MontageStack(GlobalTestConfig* gtc) : Recoverable(gtc), global_sn(0), top(nullptr), tracker(gtc->task_num, 100, 1000, true) {}
+    MontageStack(GlobalTestConfig* gtc) : Recoverable(gtc), global_sn(0), top(nullptr), tracker(gtc->task_num, 100, 1000, true) {
+        StackNode* dummy = new StackNode(this);
+        top.store(dummy);
+    }
     
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         Recoverable::init_thread(gtc, ltc);
@@ -120,8 +123,8 @@ optional<T> MontageStack<T>::pop(int tid)
             auto payload = old_node.get_val<StackNode*>()->payload;
             res = (T)payload->get_val(this);// old see new is impossible
             pretire(payload); 
-            tracker.retire(old_node.get_val<StackNode*>(), tid);
             end_op();
+            tracker.retire(old_node.get_val<StackNode*>(), tid);
             break;
         }
         abort_op();
