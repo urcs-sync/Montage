@@ -66,7 +66,7 @@ optional<T> TrieberStack<T>::pop(int tid)
     do
     {
         old_node = top.load();
-        if (old_node == NULL)
+        if (old_node == nullptr)
         {
             tracker.end_op(tid);
             return res;
@@ -85,6 +85,10 @@ optional<T> TrieberStack<T>::peek(int tid)
     optional<T> res = {};
     StackNode *top_node;
     top_node = top.load();
+    if (top_node == nullptr){
+        tracker.end_op(tid);
+        return res;
+    }
     tracker.end_op(tid);
     res = top_node->data;
     return res;
