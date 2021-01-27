@@ -116,9 +116,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
 }
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
-    // sync must NOT be called in an operation.
-    assert(c == NULL_EPOCH);
-    uint64_t target_epoch = esys->get_epoch()+2;
+    uint64_t target_epoch = c+2;
     std::unique_lock<std::mutex> lk(sync_signal.bell);
     if (target_epoch < sync_signal.target_epoch-2){
         // current epoch is already persisted.

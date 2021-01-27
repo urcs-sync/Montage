@@ -195,6 +195,8 @@ class Recoverable{
     
     // current epoch of each thread.
     padded<uint64_t>* epochs = nullptr;
+    // last epoch of each thread, for sync().
+    padded<uint64_t>* last_epochs = nullptr;
     // containers for pending allocations
     padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
     // local descriptors for DCSS
@@ -230,6 +232,7 @@ public:
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
+            last_epochs[pds::EpochSys::tid].ui = epochs[pds::EpochSys::tid].ui;
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
         }
         if(!pending_allocs[pds::EpochSys::tid].ui.empty()) 
@@ -359,7 +362,8 @@ public:
         return _esys->recover(rec_thd);
     }
     void sync(){
-        _esys->sync(epochs[pds::EpochSys::tid].ui);
+        assert(epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
+        _esys->sync(last_epochs[pds::EpochSys::tid].ui);
     }
     void recover_mode(){
         _esys->sys_mode = pds::RECOVER; // PDELETE -> nop

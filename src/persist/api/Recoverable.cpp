@@ -5,8 +5,10 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
     // TODO: put this into EpochSys.
     // Persistent::init();
     epochs = new padded<uint64_t>[gtc->task_num];
+    last_epochs = new padded<uint64_t>[gtc->task_num];
     for(int i = 0; i < gtc->task_num; i++){
         epochs[i].ui = NULL_EPOCH;
+        last_epochs[i].ui = NULL_EPOCH;
     }
     pending_allocs = new padded<std::vector<pds::PBlk*>>[gtc->task_num];
     local_descs = new padded<pds::sc_desc_t>[gtc->task_num];
@@ -20,6 +22,7 @@ Recoverable::~Recoverable(){
     delete local_descs;
     delete pending_allocs;
     delete epochs;
+    delete last_epochs;
     Persistent::finalize();
 }
 void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){
