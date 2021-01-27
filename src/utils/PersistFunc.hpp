@@ -28,6 +28,20 @@ namespace persist_func{
 		asm volatile ("nop");
 	}
 
+	inline void clwb_emulated(){
+		// this ends up as around 400 instructions.
+        for (size_t i = 0; i < 50; i++){
+            persist_func::nop();
+        }
+	}
+
+	inline void sfence_emulated(){
+		// this ends up as around 16000 instructions.
+        for (size_t i = 0; i < 2000; i++){
+            persist_func::nop();
+        }
+	}
+
 	inline void clflush(void *p){
 		asm volatile ("clflush (%0)" :: "r"(p));
 	}
@@ -37,7 +51,8 @@ namespace persist_func{
 	}
 
 	inline void clwb(void *p){
-		asm volatile ("clwb (%0)" :: "r"(p));
+		// asm volatile ("clwb (%0)" :: "r"(p));
+		clwb_emulated();
 	}
 
 	inline void mfence(){
@@ -78,20 +93,6 @@ namespace persist_func{
 	inline void flush_fence(void *p){
 		clwb(p);
 		sfence();
-	}
-
-	inline void clwb_emulated(){
-		// this ends up as around 400 instructions.
-        for (size_t i = 0; i < 50; i++){
-            persist_func::nop();
-        }
-	}
-
-	inline void sfence_emulated(){
-		// this ends up as around 16000 instructions.
-        for (size_t i = 0; i < 2000; i++){
-            persist_func::nop();
-        }
 	}
 
 }

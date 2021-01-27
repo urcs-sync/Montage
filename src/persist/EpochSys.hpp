@@ -8,6 +8,7 @@
 #include <thread>
 #include <condition_variable>
 #include <string>
+#include <chrono>
 #include "TestConfig.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include "PersistFunc.hpp"
@@ -140,6 +141,11 @@ private:
     int task_num;
     static std::atomic<int> esys_num;
 
+    // for experimenting only:
+    int reclamation_time;
+    int persist_time;
+    int wait_time;
+
 public:
 
     /* static */
@@ -175,6 +181,11 @@ public:
         delete to_be_persisted;
         delete to_be_freed;
         delete _ral;
+
+        std::cout<<"reclamation_time:"<<reclamation_time<<"us"<<std::endl;
+        std::cout<<"persist_time:"<<persist_time<<"us"<<std::endl;
+        std::cout<<"wait_time:"<<wait_time<<"us"<<std::endl;
+
     }
 
     void parse_env();

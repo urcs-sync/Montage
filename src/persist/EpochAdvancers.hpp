@@ -66,6 +66,8 @@ class DedicatedEpochAdvancer : public EpochAdvancer{
     std::atomic<bool> started;
     uint64_t epoch_length;
     SyncSignal sync_signal;
+    padded<uint64_t>* sync_counts; // for experiments only
+    padded<uint64_t>* shortcut_sync_counts; // for experiments only
     void advancer(int task_num);
 public:
     DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es);

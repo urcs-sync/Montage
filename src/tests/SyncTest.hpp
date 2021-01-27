@@ -4,6 +4,10 @@
 #include "MapChurnTest.hpp"
 #include "Recoverable.hpp"
 
+class QueueSyncTest: public QueueChurnTest{
+    
+};
+
 template <class K, class V>
 class MapSyncTest: public MapChurnTest<K,V>{
 public:

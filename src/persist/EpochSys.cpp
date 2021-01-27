@@ -219,16 +219,24 @@ namespace pds{
     // TODO: put epoch advancing logic into epoch advancers.
     void EpochSys::advance_epoch_dedicated(){
         uint64_t c = global_epoch->load(std::memory_order_relaxed);
+        auto begin = chrono::high_resolution_clock::now();
         // Free all retired blocks from 2 epochs ago
         to_be_freed->help_free(c-2);
+        auto free = chrono::high_resolution_clock::now();
         // Wait until all threads active one epoch ago are done
         while(!trans_tracker->no_active(c-1)){}
+        auto wait = chrono::high_resolution_clock::now();
         // Persist all modified blocks from 1 epoch ago
         to_be_persisted->persist_epoch(c-1);
         persist_func::sfence();
+        auto persist = chrono::high_resolution_clock::now();
         // Actually advance the epoch
         // global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
         global_epoch->store(c+1, std::memory_order_seq_cst);
+
+        reclamation_time += std::chrono::duration_cast<std::chrono::microseconds>(free - begin).count();
+        wait_time += std::chrono::duration_cast<std::chrono::microseconds>(wait - free).count();
+        persist_time += std::chrono::duration_cast<std::chrono::microseconds>(persist - wait).count();
     }
 
     // TODO: figure out how/whether to do helping with existence of dedicated bookkeeping thread(s)

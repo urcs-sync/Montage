@@ -62,6 +62,12 @@ DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* 
             errexit("time unit not supported.");
         }
     }
+    sync_counts = new padded<uint64_t>[gtc->task_num];
+    shortcut_sync_counts = new padded<uint64_t>[gtc->task_num];
+    for (uint64_t i = 0; i < gtc->task_num; i++){
+        sync_counts[i].ui = 0;
+        shortcut_sync_counts[i].ui = 0;
+    }
     started.store(false);
     advancer_thread = std::move(std::thread(&DedicatedEpochAdvancer::advancer, this, gtc->task_num));
     started.store(true);
@@ -99,11 +105,11 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         auto wb_start = chrono::high_resolution_clock::now();
         for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
             esys->advance_epoch_dedicated();
-            if (gtc->verbose){
-                if (curr_epoch%1024 == 0){
-                    std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
-                }
-            }
+            // if (gtc->verbose){
+            //     if (curr_epoch%1024 == 0){
+            //         std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
+            //     }
+            // }
         }
         int64_t wb_length = chrono::duration_cast<chrono::microseconds>(
             chrono::high_resolution_clock::now()-wb_start).count();
@@ -117,11 +123,13 @@ void DedicatedEpochAdvancer::advancer(int task_num){
 
 void DedicatedEpochAdvancer::sync(uint64_t c){
     // sync must NOT be called in an operation.
+    sync_counts[EpochSys::tid].ui++;
     assert(c == NULL_EPOCH);
     uint64_t target_epoch = esys->get_epoch()+2;
     std::unique_lock<std::mutex> lk(sync_signal.bell);
     if (target_epoch < sync_signal.target_epoch-2){
         // current epoch is already persisted.
+        shortcut_sync_counts[EpochSys::tid].ui++;
         return;
     }
     sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
@@ -141,5 +149,15 @@ DedicatedEpochAdvancer::~DedicatedEpochAdvancer(){
     if (advancer_thread.joinable()){
         advancer_thread.join();
     }
+
+    uint64_t syncs = 0, shortcut_syncs = 0;
+    for (uint64_t i = 0; i < gtc->task_num; i++){
+        syncs += sync_counts[i].ui;
+        shortcut_syncs += shortcut_sync_counts[i].ui;
+    }
+    std::cout<<"sync count:"<<syncs<<std::endl;
+    std::cout<<"shortcuted sync count:"<<shortcut_syncs<<std::endl;
+    delete sync_counts;
+    delete shortcut_sync_counts;
     // std::cout<<"terminated advancer_thread"<<std::endl;
 }
