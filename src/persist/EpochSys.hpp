@@ -331,12 +331,6 @@ public:
     // a version of advance_epoch for a SINGLE bookkeeping thread.
     void advance_epoch_dedicated();
 
-    // try to help with block persistence and reclamation.
-    void help();
-
-    // try to help with thread local persistence and reclamation.
-    void help_local();
-
     /////////////
     // Recover //
     /////////////

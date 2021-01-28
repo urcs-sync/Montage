@@ -24,35 +24,6 @@ public:
     virtual ~EpochAdvancer(){}
 };
 
-class SingleThreadEpochAdvancer : public EpochAdvancer{
-    // uint64_t trans_cnt;
-    padded<uint64_t>* trans_cnts;
-    uint64_t epoch_threshold = 0x1ULL << 19;
-    uint64_t help_threshold = 0x1ULL << 6;
-public:
-    SingleThreadEpochAdvancer(GlobalTestConfig* gtc);
-    void set_epoch_freq(int epoch_power);
-    void set_help_freq(int help_power);
-    void on_end_transaction(EpochSys* esys, uint64_t c);
-    void sync(uint64_t c){
-        errexit("SingleThreadEpochAdvancer::sync() not implemented.");
-    }
-};
-
-class GlobalCounterEpochAdvancer : public EpochAdvancer{
-    std::atomic<uint64_t> trans_cnt;
-    uint64_t epoch_threshold = 0x1ULL << 14;
-    uint64_t help_threshold = 0x1ULL;
-public:
-    // GlobalCounterEpochAdvancer();
-    void set_epoch_freq(int epoch_power);
-    void set_help_freq(int help_power);
-    void on_end_transaction(EpochSys* esys, uint64_t c);
-    void sync(uint64_t c){
-        errexit("GlobalCounterEpochAdvancer::sync() not implemented.");
-    }
-};
-
 class DedicatedEpochAdvancer : public EpochAdvancer{
     struct SyncSignal{
         std::mutex bell;

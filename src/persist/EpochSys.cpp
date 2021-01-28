@@ -231,47 +231,6 @@ namespace pds{
         global_epoch->store(c+1, std::memory_order_seq_cst);
     }
 
-    // TODO: figure out how/whether to do helping with existence of dedicated bookkeeping thread(s)
-    void EpochSys::help_local(){
-        // // Free retired blocks from 2 epochs ago
-        // uint64_t c;
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-2, c));
-
-        // while(to_be_freed->help_free_local(c-2));
-        // trans_tracker->unregister_bookkeeping(c-2);
-    }
-
-    void EpochSys::help(){
-        // // Free retired blocks from 2 epochs ago
-        // uint64_t c;
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-2, c));
-
-        // while(to_be_freed->help_free(c-2));
-        // trans_tracker->unregister_bookkeeping(c-2);
-
-        // // Persist all modified blocks from 1 epoch ago
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-1, c));
-
-        // while(to_be_persisted->persist_epoch(c-1));
-        // // persist_func::sfence(); // this might not be needed. (#1)
-        // trans_tracker->unregister_bookkeeping(c-1);
-
-        // // Persist modified blocks from current epoch
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-1, c));
-
-        // while(to_be_persisted->persist_epoch(c));
-        // // persist_func::sfence(); // this might not be needed. (#1)
-        // trans_tracker->unregister_bookkeeping(c);
-    }
-
     std::unordered_map<uint64_t, PBlk*>* EpochSys::recover(const int rec_thd){
         std::unordered_map<uint64_t, PBlk*>* in_use = new std::unordered_map<uint64_t, PBlk*>();
 #ifndef MNEMOSYNE

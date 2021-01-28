@@ -3,45 +3,6 @@
 
 using namespace pds;
 
-SingleThreadEpochAdvancer::SingleThreadEpochAdvancer(GlobalTestConfig* gtc){
-    trans_cnts = new padded<uint64_t>[gtc->task_num];
-    for (int i = 0; i < gtc->task_num; i++){
-        trans_cnts[i].ui = 0;
-    }
-}
-void SingleThreadEpochAdvancer::set_epoch_freq(int epoch_power){
-    epoch_threshold = 0x1ULL << epoch_power;
-}
-void SingleThreadEpochAdvancer::set_help_freq(int help_power){
-    help_threshold = 0x1ULL << help_power;
-}
-void SingleThreadEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
-    assert(EpochSys::tid != -1);
-    trans_cnts[EpochSys::tid].ui++;
-    if (EpochSys::tid == 0){
-        // only a single thread can advance epochs.
-        if (trans_cnts[EpochSys::tid].ui % epoch_threshold == 0){
-            esys->advance_epoch(c);
-        } 
-    }
-}
-
-
-void GlobalCounterEpochAdvancer::set_epoch_freq(int epoch_power){
-    epoch_threshold = 0x1ULL << epoch_power;
-}
-void GlobalCounterEpochAdvancer::set_help_freq(int help_power){
-    help_threshold = 0x1ULL << help_power;
-}
-void GlobalCounterEpochAdvancer::on_end_transaction(EpochSys* esys, uint64_t c){
-    uint64_t curr_cnt = trans_cnt.fetch_add(1, std::memory_order_acq_rel);
-    if (curr_cnt % epoch_threshold == 0){
-        esys->advance_epoch(c);
-    } else if (curr_cnt % help_threshold == 0){
-        esys->help_local();
-    }
-}
-
 
 DedicatedEpochAdvancer::DedicatedEpochAdvancer(GlobalTestConfig* gtc, EpochSys* es):
     gtc(gtc), esys(es){
