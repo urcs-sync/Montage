@@ -23,26 +23,26 @@ public:
 
 template <typename T>
 class CircBufferContainer: public PerThreadContainer<T>{
-    padded<PerThreadCircBuffer<T>*> containers[4];
+    padded<PerThreadCircBuffer<T>*> containers[EPOCH_WINDOW];
 public:
     CircBufferContainer(int task_num){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui = new PerThreadCircBuffer<T>(task_num);
         }
     }
     void push(T x, int tid, uint64_t c){
-        containers[c%4].ui->push(x, tid);
+        containers[c%EPOCH_WINDOW].ui->push(x, tid);
     }
     void pop_all(const std::function<void(T& x)>& func, uint64_t c){
-        containers[c%4].ui->pop_all(func);
+        containers[c%EPOCH_WINDOW].ui->pop_all(func);
     }
     void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        containers[c%4].ui->pop_all_local(func, tid);
+        containers[c%EPOCH_WINDOW].ui->pop_all_local(func, tid);
     }
     bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        return containers[c%4].ui->try_pop_local(func, tid);
+        return containers[c%EPOCH_WINDOW].ui->try_pop_local(func, tid);
     }
     void clear(){
         for (int i = 0; i < 4; i++){
@@ -53,10 +53,10 @@ public:
 
 template <typename T>
 class FixedCircBufferContainer: public PerThreadContainer<T>{
-    padded<PerThreadFixedCircBuffer<T>*> containers[4];
+    padded<PerThreadFixedCircBuffer<T>*> containers[EPOCH_WINDOW];
 public:
     FixedCircBufferContainer(int task_num, size_t cap){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui = new PerThreadFixedCircBuffer<T>(task_num, cap);
         }
     }
@@ -64,21 +64,21 @@ public:
         errexit("always use FixedCircBuffer::try_push().");
     }
     bool try_push(T x, int tid, uint64_t c){
-        return containers[c%4].ui->try_push(x, tid);
+        return containers[c%EPOCH_WINDOW].ui->try_push(x, tid);
     }
     void pop_all(const std::function<void(T& x)>& func, uint64_t c){
-        containers[c%4].ui->pop_all(func);
+        containers[c%EPOCH_WINDOW].ui->pop_all(func);
     }
     void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        containers[c%4].ui->pop_all_local(func, tid);
+        containers[c%EPOCH_WINDOW].ui->pop_all_local(func, tid);
     }
     bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        return containers[c%4].ui->try_pop_local(func, tid);
+        return containers[c%EPOCH_WINDOW].ui->try_pop_local(func, tid);
     }
     void clear(){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui->clear();
         }
     }
@@ -86,29 +86,29 @@ public:
 
 template <typename T>
 class VectorContainer: public PerThreadContainer<T>{
-    padded<PerThreadVector<T>*> containers[4];
+    padded<PerThreadVector<T>*> containers[EPOCH_WINDOW];
 public:
     VectorContainer(int task_num){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui = new PerThreadVector<T>(task_num);
         }
     }
     void push(T x, int tid, uint64_t c){
-        containers[c%4].ui->push(x, tid);
+        containers[c%EPOCH_WINDOW].ui->push(x, tid);
     }
     void pop_all(const std::function<void(T& x)>& func, uint64_t c){
-        containers[c%4].ui->pop_all(func);
+        containers[c%EPOCH_WINDOW].ui->pop_all(func);
     }
     void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        containers[c%4].ui->pop_all_local(func, tid);
+        containers[c%EPOCH_WINDOW].ui->pop_all_local(func, tid);
     }
     bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        return containers[c%4].ui->try_pop_local(func, tid);
+        return containers[c%EPOCH_WINDOW].ui->try_pop_local(func, tid);
     }
     void clear(){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui->clear();
         }
     }
@@ -116,29 +116,29 @@ public:
 
 template <typename T, typename Hash = std::hash<T>>
 class HashSetContainer: public PerThreadContainer<T>{
-    padded<PerThreadHashSet<T, Hash>*> containers[4];
+    padded<PerThreadHashSet<T, Hash>*> containers[EPOCH_WINDOW];
 public:
     HashSetContainer(int task_num){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui = new PerThreadHashSet<T, Hash>(task_num);
         }
     }
     void push(T x, int tid, uint64_t c){
-        containers[c%4].ui->push(x, tid);
+        containers[c%EPOCH_WINDOW].ui->push(x, tid);
     }
     void pop_all(const std::function<void(T& x)>& func, uint64_t c){
-        containers[c%4].ui->pop_all(func);
+        containers[c%EPOCH_WINDOW].ui->pop_all(func);
     }
     void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        containers[c%4].ui->pop_all_local(func, tid);
+        containers[c%EPOCH_WINDOW].ui->pop_all_local(func, tid);
     }
     bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
-        return containers[c%4].ui->try_pop_local(func, tid);
+        return containers[c%EPOCH_WINDOW].ui->try_pop_local(func, tid);
     }
     void clear(){
-        for (int i = 0; i < 4; i++){
+        for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i].ui->clear();
         }
     }

@@ -325,11 +325,25 @@ public:
     // get the current global epoch number.
     uint64_t get_epoch();
 
-    // try to advance global epoch, helping others along the way.
-    void advance_epoch(uint64_t c);
+    // // try to advance global epoch, helping others along the way.
+    // void advance_epoch(uint64_t c);
 
-    // a version of advance_epoch for a SINGLE bookkeeping thread.
-    void advance_epoch_dedicated();
+    // // a version of advance_epoch for a SINGLE bookkeeping thread.
+    // void advance_epoch_dedicated();
+
+    // The following bookkeeping methods are for a SINGLE bookkeeping thread:
+
+    // reclaim everything in to-be-freed container of epoch c
+    void free_epoch(uint64_t c);
+
+    // whether epoch c has reached quiesence
+    bool is_quiesent(uint64_t c);
+
+    // write back everything in to-be-persisted container of epoch c
+    void persist_epoch(uint64_t c);
+
+    // atomically set the current global epoch number
+    void set_epoch(uint64_t c);
 
     /////////////
     // Recover //
