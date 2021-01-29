@@ -80,6 +80,7 @@
 #include "CustomTypes.hpp"
 
 #include "TreiberStack.hpp"
+#include "PTreiberStack.hpp"
 #include "MontageStack.hpp"
 
 using namespace std;
@@ -92,6 +93,7 @@ int main(int argc, char *argv[])
 
 	/* stacks */
 	gtc.addRideableOption(new TreiberStackFactory<string>(), "TreiberStack");
+	gtc.addRideableOption(new PTreiberStackFactory<string>(), "PTreiberStack");
 	gtc.addRideableOption(new MontageStackFactory<string>(), "MontageTreiberStack");
 
 
