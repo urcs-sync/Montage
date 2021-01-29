@@ -59,7 +59,8 @@
 #include "ProntoHashTable.hpp"
 #endif
 // #include "Toy.hpp"
-
+#include "StackVerify.hpp"
+#include "StackTest.hpp"
 #include "QueueTest.hpp"
 #include "KVTest.hpp"
 #include "YCSBTest.hpp"
@@ -80,6 +81,10 @@
 #include "AllocTest.hpp"
 #include "CustomTypes.hpp"
 
+#include "TreiberStack.hpp"
+#include "PTreiberStack.hpp"
+#include "MontageStack.hpp"
+
 using namespace std;
 
 
@@ -89,6 +94,13 @@ int main(int argc, char *argv[])
 	const int numVertices = 1000000;
 	const int meanEdgesPerVertex = 32;
 	const int vertexLoad = 50;
+
+
+	/* stacks */
+	gtc.addRideableOption(new TreiberStackFactory<string>(), "TreiberStack");
+	gtc.addRideableOption(new PTreiberStackFactory<string>(), "PTreiberStack");
+	gtc.addRideableOption(new MontageStackFactory<string>(), "MontageTreiberStack");
+
 
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
@@ -131,7 +143,8 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new ProntoQueueFactory(), "ProntoQueue");
 	gtc.addRideableOption(new ProntoHashTableFactory(), "ProntoHashTable");
 #endif
-
+	gtc.addTestOption(new StackVerify(90,10), "StackVerify");
+	gtc.addTestOption(new StackTest(50,50,2000), "Stack:push50pop50:prefill=2000");
 	gtc.addTestOption(new QueueChurnTest(50,50,2000), "QueueChurn:eq50dq50:prefill=2000");
 	gtc.addTestOption(new QueueTest(5000000,50), "Queue:5m");
 	gtc.addTestOption(new MapChurnTest<string,string>(0, 0, 50, 50, 1000000, 500000), "MapChurnTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
