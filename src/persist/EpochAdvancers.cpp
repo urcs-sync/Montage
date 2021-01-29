@@ -79,11 +79,11 @@ void DedicatedEpochAdvancer::advancer(int task_num){
             // does reclamation for curr_epoch-1
             esys->free_epoch(curr_epoch-1);
             
-            if (gtc->verbose){
-                if (curr_epoch%1024 == 0){
-                    std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
-                }
-            }
+            // if (gtc->verbose){
+            //     if (curr_epoch%1024 == 0){
+            //         std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
+            //     }
+            // }
         }
         
         // measure the time used for write-back and reclamation, and deduct it from epoch_length.
