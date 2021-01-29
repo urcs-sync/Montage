@@ -46,6 +46,7 @@
 #include <time.h>
 #include <type_traits>
 #include <vector>
+#include <filesystem>
 
 #if _MSC_VER
 #include <intrin.h>
@@ -67,6 +68,7 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+
 namespace pmem {
 namespace obj {
 namespace experimental {
@@ -79,7 +81,7 @@ using internal::shared_mutex_scoped_lock;
 
 template <typename Key, typename T, typename Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t HashPower = 14>
-class clevel_hash : public RMap<Key, T> {
+class clevel_hash {
 public:
   using key_type = Key;
   using mapped_type = T;
@@ -336,36 +338,6 @@ public:
                                          persistent_ptr<value_type> &,
                                          const void *),
                      size_type thread_id);
-
-  // Wrapper around search for RMap
-  // Because clevel hash non-blocking lookup, we don’t need tid
-  optional<T> get(key_type K, int tid) {
-    ret r = search(K);
-
-    if (r.found)
-      return r.found_value;
-    else
-      return {};
-  }
-
-  // Wrapper around insert 
-  optional<mapped_type> put(key_type k, mapped_type v, int tid) {
-  }
-
-  // Another wrapper around insert
-  bool insert(key_type k, mapped_type v, int tid) {
-    
-  }
-
-  // Wrapper around update
-  optional<mapped_type> replace(key_type key, mapped_type val, int tid) {
-    
-  }
-
-  // Wrapper around erase
-  optional<mapped_type> remove(key_type key, int tid) {
-    
-  }
 
   void clear();
 
@@ -1408,10 +1380,103 @@ void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::clear() {
 } /* namespace obj */
 } /* namespace pmem */
 
+#define LAYOUT "clevel_hash_adapter"
+
+namespace nvobj = pmem::obj;
+namespace fs = std::filesystem;
+
+template<typename K, typename V>
+class CLevelHashAdapter : public RMap<K, V> {
+
+  using map = pmem::obj::experimental::clevel_hash<K, V>;
+  
+  // Root allocation
+  struct Root {
+    nvobj::persistent_ptr<map> cons;
+  };
+
+  // The pool, which will contain one root object
+  pmem::obj::pool<Root> pool;
+
+  // The location of the temp file
+  static fs::path temp_path() {
+    return fs::temp_directory_path() / fs::path("tmp");
+  }
+
+public:
+  CLevelHashAdapter(GlobalTestConfig *gtc) {
+    // Clean out the pool if another is there
+    if (fs::exists(temp_path()))
+      fs::remove(temp_path());
+
+    // Allocate the initial pool
+    pool = nvobj::pool<Root>
+      ::create(CLevelHashAdapter::temp_path().native(),
+	       LAYOUT,
+	       PMEMOBJ_MIN_POOL * 20, // TODO: allocate more space if needed
+	       S_IWUSR | S_IRUSR);
+
+    // Pop off the root object from the pool
+    auto proot = pool.root();
+
+    // Start a transaction
+    nvobj::transaction::manual tx(pool);
+
+    // Allocate the map type, set the thread number
+    proot->cons = nvobj::make_persistent<map>();
+    proot->cons->set_thread_num(gtc->task_num);
+
+    // Finish the transaction
+    nvobj::transaction::commit();
+  }
+
+  // Gets value corresponding to a key
+  // returns : the most recent value set for that key
+  optional<V> get(K key, int tid) {
+    return optional<V>{};
+  }
+  
+  // Puts a new key/value pair into the map   
+     // returns : the previous value for this key,
+  // or NULL if no such value exists
+  optional<V> put(K key, V val, int tid) {
+    return optional<V>{};
+  }
+  
+  // Inserts a new key/value pair into the map
+  // if the key is not already present
+  // returns : true if the insert is successful, false otherwise
+  bool insert(K key, V val, int tid) {
+    return false;
+  }
+ 
+  // Removes a value corresponding to a key
+  // returns : the removed value
+  optional<V> remove(K key, int tid) {
+    return optional<V>{};
+  }
+  
+  // Replaces the value corresponding to a key
+  // if the key is already present in the map
+  // returns : the replaced value, or NULL if replace was unsuccessful
+  optional<V> replace(K key, V val, int tid) {
+    return optional<V>{};
+  };
+
+  ~CLevelHashAdapter() {
+    // close the pool
+    pool.close();
+
+    // Remove the temporary file
+    fs::remove(temp_path());
+  }
+};
+
+// TODO: allocate an area in which to do work
 template<typename T>
 class CLevelHashFactory : public RideableFactory {
   Rideable* build(GlobalTestConfig *gtc) {
-    return new pmem::obj::experimental::clevel_hash<T, T>(gtc);
+    return new CLevelHashAdapter<T, T>(gtc);
   }
 };
 
