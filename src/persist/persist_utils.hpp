@@ -8,7 +8,7 @@
 #include <unordered_set>
 #include <functional>
 
-#define EPOCH_WINDOW 8
+#define EPOCH_WINDOW 4
 
 class UIDGenerator{
     padded<uint64_t>* curr_ids = nullptr;

@@ -46,6 +46,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
             }
             lk.unlock();
         } else {
+            // if next_sleep<0, epoch advance is taking longer than an epoch.
             if (gtc->verbose){
                 std::cout<<"warning: epoch is getting longer by "<<
                     ((double)abs(next_sleep))/epoch_length << "%" <<std::endl;
@@ -60,10 +61,6 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         auto wb_start = chrono::high_resolution_clock::now();
 
         for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
-            // if we cannot delay reclamation of two epochs ago, do it here
-            if (curr_epoch < sync_signal.target_epoch-1){
-                esys->free_epoch(curr_epoch-2);
-            }
             // Wait until all threads active one epoch ago are done
             while(!esys->is_quiesent(curr_epoch-1)){}
             // Persist all modified blocks from 1 epoch ago
@@ -71,6 +68,16 @@ void DedicatedEpochAdvancer::advancer(int task_num){
             persist_func::sfence();
             // Advance epoch number
             esys->set_epoch(curr_epoch+1);
+            // notify worker threads before relamation 
+            if (curr_epoch == sync_signal.target_epoch-1){
+                // only does notify before last reclamation since notification is somewhat expensive
+                sync_signal.worker_ring.notify_all();
+            } else {
+                // restart timer for a new epoch
+                wb_start = chrono::high_resolution_clock::now();
+            }
+            // does reclamation for curr_epoch-1
+            esys->free_epoch(curr_epoch-1);
             
             if (gtc->verbose){
                 if (curr_epoch%1024 == 0){
@@ -78,15 +85,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
                 }
             }
         }
-        // wake all threads waiting for sync() to finish.
-        sync_signal.worker_ring.notify_all();
-        // free curr_epoch-3 here to make sync() return faster.
-        esys->free_epoch(curr_epoch-3);
-
         
-
-        
-
         // measure the time used for write-back and reclamation, and deduct it from epoch_length.
         int64_t wb_length = chrono::duration_cast<chrono::microseconds>(
             chrono::high_resolution_clock::now()-wb_start).count();
@@ -102,8 +101,10 @@ void DedicatedEpochAdvancer::sync(uint64_t c){
         // current epoch is already persisted.
         return;
     }
-    sync_signal.target_epoch = std::max(target_epoch, sync_signal.target_epoch);
-    sync_signal.advancer_ring.notify_all();
+    if (target_epoch > sync_signal.target_epoch){
+        sync_signal.target_epoch = target_epoch;
+        sync_signal.advancer_ring.notify_all();
+    }
     sync_signal.worker_ring.wait(lk, [&]{return (esys->get_epoch() >= target_epoch);});
 }
 
