@@ -37,15 +37,15 @@ class SSHashTable : public RMap<K, V>
     };
 
 private:
-    int size = 1000000; //number of buckets for hash table
+    std::atomic<int> size = 1000000; //number of buckets for hash table
     int MAX_LOAD = 100000000;
-    padded<MarkPtr> *buckets = new padded<MarkPtr>[size] {};
+    padded<MarkPtr> *buckets;
     atomic<int32_t> count = {0};
     RCUTracker<Node> tracker;
     //TODO : must be thread private
-    MarkPtr *prev = nullptr;
-    Node *curr = nullptr;
-    Node *next = nullptr;
+    padded<MarkPtr*> *prev;
+    padded<MarkPtr> *curr;
+    padded<MarkPtr> *next;
 
     const uint64_t MARK_MASK = ~0x1;
 
@@ -67,21 +67,36 @@ private:
     }
 
 public:
-    SSHashTable(int task_num) : tracker(task_num, 100, 1000, true){};
+    SSHashTable(int task_num) : tracker(task_num, 100, 1000, true){
+        buckets = new padded<MarkPtr>[size.load()] {};
+        prev = new padded<MarkPtr*>[task_num];
+        curr = new padded<MarkPtr>[task_num];
+        next = new padded<MarkPtr>[task_num];
+    };
     ~SSHashTable(){};
 
     void initialize_bucket(int bucket, int tid);
     int get_parent(int bucket);
-    optional<K> reverse_bits(K n);
-    optional<K> so_regularkey(K key);
-    optional<K> so_dummykey(K key);
+    K reverse_bits(K n);
+    K so_regularkey(K key);
+    K so_dummykey(K key);
     optional<V> get(K key, int tid);
-    bool remove(K key, int tid);
-    bool put(K key, V val, int tid);
+    optional<V> remove(K key, int tid);
+    optional<V> put(K key, V val, int tid);
     bool list_insert(MarkPtr *head, Node *node, int tid);
-    bool list_find(Node **head, K key, int tid);
+    bool list_find(MarkPtr *head, K key, int tid);
     optional<V> list_delete(MarkPtr *head, K key, int tid);
+    bool insert(K key, V val, int tid);
+    optional<V> replace(K key, V val, int tid);
 
+
+};
+
+template <class T> 
+class SSHashTableFactory : public RideableFactory{
+    Rideable* build(GlobalTestConfig* gtc){
+        return new SSHashTable<T,T>(gtc->task_num);
+    }
 };
 
 template <class K, class V>
@@ -93,7 +108,7 @@ int SSHashTable<K, V>::get_parent(int bucket)
 }
 
 template <class K, class V>
-optional<K> SSHashTable<K, V>::reverse_bits(K n)
+K SSHashTable<K, V>::reverse_bits(K n)
 {
     K ans = 0;
     for (int i = sizeof(K) * 8 - 1; i >= 0; i--)
@@ -105,7 +120,7 @@ optional<K> SSHashTable<K, V>::reverse_bits(K n)
 }
 
 template <class K, class V>
-optional<K> SSHashTable<K, V>::so_regularkey(K key)
+K SSHashTable<K, V>::so_regularkey(K key)
 {
     return reverse_bits(key | (1ULL << (sizeof(K) * 8 - 1)));
 }
@@ -113,42 +128,42 @@ optional<K> SSHashTable<K, V>::so_regularkey(K key)
 template <class K, class V>
 void SSHashTable<K, V>::initialize_bucket(int bucket, int tid)
 {
-    tracker.start_op(tid);
+    // tracker.start_op(tid);
 
     int parent = get_parent(bucket);
 
-    if (buckets[parent] == nullptr)
+    if (buckets[parent].ui.ptr == nullptr)
     {
         initialize_bucket(parent,tid);
     }
 
-    Node dummy = new Node(so_dummykey(bucket), 0, nullptr);
-    if (!list_insert(&(buckets[parent]), dummy))
+    Node* dummy = new Node(so_dummykey(bucket), 0, nullptr);
+    if (!list_insert(&(buckets[parent].ui), dummy, tid))
     {
-        tracker.retire(dummy, tid);
         delete dummy;
-        dummy = curr;
+        dummy = curr[tid].ui.ptr.load();
     }
 
-    buckets[parent].compare_exchange_strong(nullptr, dummy);
+    Node* expected = nullptr;
+    buckets[parent].ui.ptr.compare_exchange_strong(expected, dummy);
 
-    tracker.end_op(tid);
+    // tracker.end_op(tid);
 }
 
 template <class K, class V>
-bool SSHashTable<K, V>::put(K key, V val, int tid)
+optional<V> SSHashTable<K, V>::put(K key, V val, int tid)
 {
     tracker.start_op(tid);
 
     bool res = false;
-    Node node = new Node(so_regularkey(key), val, nullptr);
+    Node* node = new Node(so_regularkey(key), val, nullptr);
     int bucket = key % size;
 
-    if (buckets[bucket] == nullptr)
+    if (buckets[bucket].ui.ptr.load() == nullptr)
     {
         initialize_bucket(bucket,tid);
     }
-    if (!list_insert(&(buckets[bucket]), node, tid))
+    if (!list_insert(&(buckets[bucket].ui), node, tid))
     {
 
         tracker.retire(node, tid);
@@ -156,11 +171,12 @@ bool SSHashTable<K, V>::put(K key, V val, int tid)
     } else {
 
         res = true;
-        int csize = size;
+        int csize = size.load();
 
-        if (atomic_fetch_add(&count,1) / csize > MAX_LOAD)
+        if (count.fetch_add(1) / csize > MAX_LOAD)
         {
-            (&size).compare_exchange_strong(csize, 2 * csize);
+            size.compare_exchange_strong(csize,2*csize);
+
         }
 
     }
@@ -179,11 +195,11 @@ optional<V> SSHashTable<K, V>::get(K key, int tid)
     optional<V> res = {};
     int bucket = key % size;
 
-    if (buckets[bucket] == nullptr)
+    if (buckets[bucket].ui.ptr.load() == nullptr)
     {
         initialize_bucket(bucket,tid);
     }
-    res = list_find(&(buckets[bucket]), so_regularkey(key));
+    res = list_find(&(buckets[bucket].ui), so_regularkey(key), tid);
 
     tracker.end_op(tid);
 
@@ -191,7 +207,7 @@ optional<V> SSHashTable<K, V>::get(K key, int tid)
 }
 
 template <class K, class V>
-bool SSHashTable<K, V>::remove(K key, int tid)
+optional<V> SSHashTable<K, V>::remove(K key, int tid)
 {
 
     tracker.start_op(tid);
@@ -199,12 +215,12 @@ bool SSHashTable<K, V>::remove(K key, int tid)
     bool res = false;
     int bucket = key % size;
 
-    if (buckets[bucket] == nullptr)
+    if (buckets[bucket].ui.ptr.load() == nullptr)
     {
         initialize_bucket(bucket,tid);
     }
-    if(list_delete(&(buckets[bucket]),so_regularkey(key)){
-        atomic_fetch_sub(&count);
+    if(list_delete(&(buckets[bucket].ui),so_regularkey(key),tid)){
+        count.fetch_sub(1);
         res = true;
     }
     
@@ -231,8 +247,8 @@ bool SSHashTable<K, V>::list_insert(MarkPtr *head, Node *node, int tid)
         else
         {
             //does not exist, insert.
-            node->next.ptr.store(curr);
-            if (prev->ptr.compare_exchange_strong(curr, node))
+            node->next.ptr.store(curr[tid].ui);
+            if (prev[tid].ui->ptr.compare_exchange_strong(curr[tid].ui, node))
             {
                 res = true;
                 break;
@@ -256,14 +272,14 @@ optional<V> SSHashTable<K, V>::list_delete(MarkPtr *head, K key, int tid)
             res = false;
             break;
         }
-        res = curr->val;
-        if (!curr->next.ptr.compare_exchange_strong(next, setMark(next)))
+        res = curr[tid].ui->val;
+        if (!curr[tid].ui->next.ptr.compare_exchange_strong(next[tid].ui, setMark(next[tid].ui)))
         {
             continue;
         }
-        if (prev->ptr.compare_exchange_strong(curr, next))
+        if (prev[tid].ui->ptr.compare_exchange_strong(curr[tid].ui, next[tid].ui))
         {
-            tracker.retire(curr, tid);
+            tracker.retire(curr[tid].ui, tid);
         }
         else
         {
@@ -276,47 +292,61 @@ optional<V> SSHashTable<K, V>::list_delete(MarkPtr *head, K key, int tid)
     return res;
 }
 
+
 template <class K, class V>
-bool SSHashTable<K, V>::list_find(Node **head, K key, int tid)
+bool SSHashTable<K, V>::list_find(MarkPtr* head, K key, int tid)
 {
     while (true)
     {
         bool cmark = false;
 
-        prev = new MarkPtr(*head);
+        prev[tid].ui = head;
 
-        curr = getPtr(prev->ptr.load());
+        curr[tid].ui = getPtr(prev[tid].ui->ptr.load());
 
         while (true)
         { //to lock old and curr
-            if (curr == nullptr)
+            if (curr[tid].ui == nullptr)
                 return false;
-            next = curr->next.ptr.load();
-            cmark = getMark(next);
-            next = getPtr(next);
-            auto ckey = curr->key;
-            if (prev->ptr.load() != curr)
+            next[tid].ui = curr[tid].ui->next.ptr.load();
+            cmark = getMark(next[tid].ui);
+            next[tid].ui = next[tid].ui;
+            auto ckey = curr[tid].ui->key;
+            if (prev[tid].ui->ptr.load() != curr[tid].ui)
                 break; //retry
             if (!cmark)
             {
                 if (ckey >= key)
                     return ckey == key;
-                prev = &(curr->next);
+                prev[tid].ui = &(curr[tid].ui->next);
             }
             else
             {
-                if (prev->ptr.compare_exchange_strong(curr, next))
+                if (prev[tid].ui->ptr.compare_exchange_strong(curr[tid].ui, next))
                 {
-                    tracker.retire(curr, tid);
+                    tracker.retire(curr[tid].ui, tid);
                 }
                 else
                 {
                     break; //retry
                 }
             }
-            curr = next;
+            curr[tid].ui = next;
         }
     }
+}
+
+template <class K, class V>
+bool SSHashTable<K, V>::insert(K key, V val, int tid)
+{
+    assert(0&&"insert not implemented!");
+    return 0;}
+
+template <class K, class V>
+optional<V> SSHashTable<K, V>::replace(K key, V val, int tid)
+{
+    assert(0&&"replace not implemented!");
+    return 0;
 }
 
 #endif
