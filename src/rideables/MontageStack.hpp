@@ -13,15 +13,15 @@
 
 using namespace std;
 
+// Treiber Stack persisted using Montage
 template <typename T>
-class MontageStack : public RStack<T>, Recoverable
+class MontageStack : public RStack<T>, public Recoverable
 {
 public:
     class Payload : public pds::PBlk{
         GENERATE_FIELD(T, val, Payload);
         GENERATE_FIELD(uint64_t, sn, Payload); 
     public:
-        Payload(): pds::PBlk(){}
         Payload(T v): pds::PBlk(), m_val(v), m_sn(0){}
         Payload(const Payload& oth): pds::PBlk(oth), m_sn(0), m_val(oth.m_val){}
         void persist(){}
@@ -41,6 +41,10 @@ private:
         {
             assert(payload != nullptr && "payload shouldn't be null");
             payload->set_unsafe_sn(ds, s);
+        }
+        T get_val(){
+            assert(payload!=nullptr && "payload shouldn't be null");
+            return (T)payload->get_unsafe_val(ds);
         }
         ~StackNode(){
             if (payload)
@@ -109,7 +113,7 @@ optional<T> MontageStack<T>::pop(int tid)
     while(true)
     {
         pds::lin_var old_node = top.load(this);
-        if (old_node.get_val<StackNode*>() == nullptr)
+        if (old_node.val == 0)
         {
             tracker.end_op(tid);
             return res;
@@ -143,11 +147,8 @@ optional<T> MontageStack<T>::peek(int tid)
             return res;
         }
         tracker.end_op(tid);
-        auto payload = top_node->payload;
-        res = (T)payload->get_val(this);
-
+        res = top_node->get_val();
     }
-
     return res;
 }
 
@@ -164,6 +165,20 @@ class MontageStackFactory : public RideableFactory
     {
         return new MontageStack<T>(gtc);
     }
+};
+
+/* Specialization for strings */
+#include <string>
+#include "PString.hpp"
+template <>
+class MontageStack<std::string>::Payload : public pds::PBlk{
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
+    GENERATE_FIELD(uint64_t, sn, Payload); 
+
+public:
+    Payload(const std::string& v) : pds::PBlk(), m_val(this, v), m_sn(0) {}
+    Payload(const Payload& oth) : pds::PBlk(oth), m_val(this, oth.m_val), m_sn(0) {}
+    void persist(){}
 };
 
 #endif

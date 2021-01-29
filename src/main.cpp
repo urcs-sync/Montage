@@ -79,7 +79,8 @@
 #endif /* !MNEMOSYNE */
 #include "CustomTypes.hpp"
 
-#include "TrieberStack.hpp"
+#include "TreiberStack.hpp"
+#include "MontageStack.hpp"
 
 using namespace std;
 
@@ -90,7 +91,8 @@ int main(int argc, char *argv[])
 
 
 	/* stacks */
-	gtc.addRideableOption(new TrieberStackFactory<string>(), "TrieberStack");
+	gtc.addRideableOption(new TreiberStackFactory<string>(), "TreiberStack");
+	gtc.addRideableOption(new MontageStackFactory<string>(), "MontageTreiberStack");
 
 
 	/* queues */
