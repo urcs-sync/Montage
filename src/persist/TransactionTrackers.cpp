@@ -70,22 +70,22 @@ AtomicTransactionTracker::AtomicTransactionTracker(atomic<uint64_t>* ge): Transa
     }
 }
 bool AtomicTransactionTracker::consistent_register_active(uint64_t target, uint64_t c){
-    return consistent_increment(active_transactions[target%4].ui, c);
+    return consistent_increment(active_transactions[target%EPOCH_WINDOW].ui, c);
 }
 bool AtomicTransactionTracker::consistent_register_bookkeeping(uint64_t target, uint64_t c){
-    return consistent_increment(bookkeeping_transactions[target%4].ui, c);
+    return consistent_increment(bookkeeping_transactions[target%EPOCH_WINDOW].ui, c);
 }
 void AtomicTransactionTracker::unregister_active(uint64_t target){
-    active_transactions[target%4].ui.fetch_sub(1, std::memory_order_seq_cst);
+    active_transactions[target%EPOCH_WINDOW].ui.fetch_sub(1, std::memory_order_seq_cst);
 }
 void AtomicTransactionTracker::unregister_bookkeeping(uint64_t target){
-    bookkeeping_transactions[target%4].ui.fetch_sub(1, std::memory_order_seq_cst);
+    bookkeeping_transactions[target%EPOCH_WINDOW].ui.fetch_sub(1, std::memory_order_seq_cst);
 }
 bool AtomicTransactionTracker::no_active(uint64_t target){
-    return (active_transactions[target%4].ui.load(std::memory_order_seq_cst) == 0);
+    return (active_transactions[target%EPOCH_WINDOW].ui.load(std::memory_order_seq_cst) == 0);
 }
 bool AtomicTransactionTracker::no_bookkeeping(uint64_t target){
-    return (bookkeeping_transactions[target%4].ui.load(std::memory_order_seq_cst) == 0);
+    return (bookkeeping_transactions[target%EPOCH_WINDOW].ui.load(std::memory_order_seq_cst) == 0);
 }
 
 
@@ -128,22 +128,22 @@ NoFenceTransactionTracker::NoFenceTransactionTracker(atomic<uint64_t>* ge, int t
     }
 }
 bool NoFenceTransactionTracker::consistent_register_active(uint64_t target, uint64_t c){
-    return consistent_register(active_transactions[target%4].ui, c);
+    return consistent_register(active_transactions[target%EPOCH_WINDOW].ui, c);
 }
 bool NoFenceTransactionTracker::consistent_register_bookkeeping(uint64_t target, uint64_t c){
-    return consistent_register(bookkeeping_transactions[target%4].ui, c);
+    return consistent_register(bookkeeping_transactions[target%EPOCH_WINDOW].ui, c);
 }
 void NoFenceTransactionTracker::unregister_active(uint64_t target){
-    set_unregister(active_transactions[target%4].ui);
+    set_unregister(active_transactions[target%EPOCH_WINDOW].ui);
 }
 void NoFenceTransactionTracker::unregister_bookkeeping(uint64_t target){
-    set_unregister(bookkeeping_transactions[target%4].ui);
+    set_unregister(bookkeeping_transactions[target%EPOCH_WINDOW].ui);
 }
 bool NoFenceTransactionTracker::no_active(uint64_t target){
-    return all_false(active_transactions[target%4].ui);
+    return all_false(active_transactions[target%EPOCH_WINDOW].ui);
 }
 bool NoFenceTransactionTracker::no_bookkeeping(uint64_t target){
-    return all_false(bookkeeping_transactions[target%4].ui);
+    return all_false(bookkeeping_transactions[target%EPOCH_WINDOW].ui);
 }
 
 void FenceBeginTransactionTracker::set_register(paddedAtomic<bool>* indicators){

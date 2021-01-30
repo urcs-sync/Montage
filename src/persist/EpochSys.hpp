@@ -145,8 +145,6 @@ public:
     /* static */
     static thread_local int tid;
     
-    std::mutex dedicated_epoch_advancer_lock;
-
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
 
@@ -158,18 +156,21 @@ public:
     }
 
     void flush(){
-        for (int i = 0; i < 4; i++){
-            advance_epoch_dedicated();
+        for (int i = 0; i < 2; i++){
+            sync(NULL_EPOCH);
         }
     }
 
     ~EpochSys(){
         // std::cout<<"epochsys descructor called"<<std::endl;
         trans_tracker->finalize();
+        // flush(); // flush is done in epoch_advancer's destructor.
         if (epoch_advancer){
             delete epoch_advancer;
         }
-        flush();
+        if (gtc->verbose){
+            std::cout<<"final epoch:"<<global_epoch->load()<<std::endl;
+        }
         delete trans_tracker;
         delete to_be_persisted;
         delete to_be_freed;
@@ -311,21 +312,38 @@ public:
     template<typename T>
     T* openwrite_pblk(T* b, uint64_t c);
 
+    // block, call for persistence of epoch c, and wait until finish.
+    void sync(uint64_t c){
+        epoch_advancer->sync(c);
+    }
+
+
     /////////////////
     // Bookkeeping //
     /////////////////
 
-    // try to advance global epoch, helping others along the way.
-    void advance_epoch(uint64_t c);
+    // get the current global epoch number.
+    uint64_t get_epoch();
 
-    // a version of advance_epoch for a SINGLE bookkeeping thread.
-    void advance_epoch_dedicated();
+    // // try to advance global epoch, helping others along the way.
+    // void advance_epoch(uint64_t c);
 
-    // try to help with block persistence and reclamation.
-    void help();
+    // // a version of advance_epoch for a SINGLE bookkeeping thread.
+    // void advance_epoch_dedicated();
 
-    // try to help with thread local persistence and reclamation.
-    void help_local();
+    // The following bookkeeping methods are for a SINGLE bookkeeping thread:
+
+    // reclaim everything in to-be-freed container of epoch c
+    void free_epoch(uint64_t c);
+
+    // whether epoch c has reached quiesence
+    bool is_quiesent(uint64_t c);
+
+    // write back everything in to-be-persisted container of epoch c
+    void persist_epoch(uint64_t c);
+
+    // atomically set the current global epoch number
+    void set_epoch(uint64_t c);
 
     /////////////
     // Recover //

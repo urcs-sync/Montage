@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 
+#include "persist_utils.hpp"
 #include "ConcurrentPrimitives.hpp"
 
 namespace pds{
@@ -62,8 +63,8 @@ namespace pds{
     };
 
     class AtomicTransactionTracker : public TransactionTracker{
-        paddedAtomic<uint64_t> active_transactions[4];
-        paddedAtomic<uint64_t> bookkeeping_transactions[4];
+        paddedAtomic<uint64_t> active_transactions[EPOCH_WINDOW];
+        paddedAtomic<uint64_t> bookkeeping_transactions[EPOCH_WINDOW];
         bool consistent_increment(std::atomic<uint64_t>& counter, const uint64_t c);
     public:
         AtomicTransactionTracker(std::atomic<uint64_t>* ge);
@@ -76,8 +77,8 @@ namespace pds{
     };
 
     class NoFenceTransactionTracker : public TransactionTracker{
-        padded<paddedAtomic<bool>*> active_transactions[4];
-        padded<paddedAtomic<bool>*> bookkeeping_transactions[4];
+        padded<paddedAtomic<bool>*> active_transactions[EPOCH_WINDOW];
+        padded<paddedAtomic<bool>*> bookkeeping_transactions[EPOCH_WINDOW];
         int task_num;
         virtual void set_register(paddedAtomic<bool>* indicators);
         virtual void set_unregister(paddedAtomic<bool>* indicators);

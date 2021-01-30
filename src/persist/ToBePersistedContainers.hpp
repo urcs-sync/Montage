@@ -61,13 +61,15 @@ class PerEpoch : public ToBePersistContainer{
         struct Signal {
             std::mutex bell;
             std::condition_variable ring;
-            int curr = 0;
             uint64_t epoch = INIT_EPOCH;
+            std::atomic<int> finish_counter;
         }__attribute__((aligned(CACHE_LINE_SIZE)));
-
+        
         GlobalTestConfig* gtc;
         std::vector<std::thread> persisters;
         std::vector<hwloc_obj_t> persister_affinities;
+        uint64_t last_persisted = NULL_EPOCH;
+        
         std::atomic<bool> exit;
         Signal signal;
         // TODO: explain in comment what's going on here.

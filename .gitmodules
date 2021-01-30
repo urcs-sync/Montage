@@ -1,0 +1,6 @@
+[submodule "ext/qstm"]
+	path = ext/qstm
+	url = https://github.com/beadleha/qstm
+[submodule "ext/OneFile"]
+	path = ext/OneFile
+	url = https://github.com/pramalhe/OneFile

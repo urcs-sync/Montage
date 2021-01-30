@@ -20,12 +20,15 @@ public:
 
 	inline T fromInt(uint64_t v);
 
-	void getRideable(GlobalTestConfig* gtc){
+	void allocRideable(GlobalTestConfig* gtc){
 		Rideable* ptr = gtc->allocRideable();
 		s = dynamic_cast<RSet<T>*>(ptr);
 		if (!s) {
 			 errexit("SetChurnTest must be run on RSet<T> type object.");
 		}
+	}
+	Rideable* getRideable(){
+		return s;
 	}
 	void doPrefill(GlobalTestConfig* gtc){
 		// prefill deterministically:

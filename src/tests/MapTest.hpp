@@ -234,8 +234,10 @@ public:
 
         Savitar_core_finalize();
         pthread_mutex_destroy(&snapshot_lock);
-#endif
+#else
+        // Pronto handles deletion by its own
         delete m;
+#endif
     }
 
 };

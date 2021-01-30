@@ -25,7 +25,7 @@ public:
 
 	inline K fromInt(uint64_t v);
 
-	void init(GlobalTestConfig* gtc){
+	virtual void init(GlobalTestConfig* gtc){
 		if(gtc->checkEnv("KeySize")){
             key_size = atoi((gtc->getEnv("KeySize")).c_str());
 			assert(key_size<=TESTS_KEY_SIZE&&"KeySize dynamically passed in is greater than macro TESTS_KEY_SIZE!");
@@ -46,17 +46,20 @@ public:
 		ChurnTest::init(gtc);
 	}
 
-	void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+	virtual void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 		m->init_thread(gtc, ltc);
 		ChurnTest::parInit(gtc, ltc);
 	}
 
-	void getRideable(GlobalTestConfig* gtc){
+	void allocRideable(GlobalTestConfig* gtc){
 		Rideable* ptr = gtc->allocRideable();
 		m = dynamic_cast<RMap<K, V>*>(ptr);
 		if (!m) {
 			 errexit("MapChurnTest must be run on RMap<K,V> type object.");
 		}
+	}
+	Rideable* getRideable(){
+		return m;
 	}
 	void doPrefill(GlobalTestConfig* gtc){
 		if (this->prefill > 0){
@@ -97,7 +100,10 @@ public:
 	}
 	void cleanup(GlobalTestConfig* gtc){
 		ChurnTest::cleanup(gtc);
+#ifndef PRONTO
+		// Pronto handles deletion by its own
 		delete m;
+#endif
 	}
 };
 

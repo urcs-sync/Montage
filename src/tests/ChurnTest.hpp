@@ -53,12 +53,13 @@ public:
 	ChurnTest(int p_gets, int p_puts, int p_inserts, int p_removes, int range):
 		ChurnTest(p_gets, p_puts, p_inserts, p_removes, range,0){}
 	void init(GlobalTestConfig* gtc);
-	int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
+	virtual int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
 	pthread_barrier_t barrier;
 
 	virtual void cleanup(GlobalTestConfig* gtc);
 	virtual void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
-	virtual void getRideable(GlobalTestConfig* gtc) = 0;
+	virtual void allocRideable(GlobalTestConfig* gtc) = 0;
+	virtual Rideable* getRideable() = 0;
 	virtual void doPrefill(GlobalTestConfig* gtc) = 0;
 	virtual void operation(uint64_t key, int op, int tid) = 0;
 };
@@ -107,7 +108,7 @@ void ChurnTest::init(GlobalTestConfig* gtc){
 	assert(sigaction(SIGUSR1, &sa, NULL) == 0);
 #endif
 
-	getRideable(gtc);
+	allocRideable(gtc);
 	
 	if(gtc->verbose){
 		printf("Gets:%d Puts:%d Inserts:%d Removes: %d\n",

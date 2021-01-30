@@ -118,7 +118,7 @@ ARCHIVEDIR:=./lib
 # -since we do pattern matching between this list and the
 # source files, the file path specified must be the same
 # type (absolute or relative)
-EXECUTABLES:= ./src/main.cpp #./unit_test/dcss.cpp
+EXECUTABLES:= ./src/main.cpp #./unit_test/scratch.cpp #./unit_test/dcss.cpp
 
 # A list of source files contained in the
 # source directory to exclude from the build
@@ -209,8 +209,8 @@ LDFLAGS := $(WARNING_FLAGS) $(foreach d, $(LDIRS), -Xlinker -rpath -Xlinker $(d)
 
 ifeq ($(BUILD),graph-rec)
 # -ftree-vectorize crashes Mnemosyne
-CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 -DNDEBUG
-CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 -DNDEBUG
+CFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
+CXXFLAGS+=-DGRAPH_RECOVERY -ftree-vectorize -O3 #-DNDEBUG
 # we can add additional release customization here
 # e.g. link against different libraries, 
 # define enviroment vars, etc.

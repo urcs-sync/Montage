@@ -154,6 +154,7 @@ namespace pds{
         }
     }
 
+    // TODO (Hs): possible to move these into .hpp for inlining?
     void EpochSys::register_update_pblk(PBlk* b, uint64_t c){
         // to_be_persisted[c%4].push(b);
         if (c == NULL_EPOCH){
@@ -163,113 +164,91 @@ namespace pds{
         to_be_persisted->register_persist(b, _ral->malloc_size(b), c);
     }
 
-    // Arg is epoch we think we're ending
-    void EpochSys::advance_epoch(uint64_t c){
-        // TODO: if we go with one bookkeeping thread, remove unecessary synchronizations.
-
-        // Free all retired blocks from 2 epochs ago
-        if (!trans_tracker->consistent_register_bookkeeping(c-2, c)){
-            return;
-        }
-
-        to_be_freed->help_free(c-2);
-
-        trans_tracker->unregister_bookkeeping(c-2);
-
-        // Wait until any other threads freeing such blocks are done
-        while(!trans_tracker->no_bookkeeping(c-2)){
-            if (global_epoch->load(std::memory_order_acquire) != c){
-                return;
-            }
-        }
-
-        // Wait until all threads active one epoch ago are done
-        if (!trans_tracker->consistent_register_bookkeeping(c-1, c)){
-            return;
-        }
-        while(!trans_tracker->no_active(c-1)){
-            if (global_epoch->load(std::memory_order_acquire) != c){
-                return;
-            }
-        }
-
-        // Persist all modified blocks from 1 epoch ago
-        // while(to_be_persisted->persist_epoch(c-1));
-        to_be_persisted->persist_epoch(c-1);
-
-        trans_tracker->unregister_bookkeeping(c-1);
-
-        // Wait until any other threads persisting such blocks are done
-        while(!trans_tracker->no_bookkeeping(c-1)){
-            if (global_epoch->load(std::memory_order_acquire) != c){
-                return;
-            }
-        }
-        // persist_func::sfence(); // given the length of current epoch, we may not need this.
-        // Actually advance the epoch
-        global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
-        // Failure is harmless
+    uint64_t EpochSys::get_epoch(){
+        return global_epoch->load(std::memory_order_acquire);
     }
 
-    // TODO: put epoch advancing logic into epoch advancers.
-    void EpochSys::advance_epoch_dedicated(){
-        std::lock_guard<std::mutex> lock(dedicated_epoch_advancer_lock);
-        uint64_t c = global_epoch->load(std::memory_order_relaxed);
-        // Free all retired blocks from 2 epochs ago
-        to_be_freed->help_free(c-2);
-        // Wait until all threads active one epoch ago are done
-        while(!trans_tracker->no_active(c-1)){}
-        // Persist all modified blocks from 1 epoch ago
-        to_be_persisted->persist_epoch(c-1);
-        // persist_func::sfence(); // given the length of current epoch, we may not need this.
-        // Actually advance the epoch
-        // global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
-        global_epoch->store(c+1, std::memory_order_relaxed);
+    // // Arg is epoch we think we're ending
+    // void EpochSys::advance_epoch(uint64_t c){
+    //     // TODO: if we go with one bookkeeping thread, remove unecessary synchronizations.
 
-        //if (c % 10000 == 0){
-        //    std::cout<<"epoch:"<<c<<std::endl;
-        //}
+    //     // Free all retired blocks from 2 epochs ago
+    //     if (!trans_tracker->consistent_register_bookkeeping(c-2, c)){
+    //         return;
+    //     }
+
+    //     to_be_freed->help_free(c-2);
+
+    //     trans_tracker->unregister_bookkeeping(c-2);
+
+    //     // Wait until any other threads freeing such blocks are done
+    //     while(!trans_tracker->no_bookkeeping(c-2)){
+    //         if (global_epoch->load(std::memory_order_acquire) != c){
+    //             return;
+    //         }
+    //     }
+
+    //     // Wait until all threads active one epoch ago are done
+    //     if (!trans_tracker->consistent_register_bookkeeping(c-1, c)){
+    //         return;
+    //     }
+    //     while(!trans_tracker->no_active(c-1)){
+    //         if (global_epoch->load(std::memory_order_acquire) != c){
+    //             return;
+    //         }
+    //     }
+
+    //     // Persist all modified blocks from 1 epoch ago
+    //     // while(to_be_persisted->persist_epoch(c-1));
+    //     to_be_persisted->persist_epoch(c-1);
+
+    //     trans_tracker->unregister_bookkeeping(c-1);
+
+    //     // Wait until any other threads persisting such blocks are done
+    //     while(!trans_tracker->no_bookkeeping(c-1)){
+    //         if (global_epoch->load(std::memory_order_acquire) != c){
+    //             return;
+    //         }
+    //     }
+    //     // persist_func::sfence(); // given the length of current epoch, we may not need this.
+    //     // Actually advance the epoch
+    //     global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
+    //     // Failure is harmless
+    // }
+
+    // this epoch advancing logic has been put into epoch advancers.
+    // void EpochSys::advance_epoch_dedicated(){
+    //     uint64_t c = global_epoch->load(std::memory_order_relaxed);
+    //     // Free all retired blocks from 2 epochs ago
+    //     to_be_freed->help_free(c-2);
+    //     // Wait until all threads active one epoch ago are done
+    //     while(!trans_tracker->no_active(c-1)){}
+    //     // Persist all modified blocks from 1 epoch ago
+    //     to_be_persisted->persist_epoch(c-1);
+    //     persist_func::sfence();
+    //     // Actually advance the epoch
+    //     // global_epoch->compare_exchange_strong(c, c+1, std::memory_order_seq_cst);
+    //     global_epoch->store(c+1, std::memory_order_seq_cst);
+    // }
+
+    // reclaim everything in to-be-freed container of epoch c
+    void EpochSys::free_epoch(uint64_t c){
+        to_be_freed->help_free(c);
     }
 
-    // TODO: figure out how/whether to do helping with existence of dedicated bookkeeping thread(s)
-    void EpochSys::help_local(){
-        // // Free retired blocks from 2 epochs ago
-        // uint64_t c;
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-2, c));
-
-        // while(to_be_freed->help_free_local(c-2));
-        // trans_tracker->unregister_bookkeeping(c-2);
+    // whether epoch c has reached quiesence
+    bool EpochSys::is_quiesent(uint64_t c){
+        return trans_tracker->no_active(c);
     }
 
-    void EpochSys::help(){
-        // // Free retired blocks from 2 epochs ago
-        // uint64_t c;
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-2, c));
+    // write back everything in to-be-persisted container of epoch c
+    void EpochSys::persist_epoch(uint64_t c){
+        to_be_persisted->persist_epoch(c);
+    }
 
-        // while(to_be_freed->help_free(c-2));
-        // trans_tracker->unregister_bookkeeping(c-2);
-
-        // // Persist all modified blocks from 1 epoch ago
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-1, c));
-
-        // while(to_be_persisted->persist_epoch(c-1));
-        // // persist_func::sfence(); // this might not be needed. (#1)
-        // trans_tracker->unregister_bookkeeping(c-1);
-
-        // // Persist modified blocks from current epoch
-        // do{
-        //     c = global_epoch->load(std::memory_order_acquire);
-        // }while(!trans_tracker->consistent_register_bookkeeping(c-1, c));
-
-        // while(to_be_persisted->persist_epoch(c));
-        // // persist_func::sfence(); // this might not be needed. (#1)
-        // trans_tracker->unregister_bookkeeping(c);
+    // atomically set the current global epoch number
+    void EpochSys::set_epoch(uint64_t c){
+        global_epoch->store(c, std::memory_order_seq_cst);
     }
 
     std::unordered_map<uint64_t, PBlk*>* EpochSys::recover(const int rec_thd){
