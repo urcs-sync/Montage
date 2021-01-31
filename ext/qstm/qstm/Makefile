@@ -58,12 +58,12 @@
 # Paths configuration
 # -------------------------
 # list of directories which contain headers (include directories)
-IDIRS:=./src ./src/util ./src/test ./src/trackers ./bench/stamp-kozy/lib ./bench/stamp-kozy/vacation ./bench/stamp-kozy/intruder ../ralloc/src/
+IDIRS:=./src ./src/util ./src/test ./src/trackers ../../ralloc/src/
 # directory to put build artifacts (e.g. .o, .d files)
 ODIR:=./obj
 # list of directories which contain linked in libraries
 # LDIRS:=./bench/stamp-kozy/vacation/libs ./bench/stamp-kozy/intruder/libs
-LDIRS := ../ralloc/test/
+LDIRS := ../../ralloc/test/
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lparharness -lpthread -lhwloc -lm -lrt
@@ -77,7 +77,7 @@ RECURSEDIRS :=
 # root directories of sources.  Will be recursively
 # searched for .c and .cpp files.  All of them will
 # be built
-SRCDIRS :=./bench/stamp-kozy ./src
+SRCDIRS :=./src
 # output directory for binary executables
 BINDIR :=./bin
 # C compiler

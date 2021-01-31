@@ -3,8 +3,6 @@
 #include "transaction.hpp"
 #include "countertest.hpp"
 #include "ncounterstest.hpp"
-#include "vacationtest.hpp"
-#include "intrudertest.hpp"
 
 #include "qstm.hpp"
 #include "testlaunch.hpp"
@@ -25,8 +23,6 @@ int main(int argc, char** argv){
 
 	tc->addTest(new CounterTestFactory(), "Single counter");
 	tc->addTest(new NCountersTestFactory(), "N counters (-dN=<number>)");
-	tc->addTest(new VacationTestFactory(), "Vacation (-dcont=<0|1>	0 for low, 1 for high)");
-	tc->addTest(new IntruderTestFactory(), "Intruder (-dcont=<0|1>	0 for simulator, 1 for non-simulator)");
 
 	tc->stm = new QSTMFactory();
 	tc->stm_name="QSTM";
