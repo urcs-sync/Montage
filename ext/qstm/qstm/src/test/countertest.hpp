@@ -35,6 +35,7 @@ public:
 	static void *workerCount(void *threadid) {
 		long tid;
 		tid = (long)threadid;
+		RP_set_tid(tid);
 
 		setAffinity(tc, tid);
 
