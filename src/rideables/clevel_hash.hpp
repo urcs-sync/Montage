@@ -79,9 +79,10 @@ using namespace pmem::obj;
 using internal::shared_mutex_scoped_lock;
 #endif
 
+//#region [rgba(0,205,30,0.1)]
 template <typename Key, typename T, typename Hash = std::hash<Key>,
           typename KeyEqual = std::equal_to<Key>, size_t HashPower = 14>
-class clevel_hash {
+class clevel_hash : public RMap <Key, T>{
 public:
   using key_type = Key;
   using mapped_type = T;
@@ -165,31 +166,27 @@ public:
 
   struct ret {
     bool found;
+    mapped_type val;
     uint8_t level_idx;
     difference_type bucket_idx;
     int8_t slot_idx;
     bool expanded;
     uint64_t capacity;
-    mapped_type found_value;
 
-    ret(size_type _level_idx, difference_type _bucket_idx, size_type _slot_idx,
-	mapped_type fv,
-        bool _expanded = false, uint64_t _cap = 0)
-        : found(true), level_idx(_level_idx), bucket_idx(_bucket_idx),
-	  found_value(fv),
-          slot_idx(_slot_idx), expanded(_expanded), capacity(_cap) {}
+    ret(mapped_type _val, size_type _level_idx, difference_type _bucket_idx, size_type _slot_idx, bool _expanded = false, uint64_t _cap = 0)
+        : found(true), val(_val), level_idx(_level_idx), bucket_idx(_bucket_idx), slot_idx(_slot_idx), expanded(_expanded), capacity(_cap) {}
 
     ret(bool _expanded, uint64_t _cap)
-        : found(false), level_idx(0), bucket_idx(0), slot_idx(0),
-          expanded(_expanded), capacity(_cap) {}
+        : found(false), level_idx(0), bucket_idx(0), slot_idx(0), expanded(_expanded), capacity(_cap) {}
+
+    ret(bool _found, mapped_type _val)
+        : found(_found), val(_val), level_idx(0), bucket_idx(0), slot_idx(0), expanded(false), capacity(0) {}
 
     ret(bool _found)
-        : found(_found), level_idx(0), bucket_idx(0), slot_idx(0),
-          expanded(false), capacity(0) {}
+        : found(_found), level_idx(0), bucket_idx(0), slot_idx(0), expanded(false), capacity(0) {}
 
     ret()
-        : found(false), level_idx(0), bucket_idx(0), slot_idx(0),
-          expanded(false), capacity(0) {}
+        : found(false), level_idx(0), bucket_idx(0), slot_idx(0), expanded(false), capacity(0) {}
   };
 
   union KV_entry_ptr_u {
@@ -302,6 +299,53 @@ public:
     internal::make_persistent_object<value_type>(
         pop, KV_ptr, std::move(*const_cast<value_type *>(v)));
   }
+
+  /*
+   * the last parameter is unused in generic_insert, can be any value
+   * there are two insert() APIs, I only wrap the one that is used in their and our benchmark 
+   */
+  bool insert(Key key, T val, int tid){
+    auto ret_val = insert(value_type(k, v), tid, 0); 
+    if(ret_val.found){
+      return true;
+    }else{
+      return false;
+    }
+  }
+
+  /*
+   * this is just a workaround, other threads might change the KV pair in the slot returned by search()
+   * before get() returns
+   * a better way is to modify the return value of research
+   */
+  optional<T> get(Key key, int tid){
+    auto ret_val = search(key_type(key));
+    if(ret_val.found){
+      return ret_val.val;
+    }
+    return {};
+  }
+
+  optional<T> remove(Key key, int tid){
+    auto ret_val = erase(key_type(key), tid);
+    if(ret_val.found){
+      return ret_val.val;
+    }
+    return {};
+  }
+
+  optional<T> replace(Key key, T val, int tid){
+    auto ret_val = update(value_type(key, val), tid);
+    if(ret_val.found){
+      return ret_val.val;
+    }
+    return {};
+  }
+
+  optional<V> put(Key key, T val, int tid){
+    /* to-do*/
+  }
+  
 
   ret insert(const value_type &value, size_type thread_id, size_type id) {
     return generic_insert(value.first, &value, allocate_KV_copy_construct,
@@ -467,6 +511,7 @@ public:
   std::vector<std::fstream> thread_logs;
 #endif
 };
+//#endregion
 
 template <typename Key, typename T, typename Hash, typename KeyEqual,
           size_t HashPower>
@@ -492,23 +537,20 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::search(
 
       bucket &f_b = cl->buckets[f_idx];
       for (size_type j = 0; j < assoc_num; j++) {
-        if (f_b.slots[j].x.partial == partial &&
-            f_b.slots[j].p.get_offset() != 0) {
-	  value_type *maybe_it = f_b.slots[j].p.get_address(my_pool_uuid);
-          if (key_equal{}(maybe_it->first, key)) {
-            return ret(i, f_idx, j, maybe_it->second);
-          }
+        if (f_b.slots[j].x.partial == partial && f_b.slots[j].p.get_offset() != 0) {
+	          pointer maybe_it = f_b.slots[j].p.get_address(my_pool_uuid);
+            if (key_equal{}(maybe_it->first, key)) {
+              return ret(maybe_it->second, i, f_idx, j);
+            }
         }
       }
 
       bucket &s_b = cl->buckets[s_idx];
       for (size_type j = 0; j < assoc_num; j++) {
-        if (s_b.slots[j].x.partial == partial &&
-            s_b.slots[j].p.get_offset() != 0) {
-	  value_type *maybe_it = s_b.slots[j].p.get_address(my_pool_uuid);
-          if (key_equal{}(maybe_it->first,
-                          key)) {
-            return ret(i, s_idx, j, maybe_it->second);
+        if (s_b.slots[j].x.partial == partial && s_b.slots[j].p.get_offset() != 0) {
+	        pointer maybe_it = s_b.slots[j].p.get_address(my_pool_uuid);
+          if (key_equal{}(maybe_it->first, key)) {
+            return ret(maybe_it->second, i, s_idx, j);
           }
         }
       }
@@ -923,7 +965,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_insert(
 
     if (result == FOUND_IN_LEFT || result == FOUND_IN_RIGHT) {
       delete_persistent_atomic<value_type>(tmp_entry[t_id]);
-      return ret(level_num, 0, 0);
+      return ret(true);
     } else if ((result == VACANCY_IN_LEFT || result == VACANCY_IN_RIGHT) &&
                (level_num > 0 || !m->is_resizing)) {
       if (CAS(&(e->off), old_e.raw(), created.p.raw())) {
@@ -967,6 +1009,8 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
   partial_t partial = get_partial(hv);
   difference_type expand_bucket_old;
   bool succ_deletion = false;
+  pointer kv_ptr_1 = nullptr;  // delete might delete multiple KV pairs, and we should return the val that is found first
+  pointer kv_ptr_2 = nullptr;
 
   while (true) {
     level_meta_ptr_t m_copy(meta);
@@ -975,6 +1019,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
     difference_type f_idx, s_idx;
     size_type i = 0;
     level_ptr_t li = nullptr, next_li = m->last_level;
+    pointer tmp_ptr;
     do {
       li = next_li;
       level_bucket *cl = li.get_address(my_pool_uuid);
@@ -986,9 +1031,11 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
         KV_entry_ptr_u tmp(f_b.slots[j].p.off);
         if (tmp.x.partial == partial && tmp.p.get_offset() != 0) {
           if (key_equal{}(tmp.p.get_address(my_pool_uuid)->first, key)) {
+            tmp_ptr = tmp.p.get_address(my_pool_uuid);
             if (CAS(&(f_b.slots[j].p.off), tmp.p.off, 0)) {
               pop.persist(&(f_b.slots[j].p.off), sizeof(uint64_t));
               succ_deletion = true;
+              kv_ptr_1 = tmp_ptr;
 
               PMEMoid oid = tmp.p.raw_ptr(my_pool_uuid);
               pmemobj_free(&oid);
@@ -1015,9 +1062,11 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
         KV_entry_ptr_u tmp(s_b.slots[j].p.off);
         if (tmp.x.partial == partial && tmp.p.get_offset() != 0) {
           if (key_equal{}(tmp.p.get_address(my_pool_uuid)->first, key)) {
+            tmp_ptr = tmp.p.get_address(my_pool_uuid);
             if (CAS(&(s_b.slots[j].p.off), tmp.p.off, 0)) {
               pop.persist(&(s_b.slots[j].p.off), sizeof(uint64_t));
               succ_deletion = true;
+              kv_ptr_2 = tmp_ptr;
 
               PMEMoid oid = tmp.p.raw_ptr(my_pool_uuid);
               pmemobj_free(&oid);
@@ -1044,7 +1093,13 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
 
     // Context checking.
     if (m_copy == meta)
-      return ret(succ_deletion);
+      if(kv_ptr_1)
+        return ret(succ_deletion, kv_ptr_1->second);
+      else if(kv_ptr_2)
+        return ret(succ_deletion, kv_ptr_2->second);
+      else
+        return ret();
+      }
   } // end while(true)
 }
 
@@ -1082,10 +1137,11 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
                            idx, /*fix_dup=*/true, thread_id, m_copy);
 
     if (result == FOUND_IN_LEFT || result == FOUND_IN_RIGHT) {
+      tmp_ptr = old_e;
       if (succ_update && old_e == created.p) {
         // The only item in table after update is the modified one,
         // which indicates a successful update.
-        return ret(true);
+        return ret(true, old_e.get_address(my_pool_uuid)->second); // old and new are the same
       } else if (CAS(&(e->off), old_e.raw(), created.p.raw())) {
         pop.persist(&(e->off), sizeof(uint64_t));
 
@@ -1100,7 +1156,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
           succ_update = true;
           continue;
         } else
-          return ret(true);
+          return ret(true, old_e.get_address(my_pool_uuid)->second);
       }
     } else {
       if (!succ_update) {
@@ -1108,7 +1164,11 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
       }
       // Even the updated item is deleted by other threads, our update
       // succeeds anyway.
-      return ret(succ_update);
+      if(succ_update){
+        return ret(true, old_e.get_address(my_pool_uuid)->second); // old_e will be non-null if succ_update is true
+      }else{
+        return ret();
+      }
     }
   }
 }
