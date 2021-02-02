@@ -305,7 +305,7 @@ public:
    * there are two insert() APIs, I only wrap the one that is used in their and our benchmark 
    */
   bool insert(Key key, T val, int tid){
-    auto ret_val = insert(value_type(k, v), tid, 0); 
+    auto ret_val = insert(value_type(key, val), tid, 0); 
     if(ret_val.found){
       return true;
     }else{
@@ -342,7 +342,7 @@ public:
     return {};
   }
 
-  optional<V> put(Key key, T val, int tid){
+  optional<T> put(Key key, T val, int tid){
     /* to-do*/
   }
   
@@ -1092,16 +1092,20 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
     } while (li != m->first_level);
 
     // Context checking.
-    if (m_copy == meta)
+    if (m_copy == meta) {
       if(kv_ptr_1)
-        return ret(succ_deletion, kv_ptr_1->second);
+	return ret(succ_deletion, kv_ptr_1->second);
       else if(kv_ptr_2)
-        return ret(succ_deletion, kv_ptr_2->second);
+	return ret(succ_deletion, kv_ptr_2->second);
       else
-        return ret();
-      }
+	return ret();
+    }
   } // end while(true)
 }
+
+// template <typename Key, typename T, typename Hash, typename KeyEqual,
+//           size_t HashPower>
+// typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
 
 template <typename Key, typename T, typename Hash, typename KeyEqual,
           size_t HashPower>
@@ -1130,6 +1134,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
     size_type n_levels;
     uint64_t level_num = 0;
     difference_type idx;
+    // pointer tmp_ptr;
     KV_entry_ptr_t *e, old_e;
 
     expand_bucket_old = expand_bucket;
@@ -1137,7 +1142,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
                            idx, /*fix_dup=*/true, thread_id, m_copy);
 
     if (result == FOUND_IN_LEFT || result == FOUND_IN_RIGHT) {
-      tmp_ptr = old_e;
+      // tmp_ptr = old_e;
       if (succ_update && old_e == created.p) {
         // The only item in table after update is the modified one,
         // which indicates a successful update.
