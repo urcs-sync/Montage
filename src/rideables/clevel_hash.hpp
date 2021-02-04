@@ -306,7 +306,11 @@ public:
    * the last parameter is unused in generic_insert, can be any value
    * there are two insert() APIs, I only wrap the one that is used in their and our benchmark 
    */
+<<<<<<< HEAD
   bool insert(key_type key, val_type val, int tid){
+=======
+  bool insert(Key key, T val, int tid){
+>>>>>>> ce4a8651d0d169a37e757db919e3d597cfb5717d
     auto ret_val = insert(value_type(key, val), tid, 0); 
     if(ret_val.found){
       return true;
@@ -344,7 +348,11 @@ public:
     return {};
   }
 
+<<<<<<< HEAD
   optional<val_type> put(key_type key, val_type val, int tid){
+=======
+  optional<T> put(Key key, T val, int tid){
+>>>>>>> ce4a8651d0d169a37e757db919e3d597cfb5717d
     /* to-do*/
     return {};
   }
@@ -1092,19 +1100,38 @@ clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::erase(const key_type
     } while (li != m->first_level);
 
     // Context checking.
+<<<<<<< HEAD
     if (m_copy == meta){
       if(succ_deletion)
         return ret(succ_deletion, tmp_val);
+=======
+    if (m_copy == meta) {
+      if(kv_ptr_1)
+	return ret(succ_deletion, kv_ptr_1->second);
+      else if(kv_ptr_2)
+	return ret(succ_deletion, kv_ptr_2->second);
+>>>>>>> ce4a8651d0d169a37e757db919e3d597cfb5717d
       else
-        return ret();
-      }
+	return ret();
+    }
   } // end while(true)
 }
 
+<<<<<<< HEAD
 template <typename key_type, typename val_type,
           typename Hash, typename KeyEqual, size_t HashPower>
 typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::ret
 clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::generic_update(
+=======
+// template <typename Key, typename T, typename Hash, typename KeyEqual,
+//           size_t HashPower>
+// typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
+
+template <typename Key, typename T, typename Hash, typename KeyEqual,
+          size_t HashPower>
+typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
+clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
+>>>>>>> ce4a8651d0d169a37e757db919e3d597cfb5717d
     const key_type &key, const void *param,
     void (*allocate_KV)(pool_base &, persistent_ptr<value_type> &,
                         const void *),
@@ -1128,6 +1155,7 @@ clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::generic_update(
     size_type n_levels;
     uint64_t level_num = 0;
     difference_type idx;
+    // pointer tmp_ptr;
     KV_entry_ptr_t *e, old_e;
 
     expand_bucket_old = expand_bucket;
@@ -1135,6 +1163,10 @@ clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::generic_update(
                            idx, /*fix_dup=*/true, thread_id, m_copy);
 
     if (result == FOUND_IN_LEFT || result == FOUND_IN_RIGHT) {
+<<<<<<< HEAD
+=======
+      // tmp_ptr = old_e;
+>>>>>>> ce4a8651d0d169a37e757db919e3d597cfb5717d
       if (succ_update && old_e == created.p) {
         // The only item in table after update is the modified one,
         // which indicates a successful update.
