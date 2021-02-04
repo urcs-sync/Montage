@@ -79,14 +79,16 @@ using namespace pmem::obj;
 using internal::shared_mutex_scoped_lock;
 #endif
 
-//#region [rgba(0,205,30,0.1)]
-template <typename Key, typename T, typename Hash = std::hash<Key>,
-          typename KeyEqual = std::equal_to<Key>, size_t HashPower = 14>
-class clevel_hash : public RMap <Key, T>{
+//#region [rgba(0,255,0,0.1)]
+template <typename key_type = char[32], typename val_type=char[1024], 
+          typename Hash = std::hash<key_type>,
+          typename KeyEqual = std::equal_to<key_type>, size_t HashPower = 14>
+class clevel_hash : public RMap <std::string, std::string>{
 public:
-  using key_type = Key;
-  using mapped_type = T;
-  using value_type = std::pair<const Key, T>;
+
+  using k_type = key_type;
+  using mapped_type = val_type;
+  using value_type = std::pair<const key_type, val_type>;
   using size_type = size_t;
   using difference_type = ptrdiff_t;
   using pointer = value_type *;
@@ -100,14 +102,6 @@ public:
   using hv_type = size_t;
   using partial_t = uint16_t;
 
-  typedef enum FindCode {
-    ABSENT_AND_NO_VACANCY = 0,
-    FOUND_IN_LEFT = 1,
-    FOUND_IN_RIGHT = 2,
-    VACANCY_IN_LEFT = 3,
-    VACANCY_IN_RIGHT = 4,
-  } f_code_t;
-
   struct level_bucket;
   struct level_meta;
 
@@ -117,19 +111,27 @@ public:
 
   using level_meta_ptr_t = detail::compound_pool_ptr<level_meta>;
 
-#if LIBPMEMOBJ_CPP_USE_TBB_RW_MUTEX
+  #if LIBPMEMOBJ_CPP_USE_TBB_RW_MUTEX
   using mutex_t = pmem::obj::experimental::v<tbb::spin_rw_mutex>;
   using scoped_t = tbb::spin_rw_mutex::scoped_lock;
-#else
+  #else
   using mutex_t = pmem::obj::shared_mutex;
   using scoped_t = shared_mutex_scoped_lock;
-#endif
+  #endif
+
+
+  typedef enum FindCode {
+    ABSENT_AND_NO_VACANCY = 0,
+    FOUND_IN_LEFT = 1,
+    FOUND_IN_RIGHT = 2,
+    VACANCY_IN_LEFT = 3,
+    VACANCY_IN_RIGHT = 4,
+  } f_code_t;
 
   constexpr static size_type assoc_num = 8;
   constexpr static size_type resize_bulk = 1;
-
-  constexpr static size_type partial_ext_bits =
-      (sizeof(uint64_t) - sizeof(partial_t)) * 8;
+  constexpr static size_type partial_ext_bits = (sizeof(uint64_t) - sizeof(partial_t)) * 8;
+  
 
   difference_type first_index(hv_type hv, size_type capacity) const {
     // Since the "bucket_idx" needs to be "std::ptrdiff_t" due to
@@ -147,21 +149,6 @@ public:
     return static_cast<difference_type>(
         (static_cast<uint64_t>(idx) ^ hash_of_tag) % (capacity / 2) +
         capacity / 2);
-  }
-
-  difference_type alt_index(partial_t partial, difference_type idx,
-                            size_type capacity) const {
-    partial_t nonzero_tag = (partial >> 1 << 1) + 1;
-    // 0xc6a4a7935bd1e995 is the hash constant from 64-bit MurmurHash2
-    uint64_t hash_of_tag = (uint64_t)(nonzero_tag * 0xc6a4a7935bd1e995);
-    if (static_cast<size_type>(idx) < (capacity / 2)) {
-      return static_cast<difference_type>(
-          (static_cast<uint64_t>(idx) ^ hash_of_tag) % (capacity / 2) +
-          capacity / 2);
-    } else {
-      return static_cast<difference_type>(
-          (static_cast<uint64_t>(idx) ^ hash_of_tag) % (capacity / 2));
-    }
   }
 
   struct ret {
@@ -236,6 +223,21 @@ public:
     }
   };
 
+  difference_type alt_index(partial_t partial, difference_type idx,
+                            size_type capacity) const {
+    partial_t nonzero_tag = (partial >> 1 << 1) + 1;
+    // 0xc6a4a7935bd1e995 is the hash constant from 64-bit MurmurHash2
+    uint64_t hash_of_tag = (uint64_t)(nonzero_tag * 0xc6a4a7935bd1e995);
+    if (static_cast<size_type>(idx) < (capacity / 2)) {
+      return static_cast<difference_type>(
+          (static_cast<uint64_t>(idx) ^ hash_of_tag) % (capacity / 2) +
+          capacity / 2);
+    } else {
+      return static_cast<difference_type>(
+          (static_cast<uint64_t>(idx) ^ hash_of_tag) % (capacity / 2));
+    }
+  }
+
   static partial_t get_partial(hv_type hv) {
     constexpr static size_type shift_bits =
         (sizeof(hv_type) - sizeof(partial_t)) * 8;
@@ -304,8 +306,8 @@ public:
    * the last parameter is unused in generic_insert, can be any value
    * there are two insert() APIs, I only wrap the one that is used in their and our benchmark 
    */
-  bool insert(Key key, T val, int tid){
-    auto ret_val = insert(value_type(k, v), tid, 0); 
+  bool insert(key_type key, val_type val, int tid){
+    auto ret_val = insert(value_type(key, val), tid, 0); 
     if(ret_val.found){
       return true;
     }else{
@@ -318,7 +320,7 @@ public:
    * before get() returns
    * a better way is to modify the return value of research
    */
-  optional<T> get(Key key, int tid){
+  optional<val_type> get(key_type key, int tid){
     auto ret_val = search(key_type(key));
     if(ret_val.found){
       return ret_val.val;
@@ -326,7 +328,7 @@ public:
     return {};
   }
 
-  optional<T> remove(Key key, int tid){
+  optional<val_type> remove(key_type key, int tid){
     auto ret_val = erase(key_type(key), tid);
     if(ret_val.found){
       return ret_val.val;
@@ -334,7 +336,7 @@ public:
     return {};
   }
 
-  optional<T> replace(Key key, T val, int tid){
+  optional<val_type> replace(key_type key, val_type val, int tid){
     auto ret_val = update(value_type(key, val), tid);
     if(ret_val.found){
       return ret_val.val;
@@ -342,8 +344,9 @@ public:
     return {};
   }
 
-  optional<V> put(Key key, T val, int tid){
+  optional<val_type> put(key_type key, val_type val, int tid){
     /* to-do*/
+    return {};
   }
   
 
@@ -473,7 +476,7 @@ public:
                             uint64_t slot_idx);
 
   // Only for debug use!
-  key_type get_key(KV_entry_ptr_t &e);
+  k_type get_key(KV_entry_ptr_t &e);
 
   void del_dup(pool_base &pop, KV_entry_ptr_u *p1, KV_entry_ptr_u *p2,
                KV_entry_ptr_t e1, KV_entry_ptr_t e2);
@@ -513,11 +516,11 @@ public:
 };
 //#endregion
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::search(
-    const key_type &key) const {
+//#region [rgba(255,0,0,0.1)]
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::ret
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::search( const key_type &key) const {
   hv_type hv = hasher{}(key);
   partial_t partial = get_partial(hv);
 
@@ -564,12 +567,13 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::search(
       return ret();
   } // end while(true)
 }
+//#endregion
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::del_dup(
-    pool_base &pop, KV_entry_ptr_u *p1, KV_entry_ptr_u *p2, KV_entry_ptr_t e1,
-    KV_entry_ptr_t e2) {
+//#region [rgba(0,0,255,0.1)]
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+void clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::del_dup(
+    pool_base &pop, KV_entry_ptr_u *p1, KV_entry_ptr_u *p2, KV_entry_ptr_t e1, KV_entry_ptr_t e2) {
   KV_entry_ptr_u tmp1_u, tmp2_u;
   tmp1_u.p = e1;
   tmp2_u.p = e2;
@@ -597,11 +601,12 @@ void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::del_dup(
     }
   }
 }
+//#endregion
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::f_code_t
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::find_empty_slot(
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::f_code_t
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::find_empty_slot(
     pool_base &pop, const key_type &key, partial_t partial, size_type &n_levels,
     KV_entry_ptr_t **e, uint64_t &level_num, level_meta_ptr_t &m_copy) {
   hv_type hv = hasher{}(key);
@@ -680,10 +685,10 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::find_empty_slot(
   }
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::f_code_t
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::find(
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::f_code_t
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::find(
     pool_base &pop, const key_type &key, partial_t partial, size_type &n_levels,
     KV_entry_ptr_t &old_e, KV_entry_ptr_t **e, uint64_t &level_num,
     difference_type &idx, bool fix_dup, size_type thread_id,
@@ -898,10 +903,10 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::find(
   } // end while
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_insert(
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::ret
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::generic_insert(
     const key_type &key, const void *param,
     void (*allocate_KV)(pool_base &, persistent_ptr<value_type> &,
                         const void *),
@@ -998,10 +1003,9 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_insert(
   } // end while(true)
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
+template <typename key_type, typename val_type, typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::ret
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::erase(const key_type &key,
                                                       size_type thread_id) {
   pool_base pop = get_pool_base();
 
@@ -1009,8 +1013,6 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
   partial_t partial = get_partial(hv);
   difference_type expand_bucket_old;
   bool succ_deletion = false;
-  pointer kv_ptr_1 = nullptr;  // delete might delete multiple KV pairs, and we should return the val that is found first
-  pointer kv_ptr_2 = nullptr;
 
   while (true) {
     level_meta_ptr_t m_copy(meta);
@@ -1019,7 +1021,7 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
     difference_type f_idx, s_idx;
     size_type i = 0;
     level_ptr_t li = nullptr, next_li = m->last_level;
-    pointer tmp_ptr;
+    mapped_type tmp_val;
     do {
       li = next_li;
       level_bucket *cl = li.get_address(my_pool_uuid);
@@ -1031,11 +1033,10 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
         KV_entry_ptr_u tmp(f_b.slots[j].p.off);
         if (tmp.x.partial == partial && tmp.p.get_offset() != 0) {
           if (key_equal{}(tmp.p.get_address(my_pool_uuid)->first, key)) {
-            tmp_ptr = tmp.p.get_address(my_pool_uuid);
+            tmp_val = tmp.p.get_address(my_pool_uuid)->second;
             if (CAS(&(f_b.slots[j].p.off), tmp.p.off, 0)) {
               pop.persist(&(f_b.slots[j].p.off), sizeof(uint64_t));
               succ_deletion = true;
-              kv_ptr_1 = tmp_ptr;
 
               PMEMoid oid = tmp.p.raw_ptr(my_pool_uuid);
               pmemobj_free(&oid);
@@ -1062,11 +1063,10 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
         KV_entry_ptr_u tmp(s_b.slots[j].p.off);
         if (tmp.x.partial == partial && tmp.p.get_offset() != 0) {
           if (key_equal{}(tmp.p.get_address(my_pool_uuid)->first, key)) {
-            tmp_ptr = tmp.p.get_address(my_pool_uuid);
+            tmp_val = tmp.p.get_address(my_pool_uuid)->second;
             if (CAS(&(s_b.slots[j].p.off), tmp.p.off, 0)) {
               pop.persist(&(s_b.slots[j].p.off), sizeof(uint64_t));
               succ_deletion = true;
-              kv_ptr_2 = tmp_ptr;
 
               PMEMoid oid = tmp.p.raw_ptr(my_pool_uuid);
               pmemobj_free(&oid);
@@ -1092,21 +1092,19 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::erase(const key_type &key,
     } while (li != m->first_level);
 
     // Context checking.
-    if (m_copy == meta)
-      if(kv_ptr_1)
-        return ret(succ_deletion, kv_ptr_1->second);
-      else if(kv_ptr_2)
-        return ret(succ_deletion, kv_ptr_2->second);
+    if (m_copy == meta){
+      if(succ_deletion)
+        return ret(succ_deletion, tmp_val);
       else
         return ret();
       }
   } // end while(true)
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::ret
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::ret
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::generic_update(
     const key_type &key, const void *param,
     void (*allocate_KV)(pool_base &, persistent_ptr<value_type> &,
                         const void *),
@@ -1137,7 +1135,6 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
                            idx, /*fix_dup=*/true, thread_id, m_copy);
 
     if (result == FOUND_IN_LEFT || result == FOUND_IN_RIGHT) {
-      tmp_ptr = old_e;
       if (succ_update && old_e == created.p) {
         // The only item in table after update is the modified one,
         // which indicates a successful update.
@@ -1173,9 +1170,9 @@ clevel_hash<Key, T, Hash, KeyEqual, HashPower>::generic_update(
   }
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::expand(
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+void clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::expand(
     pool_base &pop, size_type thread_id, level_meta_ptr_t m_copy) {
   level_meta *m = static_cast<level_meta *>(m_copy(my_pool_uuid));
   difference_type t_id = static_cast<difference_type>(thread_id);
@@ -1286,9 +1283,9 @@ void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::expand(
   }
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::resize() {
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+void clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::resize() {
   size_type thread_id = 0;
   difference_type t_id = static_cast<difference_type>(thread_id);
   pool_base pop = get_pool_base();
@@ -1414,25 +1411,24 @@ void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::resize() {
   std::cout << "expand_thread exits" << std::endl;
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::KV_entry_ptr_t &
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::get_entry(level_ptr_t level,
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::KV_entry_ptr_t &
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::get_entry(level_ptr_t level,
                                                           difference_type idx,
                                                           uint64_t slot_idx) {
   return level.get_address(my_pool_uuid)->buckets[idx].slots[slot_idx].p;
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-typename clevel_hash<Key, T, Hash, KeyEqual, HashPower>::key_type
-clevel_hash<Key, T, Hash, KeyEqual, HashPower>::get_key(KV_entry_ptr_t &e) {
+template <typename key_type, typename val_type,
+          typename Hash, typename KeyEqual, size_t HashPower>
+typename clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::k_type
+clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::get_key(KV_entry_ptr_t &e) {
   return e.get_address(my_pool_uuid)->first;
 }
 
-template <typename Key, typename T, typename Hash, typename KeyEqual,
-          size_t HashPower>
-void clevel_hash<Key, T, Hash, KeyEqual, HashPower>::clear() {
+template <typename key_type, typename val_type, typename Hash, typename KeyEqual, size_t HashPower>
+void clevel_hash<key_type, val_type, Hash, KeyEqual, HashPower>::clear() {
   std::cout << "level destroy!" << std::endl;
 }
 
