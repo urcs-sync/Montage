@@ -11,6 +11,7 @@ class filter{
 
 	bool intersect(filter other);
 
+	//inline bool contains(void *ptr);
 	inline bool contains(void *ptr){
 		int bitIndex = BloomHash(ptr);
 		return (0 != ((bitTable[bitIndex / 8]) & (1 << bitIndex % 8)) );

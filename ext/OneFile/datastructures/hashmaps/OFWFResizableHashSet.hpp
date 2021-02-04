@@ -157,6 +157,28 @@ public:
     // Set methods for running the usual tests and benchmarks
     //
 
+
+	bool addremove(const K& key_a, const K& key_b, const int tid=0) {
+        return ofwf::updateTx<bool>([=] () {
+            innerPut(key_a);
+            return innerRemove(key_b);
+        });
+	}
+
+	bool addtwo(const K& key_a, const K& key_b, const int tid=0) {
+        return ofwf::updateTx<bool>([=] () {
+            return (innerPut(key_a) && innerPut(key_b));
+        });
+    }
+
+	bool removetwo(const K& key_a, const K& key_b, const int tid=0) {
+        return ofwf::updateTx<bool>([=] () {
+            return (innerRemove(key_a) && innerRemove(key_b));
+        });
+    }
+
+
+
     // Inserts a key only if it's not already present
     bool add(K key, const int tid=0) {
         return ofwf::updateTx<bool>([=] () {

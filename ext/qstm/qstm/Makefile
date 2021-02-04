@@ -58,12 +58,12 @@
 # Paths configuration
 # -------------------------
 # list of directories which contain headers (include directories)
-IDIRS:=./src ./src/util ./src/test ./src/trackers ../../ralloc/src/
+IDIRS:=./src ./src/util ./src/test ./src/trackers ./bench/stamp-kozy/lib ./bench/stamp-kozy/vacation ./bench/stamp-kozy/intruder ../ext/ralloc/src/
 # directory to put build artifacts (e.g. .o, .d files)
 ODIR:=./obj
 # list of directories which contain linked in libraries
 # LDIRS:=./bench/stamp-kozy/vacation/libs ./bench/stamp-kozy/intruder/libs
-LDIRS := ../../ralloc/test/
+LDIRS := ../ext/ralloc/test/
 # libraries to link against (are expected to be in the above directories,
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lparharness -lpthread -lhwloc -lm -lrt
@@ -77,7 +77,7 @@ RECURSEDIRS :=
 # root directories of sources.  Will be recursively
 # searched for .c and .cpp files.  All of them will
 # be built
-SRCDIRS :=./src
+SRCDIRS :=./bench/stamp-kozy ./src
 # output directory for binary executables
 BINDIR :=./bin
 # C compiler
@@ -151,7 +151,7 @@ LDFLAGS := $(WARNING_FLAGS)
 # define these build configurations).
 # To run a build, e.g. release, you would invoke:
 # make release
-BUILDS :=release debug ngc release32 debug32 qstm
+BUILDS :=release debug ngc release32 debug32 ringstm qstm-old qstm mnemosyne
 DEFAULT_BUILD :=qstm
 
 # -------------------------------
@@ -196,9 +196,34 @@ LDFLAGS += -m32
 # define enviroment vars, etc.
 endif
 
+ifeq ($(BUILD),ringstm)
+CXXFLAGS += -O3 -DRINGSTM
+CFLAGS += -O3 -DRINGSTM
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
+ifeq ($(BUILD),qstm-old)
+CXXFLAGS += -O3 -DOLDQUEUESTM
+CFLAGS += -O3 -DOLDQUEUESTM
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
 ifeq ($(BUILD),qstm)
 CXXFLAGS += -O3 -DQUEUESTM
 CFLAGS += -O3 -DQUEUESTM
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
+#Dumb build option. Only to make things easier when we want to run with bolt-struct
+ifeq ($(BUILD),mnemosyne)
+CXXFLAGS += -O3 -DRINGSTM
+CFLAGS += -O3 -DRINGSTM
 # we can add additional release customization here
 # e.g. link against different libraries, 
 # define enviroment vars, etc.

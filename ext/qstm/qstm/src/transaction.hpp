@@ -15,6 +15,14 @@ class Tracker;
 class TM{
 public:
 	int tid;
+	/*virtual void tm_begin() = 0;
+	virtual void *tm_read(void** addr) = 0;
+	virtual void tm_write(void** addr, void* val, void* mask = 0) = 0;
+	virtual bool tm_end() = 0;
+	virtual void tm_clear() = 0;
+	virtual void* tm_malloc(size_t size) = 0;
+	virtual void tm_free(void **ptr) = 0;
+*/
 	static void init(TestConfig* tc) {}
 	jmp_buf env;
 	unsigned long nesting = 0;

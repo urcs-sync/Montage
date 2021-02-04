@@ -30,6 +30,7 @@ public:
 	unsigned int size;
 	void init();
 	
+	// void *lookup(void **addr);
 	bool lookup(void **addr, void** ret);
 	void add(void **addr, void *val, void *mask);
 	virtual void do_writes();

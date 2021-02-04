@@ -128,12 +128,14 @@ public:
                 int update = seed%1000;
                 seed = randomLong(seed);
                 auto ix = (unsigned int)(seed%numElements);
+                auto iy = (unsigned int)((seed+1)%numElements);
                 if (update < updateRatio) {
                     // I'm a Writer
-                    if (set->remove(*udarray[ix], tid)) {
-                    	numOps++;
-                    	set->add(*udarray[ix], tid);
-                    }
+//                    if (set->remove(*udarray[ix], tid)) {
+//                    	numOps++;
+//                    	set->add(*udarray[ix], tid);
+//                    }
+					set->addremove(*udarray[ix], *udarray[iy], tid);
                     numOps++;
                 } else {
                 	// I'm a Reader

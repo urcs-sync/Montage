@@ -4,6 +4,17 @@
 #include <string>
 
 /**
+     * An imprecise but fast random number generator
+     */
+    uint64_t randomLong(uint64_t x) {
+        x ^= x >> 12; // a
+        x ^= x << 25; // b
+        x ^= x >> 27; // c
+        return x * 2685821657736338717LL;
+    }
+
+
+/**
  * <h1> A Resizable Hash Map for PTMs </h1>
  */
 template<typename K, typename V, typename TM, template <typename> class TMTYPE>
@@ -76,7 +87,8 @@ public:
      *
      * Returns true if there was no mapping for the key, false if there was already a value and it was replaced.
      */
-    bool innerPut(const K& key, const V& value, V& oldValue, const bool saveOldValue) {
+//    bool innerPut(const K& key, const V& value, V& oldValue, const bool saveOldValue) {
+    bool innerPut(const K& key, const V& value) {
     	//printf("innerPut %d %d %f\n", sizeHM.pload(), capacity.pload(), loadFactor.pload()*capacity.pload());
         if (sizeHM.pload() > capacity.pload()*loadFactor) rebuild();
         auto h = std::hash<K>{}(key) % capacity;
@@ -85,23 +97,15 @@ public:
         while (true) {
             if (node == nullptr) {
                 Node* newnode = TM::template tmNew<Node>(key,value);
-                //Node* newnode = TM::template tmNew<Node>();
-                //newnode->key = key;
-                //newnode->val = value;
-                //newnode->next = nullptr;
                 if (node == prev) {
                     buckets[h] = newnode;
                 } else {
                     prev->next = newnode;
                 }
-                sizeHM=sizeHM+1;
+                sizeHM++;
                 return true;  // New insertion
             }
-            if (key == node->key) {
-                if (saveOldValue) oldValue = node->val; // Makes a copy of V
-                node->val = value;
-                return false; // Replace value for existing key
-            }
+            if (key == node->key) return false;
             prev = node;
             node = node->next;
         }
@@ -114,20 +118,21 @@ public:
      *
      * Returns returns true if a matching key was found
      */
-    bool innerRemove(const K& key, V& oldValue, const bool saveOldValue) {
+    //bool innerRemove(const K& key, V& oldValue, const bool saveOldValue) {
+    bool innerRemove(const K& key) {
         auto h = std::hash<K>{}(key) % capacity;
         Node* node = buckets[h];
         Node* prev = node;
         while (true) {
             if (node == nullptr) return false;
             if (key == node->key) {
-                if (saveOldValue) oldValue = node->val; // Makes a copy of V
+//                if (saveOldValue) oldValue = node->val; // Makes a copy of V
                 if (node == prev) {
                     buckets[h] = node->next;
                 } else {
                     prev->next = node->next;
                 }
-                sizeHM=sizeHM-1;
+                sizeHM--;
                 TM::tmDelete(node);
                 return true;
             }
@@ -146,7 +151,6 @@ public:
         while (true) {
             if (node == nullptr) return false;
             if (key == node->key) {
-                if (saveOldValue) oldValue = node->val; // Makes a copy of V
                 return true;
             }
             node = node->next;
@@ -158,11 +162,41 @@ public:
     // Set methods for running the usual tests and benchmarks
     //
 
+	bool bigtxn(K** udarray, int tid, int numElements){
+		return TM::template updateTx<bool>([this,udarray,tid,numElements] () {
+            V notused;
+        	uint64_t seed = tid*133 + 1234567890123456781ULL;
+			for(int i=0; i<1; i++){ // Specify number of ops per txn for OneFile
+		        seed = randomLong(seed);
+				auto ix = (unsigned int)((seed)%numElements);
+				if(innerRemove(*udarray[ix])){
+					innerPut(*udarray[ix],*udarray[ix]);
+				}
+			}
+			return true;
+		});
+	}
+/*
+	bool bigreadtxn(K** udarray, int tid, int numElements){
+        return TM::template readTx<bool>([this,udarray,tid,numElements] () {
+            V notused;
+        	uint64_t seed = tid*133 + 1234567890123456781ULL;
+			for(int i=0; i<5; i++){
+		        seed = randomLong(seed);
+				auto ix = (unsigned int)((seed)%numElements);
+				if(innerGet(*udarray[ix],notused,false)){
+					seed = randomLong(seed);
+				}
+			}
+			return true;
+		});
+	}
+*/
     // Inserts a key only if it's not already present
     bool add(const K& key) {
         return TM::template updateTx<bool>([this,key] () {
             V notused;
-            return innerPut(key,key,notused,false);
+            return innerPut(key,key);
         });
     }
 
@@ -170,7 +204,7 @@ public:
     bool remove(const K& key) {
         return TM::template updateTx<bool>([this,key] () {
             V notused;
-            return innerRemove(key,notused,false);
+            return innerRemove(key);
         });
     }
 

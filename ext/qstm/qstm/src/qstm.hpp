@@ -27,6 +27,7 @@ public:
 		freeset* fset_p;
 		std::atomic<qEntry*> next;
 		uint64_t get_ts();
+		// static std::atomic<uint64_t> cnt;
 		void detach();
 		void init();
 		void *operator new(size_t sz){
@@ -69,6 +70,7 @@ std::atomic<uint64_t> txncount;
 	void tm_free(void **ptr);
 
 	static void init(TestConfig* tc);
+	// static Tracker* tracker;
 	static queue_t* queue;
 
 	// GC stuff
@@ -80,9 +82,11 @@ std::atomic<uint64_t> txncount;
 	static bool collect;
 	static int empty_freq;
 	static int thread_cnt;
+	// void retire(qEntry* obj, int tid);
 	void reserve(int tid);
 	uint64_t get_min_reserve();
 	void release(int tid);
+	// void empty(int tid);
 
 	QSTM(TestConfig* tc, int tid);
 	~QSTM();
@@ -98,6 +102,7 @@ private:
 	mallocset* mset;
 	freeset* fset;
 
+	// bool wset_published = false;
 	filter wf;
 	filter rf;
 	qEntry *start = nullptr;
@@ -112,5 +117,7 @@ public:
 		return new QSTM(tc, tid);
 	}
 };
+
+// Tracker* QSTM::tracker = nullptr;
 
 #endif

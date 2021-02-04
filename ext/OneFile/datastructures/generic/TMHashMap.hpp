@@ -203,6 +203,17 @@ public:
     // Set methods for running the usual tests and benchmarks
     //
 
+	bool addremove(const K& key_a, const K& key_b, const int tid) {
+        return TM_WRITE_TRANSACTION<bool>([&] () -> bool {
+            put(key_a,key_a, tid) == nullptr;
+            return removeKey(key_b, tid) != nullptr;
+        });
+	}
+
+	bool bigtxn(K** udarray){
+	}
+
+
     bool add(K* key, const int tid) {
         return TM_WRITE_TRANSACTION<bool>([&] () -> bool {
             return put(key,key, tid) == nullptr;

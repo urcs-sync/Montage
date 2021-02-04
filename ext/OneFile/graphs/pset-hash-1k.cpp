@@ -6,18 +6,21 @@
 #include "pdatastructures/TMHashMapByRef.hpp"
 //#include "ptms/romuluslog/RomulusLog.hpp"
 //#include "ptms/romuluslr/RomulusLR.hpp"
-#include "ptms/PMDKTM.hpp"
+//#include "ptms/PMDKTM.hpp"
 #include "ptms/OneFilePTMLF.hpp"
 #include "ptms/OneFilePTMWF.hpp"
 
 
 int main(void) {
-    const std::string dataFilename {"data/pset-hash-1k.txt"};
-    vector<int> threadList = { 1, 2, 4, 8, 16, 32, 48, 64 };     // For the laptop or AWS c5.9xlarge
-    vector<int> ratioList = { 1000, 500, 100, 10, 1, 0 };        // Permil ratio: 100%, 50%, 10%, 1%, 0.1%, 0%
+    const std::string dataFilename {"data/pset-hash-1k-1w.txt"};
+//    vector<int> threadList = { 1, 2, 4, 6, 8, 12, 16, 24, 32, 40, 48, 64, 72 };
+//    vector<int> threadList = { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80 };  // For 2x20a
+    vector<int> threadList = { 1}; // For testing one core count at a time
+//    vector<int> ratioList = { 1000, 500, 100, };        // Permil ratio: 100%, 50%, 10%
+    vector<int> ratioList = { 500};
     const int numElements = 1000;                                // Number of keys in the set
-    const int numRuns = 1;                                       // 5 runs for the paper
-    const seconds testLength = 20s;                              // 20s for the paper
+    const int numRuns = 3;
+    const seconds testLength = 5s;
     const int EMAX_CLASS = 10;
     uint64_t results[EMAX_CLASS][threadList.size()][ratioList.size()];
     std::string cNames[EMAX_CLASS];
@@ -44,8 +47,8 @@ int main(void) {
             //ic++;
             //results[ic][it][ir] = bench.benchmark<TMHashMapByRef<uint64_t,uint64_t,romuluslr::RomulusLR,romuluslr::persist>,      romuluslr::RomulusLR>   (cNames[ic], nThreads, ratio, testLength, numRuns, numElements, false);
             //ic++;
-            results[ic][it][ir] = bench.benchmark<TMHashMapByRef<uint64_t,uint64_t,pmdk::PMDKTM,pmdk::persist>,                   pmdk::PMDKTM>           (cNames[ic], nThreads, ratio, testLength, numRuns, numElements, false);
-            ic++;
+//            results[ic][it][ir] = bench.benchmark<TMHashMapByRef<uint64_t,uint64_t,pmdk::PMDKTM,pmdk::persist>,                   pmdk::PMDKTM>           (cNames[ic], nThreads, ratio, testLength, numRuns, numElements, false);
+//            ic++;
             maxClass = ic;
         }
     }

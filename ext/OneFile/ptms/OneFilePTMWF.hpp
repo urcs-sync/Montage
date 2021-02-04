@@ -25,7 +25,7 @@
 // Please keep this file in sync (as much as possible) with stms/OneFileWF.hpp
 
 // Macros needed for persistence
-#ifdef PWB_IS_CLFLUSH
+//#ifdef PWB_IS_CLFLUSH
   /*
    * More info at http://elixir.free-electrons.com/linux/latest/source/arch/x86/include/asm/special_insns.h#L213
    * Intel programming manual at https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-optimization-manual.pdf
@@ -34,24 +34,24 @@
   #define PWB(addr)              __asm__ volatile("clflush (%0)" :: "r" (addr) : "memory")                      // Broadwell only works with this.
   #define PFENCE()               {}                                                                             // No ordering fences needed for CLFLUSH (section 7.4.6 of Intel manual)
   #define PSYNC()                {}                                                                             // For durability it's not obvious, but CLFLUSH seems to be enough, and PMDK uses the same approach
-#elif PWB_IS_CLWB
+//#elif PWB_IS_CLWB
   /* Use this for CPUs that support clwb, such as the SkyLake SP series (c5 compute intensive instances in AWS are an example of it) */
-  #define PWB(addr)              __asm__ volatile(".byte 0x66; xsaveopt %0" : "+m" (*(volatile char *)(addr)))  // clwb() only for Ice Lake onwards
-  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
-  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
-#elif PWB_IS_NOP
+//  #define PWB(addr)              __asm__ volatile(".byte 0x66; xsaveopt %0" : "+m" (*(volatile char *)(addr)))  // clwb() only for Ice Lake onwards
+//  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
+//  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
+//#elif PWB_IS_NOP
   /* pwbs are not needed for shared memory persistency (i.e. persistency across process failure) */
-  #define PWB(addr)              {}
-  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
-  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
-#elif PWB_IS_CLFLUSHOPT
-  /* Use this for CPUs that support clflushopt, which is most recent x86 */
-  #define PWB(addr)              __asm__ volatile(".byte 0x66; clflush %0" : "+m" (*(volatile char *)(addr)))    // clflushopt (Kaby Lake)
-  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
-  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
-#else
-#error "You must define what PWB is. Choose PWB_IS_CLFLUSHOPT if you don't know what your CPU is capable of"
-#endif
+//  #define PWB(addr)              {}
+//  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
+//  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
+//#elif PWB_IS_CLFLUSHOPT
+//  /* Use this for CPUs that support clflushopt, which is most recent x86 */
+//  #define PWB(addr)              __asm__ volatile(".byte 0x66; clflush %0" : "+m" (*(volatile char *)(addr)))    // clflushopt (Kaby Lake)
+//  #define PFENCE()               __asm__ volatile("sfence" : : : "memory")
+//  #define PSYNC()                __asm__ volatile("sfence" : : : "memory")
+//#else
+//#error "You must define what PWB is. Choose PWB_IS_CLFLUSHOPT if you don't know what your CPU is capable of"
+//#endif
 
 
 
@@ -78,6 +78,7 @@ static const uint64_t HASH_BUCKETS = 2048;
 // Persistent-specific configuration
 // Name of persistent file mapping
 static const char * PFILE_NAME = "/dev/shm/ponefilewf_shared";
+//static const char * PFILE_NAME = "/mnt/pmem/ponefilewf_shared";
 // Start address of mapped persistent memory
 static uint8_t* PREGION_ADDR = (uint8_t*)0x7ff000000000;
 // Size of persistent memory. Part of it will be used by the redo logs
@@ -1059,8 +1060,8 @@ private:
         if (debug) printf("Applying %ld stores in write-set\n", writeSets[tid].numStores);
         writeSets[tid].apply(seq, tid);
         writeSets[tid].flushModifications();
-        if (opd.pWriteSet->request.load() == lcurTx) {
-            const uint64_t newReq = seqidx2trans(seq+1,idx);
+        const uint64_t newReq = seqidx2trans(seq+1,idx);
+        if (opd.pWriteSet->request.load(std::memory_order_acquire) == lcurTx) {
             opd.pWriteSet->request.compare_exchange_strong(lcurTx, newReq);
         }
     }
@@ -1093,7 +1094,7 @@ private:
 
     // Upon restart, re-applies the last transaction, so as to guarantee that
     // we have a consistent state in persistent memory.
-    // This is not used on x86 because the DCAS has atomicity writting to persistent memory.
+    // This is not needed on x86, where the DCAS has atomicity writting to persistent memory.
     void recover() {
         uint64_t lcurTx = curTx->load(std::memory_order_acquire);
         opData[trans2idx(lcurTx)].pWriteSet->applyFromRecover();

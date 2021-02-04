@@ -13,6 +13,10 @@ QSTM::qEntry::qEntry(){
 	ts = 0;
 	st = State::NotWriting;
 	next.store(nullptr);
+	// uint64_t curr_cnt = cnt.fetch_add(1, std::memory_order_relaxed);
+	// if (curr_cnt%100000 == 0){
+	// 	std::cout<<"entry cnt:"<<curr_cnt<<std::endl;
+	// }
 }
 
 uint64_t QSTM::qEntry::get_ts(){
@@ -123,14 +127,21 @@ int QSTM::do_writes_qstm(qEntry *q){
 	if(!q->st.compare_exchange_strong(bar, baz, std::memory_order_seq_cst)) return 0; // Failure
 
 	q->wset_p->do_writes();
+	// On other architectures, a fence might be needed here
 	q->st = State::Complete; // Release lock
 
+// We don't actually need to flush this for recovery
+/* #ifdef DUR_LIN
+	FLUSH(&(q->st));
+	FLUSHFENCE;
+#endif */
 	return 1; // Success
 }
 
 void QSTM::init(TestConfig* tc){
 	queue = new queue_t();
 	queue->writelock.store(false, std::memory_order_release);
+	// tracker = new Tracker(tc);
 	thread_cnt = tc->thread_cnt;
 	reservs = new paddedAtomic<uint64_t>[thread_cnt];
 	for (int i = 0; i < thread_cnt; i++){
@@ -159,6 +170,7 @@ QSTM::~QSTM(){
 	if (fset){
 		delete(fset);
 	}
+	// // assert(mset);
 	delete(mset);
 
 }
@@ -173,13 +185,22 @@ void QSTM::tm_begin(){
 		fset = new freeset();
 		// wset_published = false;
 	}
+	// tracker->reserve_init(tid); // reserve from current complete to forever, just for a short time.
 	reserve(tid);
+
+	// qEntry *complete = queue->complete.load(); // Reserve for use in future reads
 	start = queue->tail.load();
+
+	// tracker->reserve_up(start->ts, tid); // *complete and *start should be reserved by reserve_init()
+
+	// The code to "catch up" writes and update start/complete was previously here.
+
 	// we cannot release reservations here.
 	return;
 }
 
-// This method must check own wset first, and then the queue, and also validate/abort, and finally as a last resort read from memory.
+// Read is very complicated in the new QSTM
+// It must check own wset first, and then the queue, and also validate/abort, and finally as a last resort read from memory.
 void* QSTM::tm_read(void** addr){
 	assert(nesting != 0);
 	void* look; // For returning writeset lookup values
@@ -210,7 +231,7 @@ void* QSTM::tm_read(void** addr){
 	}else{
 		traverse = traverse_complete->next; // My start time is newer than (or equal to) "complete"
 	}
-	// Traverse might be nullptr when (start==complete==tail) but this is ok
+	// Traverse might be nullptr when (start==complete==tail) but I think that's fine -Alan
 
 	// First loop, for reading up to "start"
 	// Note that the next loop starts with (traverse == start->next), similar to check()
@@ -238,7 +259,7 @@ void* QSTM::tm_read(void** addr){
 		if(rf.intersect(traverse->wf)){
 			tm_abort();
 		}
-		start = traverse; // This can be unconditional because of reading directly from wsets
+		start = traverse; // This can be unconditional because of reading directly from wsets!
 
 		traverse = traverse->next.load();
 	}
@@ -247,6 +268,7 @@ void* QSTM::tm_read(void** addr){
 	if(success) return newestval;
 
 	// Value not found in queue, read from memory instead
+//	asm volatile ("lfence" ::: "memory"); // Is this fence necessary?
 	return val;
 }
 
@@ -270,7 +292,9 @@ bool QSTM::tm_end(){
 		rf.clear();
 		return true;
 	}
-	// Allocate (or recycle) a queue entry and populate it with the right info
+	// Allocate a queue entry and populate it with the right info
+	// qEntry *my_txn = new qEntry; // State and next are already initialized
+	// my_txn = new qEntry; // State and next are already initialized
 	my_txn = get_new_qEntry();
 	my_txn->wset_p = wset;
 	my_txn->fset_p = fset;
@@ -299,6 +323,14 @@ bool QSTM::tm_end(){
 			check();
 
 			my_txn->ts = ((oldtail->ts)+1);
+// We don't actually need to flush this for recovery
+/*
+#ifdef DUR_LIN
+			FLUSH(&(my_txn->ts));
+			FLUSHFENCE;
+#endif
+*/			//extend reservation to my_txn
+			// tracker->reserve_up(my_txn->ts, tid);
 
 			success = oldtail->next.compare_exchange_strong(foo, my_txn, std::memory_order_seq_cst);
 		}else{
@@ -310,6 +342,7 @@ bool QSTM::tm_end(){
 		}
 	}while(!success);
 	assert(my_txn->wset_p);
+	// wset_published = true;
 #ifdef DUR_LIN
 	FLUSH(&(oldtail->next)); // We did it, so now we need to persist the CAS
 	FLUSHFENCE;
@@ -327,6 +360,7 @@ bool QSTM::tm_end(){
 	fset = nullptr;
 	my_txn = nullptr;
 	mset->clear(); // We only needed this for aborts
+	// wset_published = false;
 	wf.clear();
 	rf.clear();
 	release(tid);
@@ -339,12 +373,17 @@ void QSTM::tm_clear(){
 	rf.clear();
 	wset->clear();
 	fset->clear();
+	// delete(fset);
+	// fset = nullptr;
+	// delete(wset);
+	// wset = nullptr;
 	if (my_txn != nullptr){
 		my_txn->detach();
 		delete(my_txn);
 		my_txn = nullptr;
 	}
 	mset->undo_mallocs();
+	// tracker->release(tid);
 	release(tid);
 	
 	return;
@@ -388,6 +427,9 @@ void QSTM::check(){
 	unsigned long prevts;
 	if(tailstamp == start->ts) return;
 
+	//Reserve from start up to tail
+	// tracker->reserve_up(tailstamp, tid);
+
 	qEntry *traverse = start->next;
 
 	while((traverse != nullptr) && (traverse->ts <= tailstamp)){
@@ -399,6 +441,10 @@ void QSTM::check(){
 
 		traverse = traverse->next.load();
 	}
+
+	// update lower reservation, releasing some entries
+	// tracker->reserve_low(start->ts, tid); // Hensen, this formerly used suffix_end in place of start but we don't need suffix_end anymore
+
 	return;
 }
 
@@ -411,6 +457,7 @@ QSTM::qEntry* QSTM::get_new_qEntry(){
 	}
 	reused->init();
 	return reused;
+	// return new qEntry();
 } 
 
 // Periodic worker task for writeback.
@@ -419,6 +466,7 @@ QSTM::qEntry* QSTM::get_new_qEntry(){
 void QSTM::wb_worker(){
 	qEntry *traverse = queue->complete.load()->next; // Complete always points to a complete node
 	unsigned long tailstamp = queue->tail.load()->ts; // bound the traversal
+	// while((traverse != nullptr) && traverse->ts <= tailstamp){
 	while(true){
 		if (traverse == nullptr){
 			break;
@@ -442,14 +490,20 @@ void QSTM::wb_worker(){
 void QSTM::gc_worker(){
 	qEntry *foo;
 	qEntry *prev = nullptr;
+	// unsigned long finish = queue->complete.load(std::memory_order_acquire)->ts;
+	// dequeue until the current snapshot of lowest reservation.
 	unsigned long finish = min_reserv_snapshot.load(std::memory_order_acquire);
 
+	// tracker->reserve(queue->head.load(std::memory_order_acquire)->ts, finish, tid);
+	
 	unsigned long batch_size;
 	while(true){
 		batch_size = 500;
 		foo = queue->dequeue_until(finish, batch_size);
 		for (unsigned long i = 0; i < batch_size; i++){
 			assert(foo->ts < finish);
+			// tracker->retire(foo, tid);
+			// retire(foo, tid);
 
 			prev = foo;
 			foo = foo->next.load();
@@ -462,6 +516,15 @@ void QSTM::gc_worker(){
 	}
 	return;
 }
+
+// void QSTM::retire(qEntry* obj, int tid){
+// 	std::list<qEntry*>* myTrash = &(retired[tid].ui);
+// 	myTrash->push_back(obj);
+// 	if(collect && retire_counters[tid]%empty_freq==0){
+// 		empty(tid);
+// 	}
+// 	retire_counters[tid]=retire_counters[tid]+1;
+// }
 
 void QSTM::reserve(int tid){
 	reservs[tid].ui.store(complete_snapshot.load(std::memory_order_acquire),
@@ -483,6 +546,24 @@ void QSTM::release(int tid){
 	reservs[tid].ui.store(UINT64_MAX, std::memory_order_seq_cst);
 }
 
+// void QSTM::empty(int tid){
+// 	// uint64_t min_ts = UINT64_MAX;
+// 	uint64_t min_ts = get_min_reserve();
+	
+// 	std::list<qEntry*>* myTrash = &(retired[tid].ui);
+// 	for (auto iterator = myTrash->begin(), end = myTrash->end(); iterator != end; ) {
+// 		qEntry* res = *iterator;
+// 		if(res->get_ts() < min_ts){
+// 			if (collect) delete(res);
+// 			iterator = myTrash->erase(iterator);
+// 		}
+// 		else{++iterator;}
+// 	}
+// }
+
+
+// std::atomic<uint64_t> QSTM::qEntry::cnt;
+// Tracker* QSTM::tracker = nullptr;
 paddedAtomic<uint64_t>* QSTM::reservs = nullptr;
 padded<std::list<QSTM::qEntry*>>* QSTM::retired = nullptr;
 padded<uint64_t>* QSTM::retire_counters = nullptr;

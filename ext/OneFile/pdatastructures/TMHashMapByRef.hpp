@@ -158,6 +158,13 @@ public:
     // Set methods for running the usual tests and benchmarks
     //
 
+	bool addremove(const K& key_a, const K& key_b){
+        return TM::template updateTx<bool>([this,key_a,key_b] () {
+            V notused;
+            innerPut(key_a,key_a,notused,false);
+            return innerRemove(key_b,notused,false);
+        });
+	}
     // Inserts a key only if it's not already present
     bool add(const K& key) {
         bool retval = false;

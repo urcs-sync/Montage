@@ -32,8 +32,8 @@
    * Use these for Broadwell CPUs (cervino server)
    */
   #define PWB(addr)              __asm__ volatile("clflush (%0)" :: "r" (addr) : "memory")                  // Broadwell only works with this.
-  #define PFENCE()               {}                                                                         // No ordering fences needed for CLFLUSH (section 7.4.6 of Intel manual)
-  #define PSYNC()                {}                                                                         // For durability it's not obvious, but CLFLUSH seems to be enough, and PMDK uses the same approach
+  #define PFENCE()               {}                                                // No ordering fences needed for CLFLUSH (section 7.4.6 of Intel manual)
+  #define PSYNC()                {}                                                // For durability it's not obvious, but CLFLUSH seems to be enough, and PMDK uses the same approach
 #elif PWB_IS_CLWB
   /* Use this for CPUs that support clwb, such as the SkyLake SP series (c5 compute intensive instances in AWS are an example of it) */
   #define PWB(addr)              __asm__ volatile(".byte 0x66; xsaveopt %0" : "+m" (*(volatile char *)(addr)))  // clwb() only for Ice Lake onwards
@@ -77,6 +77,7 @@ static const uint64_t HASH_BUCKETS = 2048;
 // Persistent-specific configuration
 // Name of persistent file mapping
 static const char * PFILE_NAME = "/dev/shm/ponefilelf_shared";
+//static const char * PFILE_NAME = "/mnt/pmem/ponefilelf_shared";
 // Start address of mapped persistent memory
 static uint8_t* PREGION_ADDR = (uint8_t*)0x7fea00000000;
 // Size of persistent memory. Part of it will be used by the redo logs
@@ -793,15 +794,15 @@ private:
         if (debug) printf("Applying %ld stores in write-set\n", writeSets[tid].numStores);
         writeSets[tid].apply(seq, tid);
         writeSets[tid].flushModifications();
-        if (opd.pWriteSet->request.load() == lcurTx) {
-            const uint64_t newReq = seqidx2trans(seq+1,idx);
+        const uint64_t newReq = seqidx2trans(seq+1,idx);
+        if (opd.pWriteSet->request.load(std::memory_order_acquire) == lcurTx) {
             opd.pWriteSet->request.compare_exchange_strong(lcurTx, newReq);
         }
     }
 
     // Upon restart, re-applies the last transaction, so as to guarantee that
     // we have a consistent state in persistent memory.
-    // This is not used on x86 because the DCAS has atomicity writting to persistent memory.
+    // This is not needed on x86, where the DCAS has atomicity writting to persistent memory.
     void recover() {
         uint64_t lcurTx = curTx->load(std::memory_order_acquire);
         opData[trans2idx(lcurTx)].pWriteSet->applyFromRecover();

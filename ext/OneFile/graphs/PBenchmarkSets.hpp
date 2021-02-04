@@ -17,6 +17,10 @@
 #include <algorithm>
 #include <iostream>
 
+// For thread pinning
+#include <hwloc.h>
+#include "pinning.hpp"
+
 using namespace std;
 using namespace chrono;
 
@@ -94,7 +98,7 @@ private:
 
     static const long long NSEC_IN_SEC = 1000000000LL;
 
-    bool firstTime = true;
+//    bool firstTime = true;
 
 public:
     /**
@@ -116,6 +120,13 @@ public:
         std::cout << "##### " << S::className() << " #####  \n";
         S* set = nullptr;
 
+	PinConfig *pinconf = new PinConfig();
+	hwloc_topology_init(&(pinconf->topology));
+	hwloc_topology_load(pinconf->topology);
+	pinconf->num_procs = hwloc_get_nbobjs_by_depth(pinconf->topology,  
+	 hwloc_get_type_depth(pinconf->topology, HWLOC_OBJ_PU));
+	pinconf->buildAffinity();
+
         // Create all the keys in the concurrent set
         K** udarray = new K*[numElements];
         for (int i = 0; i < numElements; i++) udarray[i] = new K(i);
@@ -128,17 +139,20 @@ public:
         set->addAll(udarray, numElements);
 
         // Can either be a Reader or a Writer
-        auto rw_lambda = [this,&quit,&startFlag,&startAtZero,&set,&udarray,&numElements](const int updateRatio, long long *ops, const int tid) {
+        auto rw_lambda = [this,&quit,&startFlag,&startAtZero,&set,&udarray,&numElements,&pinconf](const int updateRatio, long long *ops, const int tid) {
             long long numOps = 0;
             uint64_t seed = tid*133 + 1234567890123456781ULL;
-            if (firstTime) {
-                // Execute 1k iterations as warmup and then spin wwait for all other threads
-                for (uint64_t iter = 0; iter < 1000; iter++) {
-                    seed = randomLong(seed);
-                    auto ix = (unsigned int)(seed%numElements);
-                    if (set->remove(*udarray[ix])) set->add(*udarray[ix]);
-                }
-            }
+
+			hwloc_cpuset_t cpuset = pinconf->affinities[tid]->cpuset;
+			hwloc_set_cpubind(pinconf->topology,cpuset,HWLOC_CPUBIND_THREAD);
+//            if (firstTime) {
+//                // Execute 1k iterations as warmup and then spin wwait for all other threads
+//                for (uint64_t iter = 0; iter < 1000; iter++) {
+//                    seed = randomLong(seed);
+//                    auto ix = (unsigned int)(seed%numElements);
+//                    if (set->remove(*udarray[ix])) set->add(*udarray[ix]);
+//                }
+//            }
             startAtZero.fetch_add(-1);
             // spin waiting for all other threads before starting the measurements
             // (we wait for startAtZero to be zero on the main thread).
@@ -150,10 +164,11 @@ public:
                 auto ix = (unsigned int)(seed%numElements);
                 if (update < updateRatio) {
                     // I'm a Writer
-                    if (set->remove(*udarray[ix])) {
-                    	numOps++;
-                    	set->add(*udarray[ix]);
-                    }
+//                    if (set->remove(*udarray[ix])) {
+//                    	numOps++;
+//                    	set->add(*udarray[ix]);
+//                    }
+					set->bigtxn(udarray, tid, numElements);
                     numOps++;
                 } else {
                 	// I'm a Reader
@@ -162,6 +177,8 @@ public:
                     ix = (unsigned int)(seed%numElements);
                     set->contains(*udarray[ix]);
                     numOps+=2;
+//					set->bigreadtxn(udarray, tid, numElements);
+//					numOps++;
                 }
 
             }
@@ -204,7 +221,7 @@ public:
             for (int tid = 0; tid < num_threads; tid++) {
                 agg += ops[tid][irun]*1000000000LL/lengthSec[irun];
             }
-            firstTime = false;
+//            firstTime = false;
         }
 
         // Clear the set, one key at a time and then delete the instance
