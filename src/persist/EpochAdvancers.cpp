@@ -61,11 +61,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
         auto wb_start = chrono::high_resolution_clock::now();
 
         for (; curr_epoch < sync_signal.target_epoch; curr_epoch++){
-            // Wait until all threads active one epoch ago are done
-            while(!esys->is_quiesent(curr_epoch-1)){}
-            // Persist all modified blocks from 1 epoch ago
-            esys->persist_epoch(curr_epoch-1);
-            persist_func::sfence();
+            esys->on_epoch_end(curr_epoch);
             // Advance epoch number
             esys->set_epoch(curr_epoch+1);
             // notify worker threads before relamation 
@@ -76,9 +72,7 @@ void DedicatedEpochAdvancer::advancer(int task_num){
                 // restart timer for a new epoch
                 wb_start = chrono::high_resolution_clock::now();
             }
-            // does reclamation for curr_epoch-1
-            esys->free_epoch(curr_epoch-1);
-            
+            esys->on_epoch_begin(curr_epoch+1);
             // if (gtc->verbose){
             //     if (curr_epoch%1024 == 0){
             //         std::cout<<"epoch advanced to:" << curr_epoch+1 <<std::endl;
