@@ -64,7 +64,7 @@
 #include "QueueTest.hpp"
 #include "KVTest.hpp"
 #include "YCSBTest.hpp"
-#include "GraphTest.hpp"
+//#include "GraphTest.hpp"
 
 #include "QueueChurnTest.hpp"
 #include "HeapChurnTest.hpp"
@@ -157,8 +157,8 @@ int main(int argc, char *argv[])
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
-	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:80edge20vertex:degree32");
-	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:99.8edge.2vertex:degree32");
+//	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:80edge20vertex:degree32");
+//	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:99.8edge.2vertex:degree32");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
     // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");

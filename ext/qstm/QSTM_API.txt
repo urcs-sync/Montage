@@ -1,0 +1,61 @@
+void tm_begin();
+	Begins a new transaction. If the transaction object already has an ongoing transaction then this begins a nested transaction.
+
+void *tm_read(void** addr);
+	Returns the value contained at the specified memory address from the perspective of the ongoing transaction.
+	If the transaction has written to this location then the written value will be returned instead of the actual value present at that address.
+	Alternatively if some other committed transaction wrote to that location but the write is still only present in the queue, then that value overrides the actual value in memory.
+
+void tm_write(void** addr, void* val, void *mask=nullptr);
+	Performs a write to an address. The write is buffered until commit time. The mask argument may be used to only modify part of the word.
+
+bool tm_end(); TODO This can be a void function but changing it would result in changes to many files and applications. The return value is not used.
+	Ends a transaction. If the outermost transaction ends then it will attempt to atomically commit all operations, making them visible to other threads.
+	The transaction will restart from before the outermost call to tm_begin() if it fails to commit.
+
+void tm_clear();
+	Not usually called by application code.
+	This destroys all transaction state other than the jump location for aborts.
+
+void tm_abort();
+	Not usually called by application code.
+	Clears all transaction state and retries from the beginning of the outermost transaction.
+
+void* tm_malloc(size_t size);
+	Used whenever memory must be allocated within a transaction.
+	Results in the memory being allocated immediately, but saves information to allow this memory to be freed if the transaction aborts.
+
+void tm_free(void **ptr);
+	Used whenever memory must be freed within a transaction.
+	Saves information to free the memory if the transaction commits successfully.
+	In the current implementation, these frees are actually performed by the garbage collection worker instead of at commit time.
+
+
+Steps to use QSTM in an application:
+0)	When the application begins, each thread must do the following things:
+	Create a testconfig object
+		TestConfig* tc = new TestConfig();
+	Initialize the STM by creating an stm_factory object
+		TMFactory* stm_factory = tc->getTMFactory();
+	Create a transaction object initialized with the thread's unique thread id and optionally set core affinity.
+	See the example below. The barrier is application-specific and is used to make sure that all threads start at the same time.
+		int tid = (int)thread_getId();                \
+		TM* txn = tc->getTMFactory()->build(tc, tid); \
+		setAffinity(tc, tid);                         \
+		barrier();
+
+1)	When a thread begins a transaction, it must do the following things:
+	If the transaction is not nested, then set a jump point using setjmp similar to the example below:
+		if(txn->nesting == 0) setjmp(txn->env); 
+	After doing this, the thread makes a call to tm_begin() to set up transaction metadata.
+		txn->tm_begin();
+
+2)	The transaction may perform any number of reads and writes using the appropriate methods described above.
+	It may also allocate and free memory, or begin nested transactions to any depth, but it must not change the retry jump point of the outermost transaction.
+	If a conflict is detected then the transaction will clear all of its state and retry from the jump point that was set prior to calling tm_begin().
+	The application may also call tm_abort() directly to cause the transaction to retry, or tm_clear() to cease retries and entirely abandon the transaction.
+	TODO! tm_clear() should set nesting to zero to be used in the aforementioned way. It seems ok to move this from tm_abort() to tm_clear().
+
+3)	None of the transactional operations performed by a transaction become visible to other threads until the transaction commits successfully.
+	To commit, the thread must call tm_commit() in the outermost transaction. Calling tm_commit() from a nested transaction only decrements the nesting counter by 1.
+
