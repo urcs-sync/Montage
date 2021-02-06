@@ -248,6 +248,19 @@ namespace pds{
         persist_func::sfence();
     }
 
+    void EpochSys::on_epoch_begin(uint64_t c){
+        // does reclamation for c-2
+        to_be_freed->help_free(c-2);
+    }
+
+    void EpochSys::on_epoch_end(uint64_t c){
+        // Wait until all threads active one epoch ago are done
+        while(!trans_tracker->no_active(c-1)){}
+        // Persist all modified blocks from 1 epoch ago
+        to_be_persisted->persist_epoch(c-1);
+        persist_func::sfence();
+    }
+
     std::unordered_map<uint64_t, PBlk*>* EpochSys::recover(const int rec_thd){
         std::unordered_map<uint64_t, PBlk*>* in_use = new std::unordered_map<uint64_t, PBlk*>();
 #ifndef MNEMOSYNE
