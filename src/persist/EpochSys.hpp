@@ -333,8 +333,19 @@ public:
 
     // The following bookkeeping methods are for a SINGLE bookkeeping thread:
 
+<<<<<<< HEAD
     // atomically set the current global epoch number
     void set_epoch(uint64_t c);
+=======
+    // set the current global epoch number.
+    void set_epoch(uint64_t c);
+
+    // stuff to do at the beginning of epoch c
+    virtual void on_epoch_begin(uint64_t c);
+
+    // stuff to do at the end of epoch c
+    virtual void on_epoch_end(uint64_t c);
+>>>>>>> 01f74c3e657e6121b380288cb0b6ba398244f956
 
     // stuff to do at the beginning of epoch c
     virtual void on_epoch_begin(uint64_t c);

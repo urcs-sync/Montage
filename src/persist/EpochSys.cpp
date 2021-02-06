@@ -168,6 +168,10 @@ namespace pds{
         return global_epoch->load(std::memory_order_acquire);
     }
 
+    void EpochSys::set_epoch(uint64_t c){
+        return global_epoch->store(c, std::memory_order_seq_cst);
+    }
+
     // // Arg is epoch we think we're ending
     // void EpochSys::advance_epoch(uint64_t c){
     //     // TODO: if we go with one bookkeeping thread, remove unecessary synchronizations.
@@ -231,11 +235,14 @@ namespace pds{
     //     global_epoch->store(c+1, std::memory_order_seq_cst);
     // }
 
+<<<<<<< HEAD
     // atomically set the current global epoch number
     void EpochSys::set_epoch(uint64_t c){
         global_epoch->store(c, std::memory_order_seq_cst);
     }
 
+=======
+>>>>>>> 01f74c3e657e6121b380288cb0b6ba398244f956
     void EpochSys::on_epoch_begin(uint64_t c){
         // does reclamation for c-2
         to_be_freed->help_free(c-2);
