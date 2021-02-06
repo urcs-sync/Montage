@@ -1,0 +1,110 @@
+#ifndef QSTM_H
+#define QSTM_H
+
+#include "transaction.hpp"
+#include "concurrentprimitives.hpp"
+#include "../config.hpp"
+
+#include "util/writeset.hpp"
+#include "util/mallocset.hpp"
+#include "util/freeset.hpp"
+#include "util/bloomfilter.hpp"
+#include "util/entry.hpp"
+
+#include <atomic>
+
+class QSTM: public TM{
+public:
+	class writesetQSTM : public writeset{
+	public:
+		~writesetQSTM();
+	};
+	class qEntry : public Entry, public Trackable{
+	public:
+		qEntry();
+		writeset* wset_p;
+		freeset* fset_p;
+		std::atomic<qEntry*> next;
+		uint64_t get_ts();
+		void detach();
+		void init();
+		void *operator new(size_t sz){
+			return pstm_pmalloc(sz);
+		}
+		void *operator new[](size_t sz){
+			return pstm_pmalloc(sz);
+		}
+		void operator delete(void *p){
+			pstm_pfree(p);
+		}
+		void operator delete[](void *p){
+			pstm_pfree(p);
+		}
+		~qEntry();
+	};
+	class queue_t{
+	public:
+		queue_t();
+		void enqueue(qEntry *foo);
+		qEntry * dequeue_one_until(unsigned long until_ts);
+		qEntry * dequeue_until(unsigned long until_ts, unsigned long& cnt_ui);
+		std::atomic<qEntry*> head;
+		std::atomic<qEntry*> complete;
+		std::atomic<qEntry*> tail;
+		std::atomic<uint64_t> txncount;
+	};
+	void tm_begin();
+	void *tm_read(void** addr);
+	void tm_write(void** addr, void* val, void *mask=nullptr);
+	bool tm_end();
+	void tm_clear();
+	void tm_abort();
+	int do_writes_qstm(qEntry *q);
+
+	void* tm_pmalloc(size_t size);
+	void tm_pfree(void **ptr);
+	void* tm_malloc(size_t size);
+	void tm_free(void **ptr);
+	void gc_worker();
+
+	static void init();
+	static queue_t* queue;
+
+	// GC stuff
+	static std::atomic<uint64_t> complete_snapshot;
+	static std::atomic<uint64_t> min_reserv_snapshot;
+	static paddedAtomic<uint64_t>* reservs;
+	static int thread_cnt;
+	void reserve(int tid);
+	uint64_t get_min_reserve();
+	void release(int tid);
+
+	QSTM(TestConfig* tc, int tid);
+	~QSTM();
+
+private:
+	void check();
+	void wb_worker();
+	qEntry* get_new_qEntry();
+
+	qEntry* my_txn;
+	writesetQSTM* wset;
+	mallocset* mset;
+	freeset* fset;
+
+	filter wf;
+	filter rf;
+	qEntry *start = nullptr;
+};
+
+class QSTMFactory{
+public:
+	void init(TestConfig* tc){
+		QSTM::init();
+	}
+	QSTM* build(TestConfig* tc, int tid){
+		return new QSTM(tc, tid);
+	}
+};
+
+#endif
