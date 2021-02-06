@@ -333,17 +333,14 @@ public:
 
     // The following bookkeeping methods are for a SINGLE bookkeeping thread:
 
-    // reclaim everything in to-be-freed container of epoch c
-    void free_epoch(uint64_t c);
-
-    // whether epoch c has reached quiesence
-    bool is_quiesent(uint64_t c);
-
-    // write back everything in to-be-persisted container of epoch c
-    void persist_epoch(uint64_t c);
-
     // atomically set the current global epoch number
     void set_epoch(uint64_t c);
+
+    // stuff to do at the beginning of epoch c
+    virtual void on_epoch_begin(uint64_t c);
+
+    // stuff to do at the end of epoch c
+    virtual void on_epoch_end(uint64_t c);
 
     /////////////
     // Recover //
