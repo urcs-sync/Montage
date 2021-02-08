@@ -10,6 +10,33 @@
 
 #define EPOCH_WINDOW 4
 
+namespace pds{
+    template<typename A, typename B>
+    struct pair{
+        A first;
+        B second;
+        pair(A f, B s): first(f), second(s){}
+        pair(){}
+    };
+    template<typename A, typename B>
+    struct padded_pair{
+        A first;
+        B second;
+        padded_pair(A f, B s): first(f), second(s){}
+        padded_pair(const pair<A,B>& p): first(p.first), second(p.second){}
+        padded_pair(){}
+        operator pair<A,B>() const {
+            return pair<A,B>(first, second);
+        }
+        friend bool operator != (const padded_pair<A,B>& x, const pair<A,B>& y){
+            return (x.first != y.first || x.second != y.second);
+        }
+        friend bool operator == (const padded_pair<A,B>& x, const pair<A,B>& y){
+            return (x.first == y.first && x.second == y.second);
+        }
+    }__attribute__((aligned(CACHE_LINE_SIZE)));
+};
+
 class UIDGenerator{
     padded<uint64_t>* curr_ids = nullptr;
 public:
@@ -339,6 +366,130 @@ public:
     }
 };
 
+// thread-safe fixed-sized hashset
+// TODO: refactor container code to make the API of this less awkward.
+// currently, the semantics of try_push and try_pop are not accurate.
+class FixedHashSet{
+    int cap;
+    // I could never get it to compile with one star,
+    // because for non-trivial atomic type, default constructor is deleted.
+    std::atomic<pds::padded_pair<void*, size_t>>** payloads;
+    const std::function<void(pds::pair<void*, size_t>& x)> consume;
+    std::atomic<int> last_pop;
+public:
+    FixedHashSet(int cap_, const std::function<void(pds::pair<void*, size_t>& x)>& consume_) :
+        cap(cap_), consume(consume_){
+        payloads = new std::atomic<pds::padded_pair<void*, size_t>>*[cap];
+        for (int i = 0; i < cap; i++){
+            payloads[i] = new std::atomic<pds::padded_pair<void*, size_t>>({nullptr, 0});
+        }
+        last_pop = 0;
+    }
+    ~FixedHashSet(){
+        for (int i = 0; i < cap; i++){
+            delete payloads[i];
+        }
+        delete payloads;
+    }
+    bool try_push(pds::pair<void*, size_t> x){
+        auto idx = (((uint64_t)x.first) >> 6) % cap;
+        auto exp = payloads[idx]->load();
+        if (exp == x){
+            return true;
+        }
+        while(!payloads[idx]->compare_exchange_strong(exp, x)){}
+        if (exp != pds::pair<void*, size_t>({nullptr, 0})){
+            if (exp.first != x.first){
+                pds::pair<void*, size_t> res = exp;
+                consume(res);
+            }
+        }
+        // always return true for now, as this logic is not really try_push.
+        return true;
+    }
+    bool try_pop(const std::function<void(pds::pair<void*, size_t>& x)>& func){
+        // pop a random bucket (actually the next bucket of the previous one)
+        auto idx = last_pop.fetch_add(1)%cap;
+        auto exp = payloads[idx]->load();
+        if (exp == pds::pair<void*, size_t>({nullptr, 0})){
+            return false;
+        }
+        while(!payloads[idx]->compare_exchange_strong(exp, {nullptr, 0})){}
+        if (exp != pds::pair<void*, size_t>({nullptr, 0})){
+            pds::pair<void*, size_t> res = exp;
+            func(res);
+            return true;
+        } else {
+            // returning false doesn't mean the container is empty.
+            return false;
+        }
+    }
+    bool try_pop(pds::pair<void*, size_t>& x){
+        errexit("FixedHashSet::try_pop(pair& x) not implemented.");
+        return false;
+    }
+    void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func){
+        for (int i = 0; i < cap; i++){
+            auto exp = payloads[i]->load();
+            if (exp == pds::pair<void*, size_t>({nullptr, 0})){
+                continue;
+            }
+            while(!payloads[i]->compare_exchange_strong(exp, {nullptr, 0})){}
+            if (exp != pds::pair<void*, size_t>({nullptr, 0})){
+                pds::pair<void*, size_t> res = exp;
+                func(res);
+            }
+        }
+    }
+    void clear(){
+        for (int i = 0; i < cap; i++){
+            payloads[i]->store({nullptr, 0});
+        }
+    }
+};
+
+class PerThreadFixedHashSet{
+    // count of threads (and buffers)
+    int count;
+    padded<FixedHashSet*>* buffers;
+public:
+    PerThreadFixedHashSet(int task_num, size_t cap,
+        const std::function<void(pds::pair<void*, size_t>& x)>& func){
+        count = task_num;
+        // init the buffers.
+        buffers = new padded<FixedHashSet*>[count];
+        for (int i = 0; i < count; i++){
+            buffers[i].ui = new FixedHashSet(cap, func);
+        }
+    }
+    ~PerThreadFixedHashSet(){
+        for (int i = 0; i < count; i++){
+            delete buffers[i].ui;
+        }
+        delete buffers;
+    }
+    bool try_push(pds::pair<void*, size_t> x, int tid){
+        return buffers[tid].ui->try_push(x);
+    }
+    void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func){
+        // std::cout<<"pop_all called"<<std::endl;
+        for (int i = 0; i < count; i++){
+            buffers[i].ui->pop_all(func);
+        }
+    }
+    void pop_all_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid){
+        buffers[tid].ui->pop_all(func);
+    }
+    bool try_pop_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid){
+        return buffers[tid].ui->try_pop(func);
+    }
+    void clear(){
+        for (int i = 0; i < count; i++){
+            buffers[i].ui->clear();
+        }
+    }
+};
+
 // a group of per-thread circular buffer
 // NOTE: this is designed for single-consumer pattern only. The container is NOT thread safe.
 template<typename T>
@@ -395,61 +546,5 @@ public:
     }
 };
 
-template<typename T, typename Hash = std::hash<T>>
-class PerThreadHashSet{
-    // count of threads (and buffers)
-    int count;
-    padded<std::unordered_set<T, Hash>*>* buffers;
-public:
-    PerThreadHashSet(int task_num){
-        count = task_num;
-        // init the buffers.
-        buffers = new padded<std::unordered_set<T, Hash>*>[count];
-        for (int i = 0; i < count; i++){
-            buffers[i].ui = new std::unordered_set<T, Hash>();
-        }
-    }
-    ~PerThreadHashSet(){
-        for (int i = 0; i < count; i++){
-            delete buffers[i].ui;
-        }
-        delete buffers;
-    }
-    void push(T x, int tid){
-        buffers[tid].ui->insert(x);
-    }
-    void pop_all(const std::function<void(T& x)>& func){
-        for (int i = 0; i < count; i++){
-            for (auto itr = buffers[i].ui->begin(); itr != buffers[i].ui->end(); itr++){
-                T t = *itr;
-                func(t);
-            }
-            buffers[i].ui->clear();
-        }
-    }
-    void pop_all_local(const std::function<void(T& x)>& func, int tid){
-        for (auto itr = buffers[tid].ui->begin(); itr != buffers[tid].ui->end(); itr++){
-            T t = *itr;
-            func(t);
-        }
-        buffers[tid].ui->clear();
-
-    }
-    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
-        if (buffers[tid].ui->empty()){
-            return false;
-        } else {
-            T t = *buffers[tid].ui->begin();
-            func(t);
-            buffers[tid].ui->erase(buffers[tid].ui->begin());
-            return true;
-        }
-    }
-    void clear(){
-        for (int i = 0; i < count; i++){
-            buffers[i].ui->clear();
-        }
-    }
-};
 
 #endif
