@@ -19,12 +19,12 @@ namespace pds{
 class PBlk;
 class EpochSys;
 
-template<typename A, typename B>
-struct PairHash{
-    size_t operator () (const std::pair<A,B> &x) const{
-        return std::hash<A>{}(x.first);
-    }
-};
+// template<typename A, typename B>
+// struct PairHash{
+//     size_t operator () (const pds::pair<A,B> &x) const{
+//         return std::hash<A>{}(x.first);
+//     }
+// };
 
 //////////////////////////////
 // To-be-persist Containers //
@@ -80,24 +80,26 @@ class PerEpoch : public ToBePersistContainer{
         void persist_epoch(uint64_t c);
     };
 
-    PerThreadContainer<std::pair<void*, size_t>>* container = nullptr;
+    PerThreadContainer<pds::pair<void*, size_t>>* container = nullptr;
     Persister* persister = nullptr;
-    static void do_persist(std::pair<void*, size_t>& addr_size);
+    static void do_persist(pds::pair<void*, size_t>& addr_size);
 public:
     PerEpoch(GlobalTestConfig* gtc){
         if (gtc->checkEnv("Container")){
             std::string env_container = gtc->getEnv("Container");
             if (env_container == "CircBuffer"){
-                container = new CircBufferContainer<std::pair<void*, size_t>>(gtc->task_num);
+                container = new CircBufferContainer<pds::pair<void*, size_t>>(gtc->task_num);
             } else if (env_container == "Vector"){
-                container = new VectorContainer<std::pair<void*, size_t>>(gtc->task_num);
-            } else if (env_container == "HashSet"){
-                container = new HashSetContainer<std::pair<void*, size_t>, PairHash<const void*, size_t>>(gtc->task_num);
-            } else {
+                container = new VectorContainer<pds::pair<void*, size_t>>(gtc->task_num);
+            }
+            // else if (env_container == "HashSet"){
+            //     container = new HashSetContainer<pds::pair<void*, size_t>, PairHash<const void*, size_t>>(gtc->task_num);
+            // }
+            else {
                 errexit("unsupported container type by PerEpoch to-be-freed container.");
             }
         } else {
-            container = new VectorContainer<std::pair<void*, size_t>>(gtc->task_num);
+            container = new VectorContainer<pds::pair<void*, size_t>>(gtc->task_num);
         }
 
         if (gtc->checkEnv("Persister")){
@@ -188,7 +190,8 @@ class BufferedWB : public ToBePersistContainer{
         void help_persist_local(uint64_t c);
     };
 
-    FixedCircBufferContainer<std::pair<void*, size_t>>* container = nullptr;
+    // FixedCircBufferContainer<pds::pair<void*, size_t>>* container = nullptr;
+    PerThreadContainer<pds::pair<void*, size_t>>* container = nullptr;
     GlobalTestConfig* gtc;
     Persister* persister = nullptr;
     padded<int>* counters = nullptr;
@@ -196,10 +199,11 @@ class BufferedWB : public ToBePersistContainer{
     int task_num;
     int buffer_size = 2048;
     int dump_size = 1024;
-    static void do_persist(std::pair<void*, size_t>& addr_size);
+    static void do_persist(pds::pair<void*, size_t>& addr_size);
     void dump(uint64_t c);
 public:
     BufferedWB (GlobalTestConfig* _gtc): gtc(_gtc), task_num(_gtc->task_num){
+        
         if (gtc->checkEnv("BufferSize")){
             buffer_size = stoi(gtc->getEnv("BufferSize"));
         } else {
@@ -212,7 +216,19 @@ public:
         assert(buffer_size >= dump_size);
         assert(buffer_size > 1 && dump_size > 1);
         // persister = new WorkerThreadPersister(this);
-        container = new FixedCircBufferContainer<std::pair<void*, size_t>>(task_num, buffer_size);
+        if (gtc->checkEnv("Container")){
+            std::string env_container = gtc->getEnv("Container");
+            if (env_container == "CircBuffer"){
+                container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
+            } else if (env_container == "HashSet"){
+                container = new FixedHashSetContainer(task_num, buffer_size, do_persist);
+            } else {
+                errexit("unsupported container type by BufferedWB");
+            }
+        } else {
+            container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
+        }
+        
         if (gtc->checkEnv("Persister")){
             std::string env_persister = gtc->getEnv("Persister");
             if (env_persister == "PerThreadBusy"){
@@ -234,7 +250,7 @@ public:
         delete counters;
         delete persister;
     }
-    void push(std::pair<void*, size_t> entry, uint64_t c);
+    void push(pds::pair<void*, size_t> entry, uint64_t c);
     void register_persist(PBlk* blk, size_t sz, uint64_t c);
     void register_persist_raw(PBlk* blk, uint64_t c);
     void persist_epoch(uint64_t c);

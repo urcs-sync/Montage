@@ -59,7 +59,7 @@ PerEpoch::PerThreadDedicatedWait::~PerThreadDedicatedWait(){
         }
     }
 }
-void PerEpoch::do_persist(std::pair<void*, size_t>& addr_size){
+void PerEpoch::do_persist(pds::pair<void*, size_t>& addr_size){
     persist_func::clwb_range_nofence(
         addr_size.first, addr_size.second);
 }
@@ -82,10 +82,10 @@ void PerEpoch::register_persist(PBlk* blk, size_t sz, uint64_t c){
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    container->push(std::make_pair<void*, size_t>((char*)blk, (size_t)sz), EpochSys::tid, c);
+    container->push(pds::pair<void*, size_t>((char*)blk, (size_t)sz), EpochSys::tid, c);
 }
 void PerEpoch::register_persist_raw(PBlk* blk, uint64_t c){
-    container->push(std::make_pair<void*, size_t>((char*)blk, 1), EpochSys::tid, c);
+    container->push(pds::pair<void*, size_t>((char*)blk, 1), EpochSys::tid, c);
 }
 void PerEpoch::persist_epoch(uint64_t c){
     persister->persist_epoch(c);
@@ -235,7 +235,7 @@ void BufferedWB::WorkerThreadPersister::help_persist_local(uint64_t c){
         con->container->try_pop_local(&do_persist, EpochSys::tid, c);
     }
 }
-void BufferedWB::do_persist(std::pair<void*, size_t>& addr_size){
+void BufferedWB::do_persist(pds::pair<void*, size_t>& addr_size){
     persist_func::clwb_range_nofence(
         addr_size.first, addr_size.second);
 }
@@ -244,7 +244,7 @@ void BufferedWB::dump(uint64_t c){
         container->try_pop_local(&do_persist, EpochSys::tid, c);
     }
 }
-void BufferedWB::push(std::pair<void*, size_t> entry, uint64_t c){
+void BufferedWB::push(pds::pair<void*, size_t> entry, uint64_t c){
     while (!container->try_push(entry, EpochSys::tid, c)){// in case other thread(s) are doing write-backs.
         persister->help_persist_local(c);
     }
@@ -253,14 +253,14 @@ void BufferedWB::register_persist(PBlk* blk, size_t sz, uint64_t c){
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    push(std::make_pair<void*, size_t>((char*)blk, (size_t)sz), c);
+    push(pds::pair<void*, size_t>((char*)blk, (size_t)sz), c);
     
 }
 void BufferedWB::register_persist_raw(PBlk* blk, uint64_t c){
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    push(std::make_pair<void*, size_t>((char*)blk, 1), c);
+    push(pds::pair<void*, size_t>((char*)blk, 1), c);
 }
 void BufferedWB::persist_epoch(uint64_t c){ // NOTE: this is not thread-safe.
     for (int i = 0; i < task_num; i++){
