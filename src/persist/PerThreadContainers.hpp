@@ -14,7 +14,6 @@ template<typename T>
 class PerThreadContainer{
 public:
     virtual void push(T x, int tid, uint64_t c) = 0;
-    virtual bool try_push(T x, int tid, uint64_t c) {errexit("try_push not implemented."); return false;};
     virtual void pop_all(const std::function<void(T& x)>& func, uint64_t c) = 0;
     virtual bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
     virtual void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
@@ -83,7 +82,19 @@ public:
 };
 
 template <typename T>
-class FixedCircBufferContainer: public PerThreadContainer<T>{
+class FixedContainer{
+public:
+    virtual ~FixedContainer(){}
+    virtual void push(T x, const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
+    // virtual bool try_push(T x, int tid, uint64_t c) = 0;
+    virtual void pop_all(const std::function<void(T& x)>& func, uint64_t c) = 0;
+    virtual void pop_all_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
+    virtual bool try_pop_local(const std::function<void(T& x)>& func, int tid, uint64_t c) = 0;
+    virtual void clear() = 0;
+};
+
+template <typename T>
+class FixedCircBufferContainer: public FixedContainer<T>{
     int thread_cnt;
     FixedCircBuffer<T>** containers[EPOCH_WINDOW];
 public:
@@ -104,12 +115,12 @@ public:
             delete containers[i];
         }
     }
-    void push(T x, int tid, uint64_t c){
-        errexit("always use FixedCircBuffer::try_push().");
+    void push(T x, const std::function<void(T& x)>& func, int tid, uint64_t c){
+        return containers[c%EPOCH_WINDOW][tid]->push(x, func);
     }
-    bool try_push(T x, int tid, uint64_t c){
-        return containers[c%EPOCH_WINDOW][tid]->try_push(x);
-    }
+    // bool try_push(T x, int tid, uint64_t c){
+    //     return containers[c%EPOCH_WINDOW][tid]->try_push(x);
+    // }
     void pop_all(const std::function<void(T& x)>& func, uint64_t c){
         for (int i = 0; i < thread_cnt; i++){
             containers[c%EPOCH_WINDOW][i]->pop_all(func);
@@ -132,16 +143,16 @@ public:
     }
 };
 
-class FixedHashSetContainer: public PerThreadContainer<pds::pair<void*, size_t>>{
+class FixedHashSetContainer: public FixedContainer<pds::pair<void*, size_t>>{
     int thread_cnt;
     FixedHashSet** containers[EPOCH_WINDOW];
 public:
-    FixedHashSetContainer(int task_num, size_t cap, const std::function<void(pds::pair<void*, size_t>& x)>& func){
+    FixedHashSetContainer(int task_num, size_t cap){
         thread_cnt = task_num;
         for (int i = 0; i < EPOCH_WINDOW; i++){
             containers[i] = new FixedHashSet*[thread_cnt];
             for (int j = 0; j < thread_cnt; j++){
-                containers[i][j] = new FixedHashSet(cap, func);
+                containers[i][j] = new FixedHashSet(cap);
             }
         }
     }
@@ -153,12 +164,12 @@ public:
             delete containers[i];
         }
     }
-    void push(pds::pair<void*, size_t> x, int tid, uint64_t c){
-        errexit("always use FixedHashSet::try_push().");
+    void push(pds::pair<void*, size_t> x, const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid, uint64_t c){
+        return containers[c%EPOCH_WINDOW][tid]->push(x, func);
     }
-    bool try_push(pds::pair<void*, size_t> x, int tid, uint64_t c){
-        return containers[c%EPOCH_WINDOW][tid]->try_push(x);
-    }
+    // bool try_push(pds::pair<void*, size_t> x, int tid, uint64_t c){
+    //     return containers[c%EPOCH_WINDOW][tid]->try_push(x);
+    // }
     void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func, uint64_t c){
         for (int i = 0; i < thread_cnt; i++){
             containers[c%EPOCH_WINDOW][i]->pop_all(func);

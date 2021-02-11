@@ -191,7 +191,7 @@ class BufferedWB : public ToBePersistContainer{
     };
 
     // FixedCircBufferContainer<pds::pair<void*, size_t>>* container = nullptr;
-    PerThreadContainer<pds::pair<void*, size_t>>* container = nullptr;
+    FixedContainer<pds::pair<void*, size_t>>* container = nullptr;
     GlobalTestConfig* gtc;
     Persister* persister = nullptr;
     padded<int>* counters = nullptr;
@@ -221,7 +221,7 @@ public:
             if (env_container == "CircBuffer"){
                 container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
             } else if (env_container == "HashSet"){
-                container = new FixedHashSetContainer(task_num, buffer_size, do_persist);
+                container = new FixedHashSetContainer(task_num, buffer_size);
             } else {
                 errexit("unsupported container type by BufferedWB");
             }

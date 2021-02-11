@@ -233,9 +233,10 @@ void BufferedWB::dump(uint64_t c){
     }
 }
 void BufferedWB::push(pds::pair<void*, size_t> entry, uint64_t c){
-    while (!container->try_push(entry, EpochSys::tid, c)){// in case other thread(s) are doing write-backs.
-        persister->help_persist_local(c);
-    }
+    // while (!container->try_push(entry, EpochSys::tid, c)){// in case other thread(s) are doing write-backs.
+    //     persister->help_persist_local(c);
+    // }
+    container->push(entry, do_persist, EpochSys::tid, c);
 }
 void BufferedWB::register_persist(PBlk* blk, size_t sz, uint64_t c){
     if (c == NULL_EPOCH){

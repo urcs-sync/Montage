@@ -226,21 +226,36 @@ public:
     ~FixedCircBuffer(){
         delete(payloads);
     }
-    bool try_push(T x){
+    void push(T x, const std::function<void(T& x)>& func){
         size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
         size_t curr_popped = popped.ui.load(std::memory_order_acquire);
         assert(curr_pushed <= curr_popped + cap);
         if (curr_pushed == curr_popped + cap){
-            // full, return false
-            return false;
-        } else {
-            // push x
-            payloads[curr_pushed%cap].ui = x;
-            // advance pushed counter.
-            pushed.ui.store(curr_pushed+1, std::memory_order_release);
-            return true;
+            // full, consume one entry.
+            func(payloads[curr_popped%cap].ui);
+            // try to pop the consumed entry, failiure is harmless.
+            popped.ui.compare_exchange_strong(curr_popped, curr_popped+1, std::memory_order_acq_rel);
         }
+        // push x
+        payloads[curr_pushed%cap].ui = x;
+        // advance pushed counter.
+        pushed.ui.store(curr_pushed+1, std::memory_order_release);
     }
+    // bool try_push(T x){
+    //     size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
+    //     size_t curr_popped = popped.ui.load(std::memory_order_acquire);
+    //     assert(curr_pushed <= curr_popped + cap);
+    //     if (curr_pushed == curr_popped + cap){
+    //         // full, return false
+    //         return false;
+    //     } else {
+    //         // push x
+    //         payloads[curr_pushed%cap].ui = x;
+    //         // advance pushed counter.
+    //         pushed.ui.store(curr_pushed+1, std::memory_order_release);
+    //         return true;
+    //     }
+    // }
     bool try_pop(const std::function<void(T& x)>& func){
         size_t curr_popped = popped.ui.load(std::memory_order_acquire);
         size_t curr_pushed = pushed.ui.load(std::memory_order_acquire);
@@ -328,11 +343,9 @@ class FixedHashSet{
     // I could never get it to compile with one star,
     // because for non-trivial atomic type, default constructor is deleted.
     std::atomic<pds::padded_pair<void*, size_t>>** payloads;
-    const std::function<void(pds::pair<void*, size_t>& x)> consume;
     std::atomic<int> last_pop;
 public:
-    FixedHashSet(int cap_, const std::function<void(pds::pair<void*, size_t>& x)>& consume_) :
-        cap(cap_), consume(consume_){
+    FixedHashSet(int cap_) : cap(cap_){
         payloads = new std::atomic<pds::padded_pair<void*, size_t>>*[cap];
         for (int i = 0; i < cap; i++){
             payloads[i] = new std::atomic<pds::padded_pair<void*, size_t>>({nullptr, 0});
@@ -345,21 +358,19 @@ public:
         }
         delete payloads;
     }
-    bool try_push(pds::pair<void*, size_t> x){
+    void push(pds::pair<void*, size_t> x, const std::function<void(pds::pair<void*, size_t>& x)>& func){
         auto idx = (((uint64_t)x.first) >> 6) % cap;
         auto exp = payloads[idx]->load();
         if (exp == x){
-            return true;
+            return;
         }
         while(!payloads[idx]->compare_exchange_strong(exp, x)){}
         if (exp != pds::pair<void*, size_t>({nullptr, 0})){
             if (exp.first != x.first){
                 pds::pair<void*, size_t> res = exp;
-                consume(res);
+                func(res);
             }
         }
-        // always return true for now, as this logic is not really try_push.
-        return true;
     }
     bool try_pop(const std::function<void(pds::pair<void*, size_t>& x)>& func){
         // pop a random bucket (actually the next bucket of the previous one)
