@@ -320,52 +320,6 @@ public:
     }
 }__attribute__((aligned(CACHE_LINE_SIZE)));
 
-// a group of per-thread fixed-size circular buffer
-// NOTE: this is designed for single-consumer pattern only. The container is NOT thread safe.
-// NOTE: this class is intentionally implemented independently from PerThreadCircBuffer,
-//      as the thread safety models are different.
-template<typename T>
-class PerThreadFixedCircBuffer{
-    // count of threads (and buffers)
-    int count;
-    padded<FixedCircBuffer<T>*>* buffers;
-public:
-    PerThreadFixedCircBuffer(int task_num, size_t cap){
-        count = task_num;
-        // init the buffers.
-        buffers = new padded<FixedCircBuffer<T>*>[count];
-        for (int i = 0; i < count; i++){
-            buffers[i].ui = new FixedCircBuffer<T>(cap);
-        }
-    }
-    ~PerThreadFixedCircBuffer(){
-        for (int i = 0; i < count; i++){
-            delete buffers[i].ui;
-        }
-        delete buffers;
-    }
-    bool try_push(T x, int tid){
-        return buffers[tid].ui->try_push(x);
-    }
-    void pop_all(const std::function<void(T& x)>& func){
-        // std::cout<<"pop_all called"<<std::endl;
-        for (int i = 0; i < count; i++){
-            buffers[i].ui->pop_all(func);
-        }
-    }
-    void pop_all_local(const std::function<void(T& x)>& func, int tid){
-        buffers[tid].ui->pop_all(func);
-    }
-    bool try_pop_local(const std::function<void(T& x)>& func, int tid){
-        return buffers[tid].ui->try_pop(func);
-    }
-    void clear(){
-        for (int i = 0; i < count; i++){
-            buffers[i].ui->clear();
-        }
-    }
-};
-
 // thread-safe fixed-sized hashset
 // TODO: refactor container code to make the API of this less awkward.
 // currently, the semantics of try_push and try_pop are not accurate.
@@ -444,48 +398,6 @@ public:
     void clear(){
         for (int i = 0; i < cap; i++){
             payloads[i]->store({nullptr, 0});
-        }
-    }
-};
-
-class PerThreadFixedHashSet{
-    // count of threads (and buffers)
-    int count;
-    padded<FixedHashSet*>* buffers;
-public:
-    PerThreadFixedHashSet(int task_num, size_t cap,
-        const std::function<void(pds::pair<void*, size_t>& x)>& func){
-        count = task_num;
-        // init the buffers.
-        buffers = new padded<FixedHashSet*>[count];
-        for (int i = 0; i < count; i++){
-            buffers[i].ui = new FixedHashSet(cap, func);
-        }
-    }
-    ~PerThreadFixedHashSet(){
-        for (int i = 0; i < count; i++){
-            delete buffers[i].ui;
-        }
-        delete buffers;
-    }
-    bool try_push(pds::pair<void*, size_t> x, int tid){
-        return buffers[tid].ui->try_push(x);
-    }
-    void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func){
-        // std::cout<<"pop_all called"<<std::endl;
-        for (int i = 0; i < count; i++){
-            buffers[i].ui->pop_all(func);
-        }
-    }
-    void pop_all_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid){
-        buffers[tid].ui->pop_all(func);
-    }
-    bool try_pop_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid){
-        return buffers[tid].ui->try_pop(func);
-    }
-    void clear(){
-        for (int i = 0; i < count; i++){
-            buffers[i].ui->clear();
         }
     }
 };
