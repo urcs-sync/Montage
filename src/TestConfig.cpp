@@ -164,6 +164,16 @@ void GlobalTestConfig::parseCommandLine(int argc, char** argv){
 // DFS affinity: traverse the topology tree in DFS pattern and pin threads
 // in the order of PUs found.
 
+void GlobalTestConfig::extendAffinity(std::vector<hwloc_obj_t>& aff){
+	int ori_size = aff.size();
+	if((int)aff.size()<task_num){
+		aff.resize(task_num);
+	}
+	for(int i=ori_size; i<task_num; i++){
+		aff[i] = aff[i%ori_size];
+	}
+}
+
 void GlobalTestConfig::buildDFSAffinity_helper(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj){
 	if(obj->type==HWLOC_OBJ_PU){
 		aff.push_back(obj);
@@ -177,6 +187,7 @@ void GlobalTestConfig::buildDFSAffinity_helper(std::vector<hwloc_obj_t>& aff, hw
 
 void GlobalTestConfig::buildDFSAffinity(std::vector<hwloc_obj_t>& aff){
 	buildDFSAffinity_helper(aff, hwloc_get_root_obj(topology));
+	extendAffinity(aff);
 }
 
 // Default affinity: pin threads on PUs in the same core, then other cores in the socket,
@@ -243,6 +254,7 @@ void GlobalTestConfig::buildDefaultAffinity(std::vector<hwloc_obj_t>& aff){
 		aff.resize(0);
 		buildDFSAffinity(aff);	
 	}
+	extendAffinity(aff);
 }
 
 // Single affinity: pin all threads to the same PU.
@@ -257,6 +269,29 @@ void GlobalTestConfig::buildSingleAffinity_helper(std::vector<hwloc_obj_t>& aff,
 }
 void GlobalTestConfig::buildSingleAffinity(std::vector<hwloc_obj_t>& aff){
 	buildSingleAffinity_helper(aff,hwloc_get_root_obj(topology));
+	extendAffinity(aff);
+}
+
+
+// Single socket affinity: put all threads to the same (first) socket.
+// Follow default pattern within the socket.
+void GlobalTestConfig::buildSingleSocketAffinity(std::vector<hwloc_obj_t>& aff){
+	hwloc_obj_t obj = hwloc_get_root_obj(topology);
+	while(obj->type < HWLOC_OBJ_SOCKET){
+		obj = obj->children[0];
+	}
+	buildDefaultAffinity_findAndBuildSockets(aff, obj);
+	extendAffinity(aff);
+}
+
+// Single socket per-core affinity: single-socket version of PerCoreAffinity
+void GlobalTestConfig::buildSingleSocketPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu){
+	hwloc_obj_t obj = hwloc_get_root_obj(topology);
+	while(obj->type < HWLOC_OBJ_SOCKET){
+		obj = obj->children[0];
+	}
+	buildPerCoreAffinity_helper(aff, pu, obj);
+	extendAffinity(aff);
 }
 
 // Per-core affinity: pin one thread to $pu$ pu (thread) of each core in the same socket, then go cross socket.
@@ -274,6 +309,7 @@ void GlobalTestConfig::buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff
 }
 void GlobalTestConfig::buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu){
 	buildPerCoreAffinity_helper(aff,pu,hwloc_get_root_obj(topology));
+	extendAffinity(aff);
 }
 
 // Interleaved affinity: first thread of each socket, then the second thread, and so on.
@@ -304,6 +340,7 @@ void GlobalTestConfig::buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff){
 			aff.push_back(thread_per_package[j][i]);
 		}
 	}
+	extendAffinity(aff);
 }
 
 // Interleaved per-core affinity: the $pu$ thread of first core in each socket, then
@@ -334,6 +371,7 @@ void GlobalTestConfig::buildInterleavedPerCoreAffinity(std::vector<hwloc_obj_t>&
 			aff.push_back(thread_per_package[j][i]);
 		}
 	}
+	extendAffinity(aff);
 }
 
 // reference:
@@ -348,15 +386,14 @@ void GlobalTestConfig::buildAffinity(std::vector<hwloc_obj_t>& aff){
 	else if (affinity.compare("interleaved")==0){
 		buildInterleavedAffinity(aff);
 	}
+	else if (affinity.compare("singleSocket")==0){
+		buildSingleSocketAffinity(aff);
+	}
 	else{
 		buildDefaultAffinity(aff);
 	}
-	if((int)aff.size()<task_num){
-		aff.resize(task_num);
-	}
-	for(int i=num_procs; i<task_num; i++){
-		aff[i] = aff[i%num_procs];
-	}
+	// extendAffinity() shoud be called to cover oversubscription.
+	assert(aff.size() >= task_num);
 }
 
 

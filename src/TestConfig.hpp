@@ -92,6 +92,7 @@ public:
 	// TODO: make a general-purpose unit of this.
 	void buildPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
 	void buildInterleavedPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
+	void buildSingleSocketPerCoreAffinity(std::vector<hwloc_obj_t>& aff, unsigned pu);
 
 	// Run the test
 	void runTest();
@@ -103,6 +104,7 @@ public:
 	// // a bunch needed because of recursive traversal of topologies.
 	void buildAffinity(std::vector<hwloc_obj_t>& aff);
 private:
+	void extendAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildDFSAffinity_helper(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj);
 	void buildDFSAffinity(std::vector<hwloc_obj_t>& aff);
 	int buildDefaultAffinity_findCoresInSocket(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj, std::vector<hwloc_obj_t>* cores);
@@ -111,6 +113,7 @@ private:
 	void buildDefaultAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildSingleAffinity_helper(std::vector<hwloc_obj_t>& aff, hwloc_obj_t obj);
 	void buildSingleAffinity(std::vector<hwloc_obj_t>& aff);
+	void buildSingleSocketAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildPerCoreAffinity_helper(std::vector<hwloc_obj_t>& aff, unsigned pu, hwloc_obj_t obj);
 	void buildInterleavedAffinity(std::vector<hwloc_obj_t>& aff);
 	void buildInterleavedAffinity_traversePackages(std::vector<std::vector<hwloc_obj_t>>& thread_per_package, hwloc_obj_t obj);
