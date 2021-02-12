@@ -335,9 +335,8 @@ public:
     }
 }__attribute__((aligned(CACHE_LINE_SIZE)));
 
-// thread-safe fixed-sized hashset
-// TODO: refactor container code to make the API of this less awkward.
-// currently, the semantics of try_push and try_pop are not accurate.
+// Single-producer multiple-consumer fixed-sized hashmap
+// An entry might be consumed by multiple consumers.
 class FixedHashSet{
     int cap;
     // I could never get it to compile with one star,
@@ -364,30 +363,30 @@ public:
         if (exp == x){
             return;
         }
-        while(!payloads[idx]->compare_exchange_strong(exp, x)){}
-        if (exp != pds::pair<void*, size_t>({nullptr, 0})){
+        if (exp.first != nullptr){
             if (exp.first != x.first){
                 pds::pair<void*, size_t> res = exp;
                 func(res);
             }
         }
+        // we can simply store new value here rather than CAS, because
+        // we can only overwrite either exp or (nullptr, 0).
+        // (actually the latter case will only happen with nbMontage, and
+        // x's operation must have been aborted.)
+        payloads[idx]->store(x);
     }
     bool try_pop(const std::function<void(pds::pair<void*, size_t>& x)>& func){
         // pop a random bucket (actually the next bucket of the previous one)
         auto idx = last_pop.fetch_add(1)%cap;
         auto exp = payloads[idx]->load();
-        if (exp == pds::pair<void*, size_t>({nullptr, 0})){
-            return false;
-        }
-        while(!payloads[idx]->compare_exchange_strong(exp, {nullptr, 0})){}
-        if (exp != pds::pair<void*, size_t>({nullptr, 0})){
-            pds::pair<void*, size_t> res = exp;
-            func(res);
-            return true;
-        } else {
+        if (exp.first == nullptr){
             // returning false doesn't mean the container is empty.
             return false;
         }
+        pds::pair<void*, size_t> res = exp;
+        func(res);
+        payloads[idx]->compare_exchange_strong(exp, pds::pair<void*, size_t>({nullptr, 0}));
+        return true;
     }
     bool try_pop(pds::pair<void*, size_t>& x){
         errexit("FixedHashSet::try_pop(pair& x) not implemented.");
@@ -396,14 +395,17 @@ public:
     void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func){
         for (int i = 0; i < cap; i++){
             auto exp = payloads[i]->load();
-            if (exp == pds::pair<void*, size_t>({nullptr, 0})){
+            if (exp.first == nullptr){
                 continue;
             }
-            while(!payloads[i]->compare_exchange_strong(exp, {nullptr, 0})){}
-            if (exp != pds::pair<void*, size_t>({nullptr, 0})){
-                pds::pair<void*, size_t> res = exp;
-                func(res);
-            }
+            pds::pair<void*, size_t> res = exp;
+            func(res);
+            // we're not using CAS here because pop_all will only be called
+            // by persist-epoch, which means the overwritten content is either
+            // aborted or persisted already.
+            // also, there won't be any correctness issues if we don't overwrite
+            // with 0; we're only doing this to prevent redundant persisting.
+            payloads[i]->store(pds::pair<void*, size_t>({nullptr, 0}));
         }
     }
     void clear(){

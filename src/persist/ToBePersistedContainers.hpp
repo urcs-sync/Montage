@@ -135,86 +135,76 @@ public:
 };
 
 class BufferedWB : public ToBePersistContainer{
-    class Persister{
-    public:
-        BufferedWB* con = nullptr;
-        Persister(BufferedWB* _con) : con(_con){}
-        virtual ~Persister() {}
-        virtual void help_persist_local(uint64_t c) = 0;
-    };
+    // class Persister{
+    // public:
+    //     BufferedWB* con = nullptr;
+    //     Persister(BufferedWB* _con) : con(_con){}
+    //     virtual ~Persister() {}
+    //     virtual void help_persist_local(uint64_t c) = 0;
+    // };
 
-    class PerThreadDedicatedWait : public Persister{
-        struct Signal {
-            std::mutex bell;
-            std::condition_variable ring;
-            int curr = 0;
-            uint64_t epoch = INIT_EPOCH;
-        }__attribute__((aligned(CACHE_LINE_SIZE)));
+    // class PerThreadDedicatedWait : public Persister{
+    //     struct Signal {
+    //         std::mutex bell;
+    //         std::condition_variable ring;
+    //         int curr = 0;
+    //         uint64_t epoch = INIT_EPOCH;
+    //     }__attribute__((aligned(CACHE_LINE_SIZE)));
 
-        GlobalTestConfig* gtc;
-        std::vector<std::thread> persisters;
-        std::vector<hwloc_obj_t> persister_affinities;
-        std::atomic<bool> exit;
-        Signal* signals;
-        // TODO: explain in comment what's going on here.
-        void persister_main(int worker_id);
-    public:
-        PerThreadDedicatedWait(BufferedWB* _con, GlobalTestConfig* _gtc);
-        ~PerThreadDedicatedWait();
-        void help_persist_local(uint64_t c);
-    };
+    //     GlobalTestConfig* gtc;
+    //     std::vector<std::thread> persisters;
+    //     std::vector<hwloc_obj_t> persister_affinities;
+    //     std::atomic<bool> exit;
+    //     Signal* signals;
+    //     // TODO: explain in comment what's going on here.
+    //     void persister_main(int worker_id);
+    // public:
+    //     PerThreadDedicatedWait(BufferedWB* _con, GlobalTestConfig* _gtc);
+    //     ~PerThreadDedicatedWait();
+    //     void help_persist_local(uint64_t c);
+    // };
 
-    class PerThreadDedicatedBusy : public Persister{
-        struct Signal {
-            std::atomic<int> curr;
-            std::atomic<int> ack;
-            uint64_t epoch = INIT_EPOCH;
-        }__attribute__((aligned(CACHE_LINE_SIZE)));
+    // class PerThreadDedicatedBusy : public Persister{
+    //     struct Signal {
+    //         std::atomic<int> curr;
+    //         std::atomic<int> ack;
+    //         uint64_t epoch = INIT_EPOCH;
+    //     }__attribute__((aligned(CACHE_LINE_SIZE)));
 
-        GlobalTestConfig* gtc;
-        std::vector<std::thread> persisters;
-        std::vector<hwloc_obj_t> persister_affinities;
-        std::atomic<bool> exit;
-        Signal* signals;
-        // TODO: explain in comment what's going on here.
-        void persister_main(int worker_id);
-    public:
-        PerThreadDedicatedBusy(BufferedWB* _con, GlobalTestConfig* _gtc);
-        ~PerThreadDedicatedBusy();
-        void help_persist_local(uint64_t c);
-    };
+    //     GlobalTestConfig* gtc;
+    //     std::vector<std::thread> persisters;
+    //     std::vector<hwloc_obj_t> persister_affinities;
+    //     std::atomic<bool> exit;
+    //     Signal* signals;
+    //     // TODO: explain in comment what's going on here.
+    //     void persister_main(int worker_id);
+    // public:
+    //     PerThreadDedicatedBusy(BufferedWB* _con, GlobalTestConfig* _gtc);
+    //     ~PerThreadDedicatedBusy();
+    //     void help_persist_local(uint64_t c);
+    // };
 
-    class WorkerThreadPersister : public Persister{
-    public:
-        WorkerThreadPersister(BufferedWB* _con) : Persister(_con) {}
-        void help_persist_local(uint64_t c);
-    };
+    // class WorkerThreadPersister : public Persister{
+    // public:
+    //     WorkerThreadPersister(BufferedWB* _con) : Persister(_con) {}
+    //     void help_persist_local(uint64_t c);
+    // };
 
     // FixedCircBufferContainer<pds::pair<void*, size_t>>* container = nullptr;
     FixedContainer<pds::pair<void*, size_t>>* container = nullptr;
     GlobalTestConfig* gtc;
-    Persister* persister = nullptr;
-    padded<int>* counters = nullptr;
-    padded<std::mutex>* locks = nullptr;
+    // Persister* persister = nullptr;
     int task_num;
     int buffer_size = 2048;
-    int dump_size = 1024;
     static void do_persist(pds::pair<void*, size_t>& addr_size);
-    void dump(uint64_t c);
+    // void dump(uint64_t c);
 public:
     BufferedWB (GlobalTestConfig* _gtc): gtc(_gtc), task_num(_gtc->task_num){
-        
         if (gtc->checkEnv("BufferSize")){
             buffer_size = stoi(gtc->getEnv("BufferSize"));
         } else {
             buffer_size = 2048;
         }
-        dump_size = buffer_size / 2;
-        if (gtc->checkEnv("DumpSize")){
-            dump_size = stoi(gtc->getEnv("DumpSize"));
-        }
-        assert(buffer_size >= dump_size);
-        assert(buffer_size > 1 && dump_size > 1);
         // persister = new WorkerThreadPersister(this);
         if (gtc->checkEnv("Container")){
             std::string env_container = gtc->getEnv("Container");
@@ -229,26 +219,26 @@ public:
             container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
         }
         
-        if (gtc->checkEnv("Persister")){
-            std::string env_persister = gtc->getEnv("Persister");
-            if (env_persister == "PerThreadBusy"){
-                persister = new PerThreadDedicatedBusy(this, gtc);
-            } else if (env_persister == "PerThreadWait"){
-                persister = new PerThreadDedicatedWait(this, gtc); 
-            } else if (env_persister == "Worker"){
-                persister = new WorkerThreadPersister(this);
-            } else {
-                errexit("unsupported persister type by BufferedWB");
-            }
-        } else {
-            persister = new WorkerThreadPersister(this);
-        }
+        // if (gtc->checkEnv("Persister")){
+        //     std::string env_persister = gtc->getEnv("Persister");
+        //     if (env_persister == "PerThreadBusy"){
+        //         persister = new PerThreadDedicatedBusy(this, gtc);
+        //     } else if (env_persister == "PerThreadWait"){
+        //         persister = new PerThreadDedicatedWait(this, gtc); 
+        //     } else 
+        //     if (env_persister == "Worker"){
+        //         persister = new WorkerThreadPersister(this);
+        //     } else {
+        //         errexit("unsupported persister type by BufferedWB");
+        //     }
+        // } else {
+        //     persister = new WorkerThreadPersister(this);
+        // }
         
     }
     ~BufferedWB(){
         delete container;
-        delete counters;
-        delete persister;
+        // delete persister;
     }
     void push(pds::pair<void*, size_t> entry, uint64_t c);
     void register_persist(PBlk* blk, size_t sz, uint64_t c);
