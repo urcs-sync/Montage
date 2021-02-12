@@ -400,12 +400,12 @@ public:
             }
             pds::pair<void*, size_t> res = exp;
             func(res);
-            // we're not using CAS here because pop_all will only be called
-            // by persist-epoch, which means the overwritten content is either
-            // aborted or persisted already.
-            // also, there won't be any correctness issues if we don't overwrite
+            // we need to use CAS rather than a store here because we may get preempted
+            // here and wake up several epochs later.
+            // but, there won't be any correctness issues if we don't overwrite
             // with 0; we're only doing this to prevent redundant persisting.
-            payloads[i]->store(pds::pair<void*, size_t>({nullptr, 0}));
+
+            // payloads[i]->compare_exchange_strong(exp, pds::pair<void*, size_t>({nullptr, 0}));
         }
     }
     void clear(){
