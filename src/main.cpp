@@ -102,13 +102,6 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new MontageStackFactory<string>(), "MontageTreiberStack");
 
 
-
-	/* stacks */
-	gtc.addRideableOption(new TreiberStackFactory<string>(), "TreiberStack");
-	gtc.addRideableOption(new PTreiberStackFactory<string>(), "PTreiberStack");
-	gtc.addRideableOption(new MontageStackFactory<string>(), "MontageTreiberStack");
-
-
 	/* queues */
 	// gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
 	// gtc.addRideableOption(new FriedmanQueueFactory<string>(), "FriedmanQueue");//comparison
