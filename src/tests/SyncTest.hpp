@@ -9,6 +9,8 @@ class MapSyncTest: public MapChurnTest<K,V>{
 public:
     Recoverable* rec;
     int fs;
+    int ft;
+    int sync_cnt = 0;
     int range;
 
     MapSyncTest(int p_gets, int p_puts, int p_inserts, int p_removes, 
@@ -29,6 +31,11 @@ public:
         } else {
             gtc->setEnv("SyncFreq", "5");
             fs = 5;
+        }
+        if (gtc->checkEnv("TimedSyncFreq")){
+            ft = stoi(gtc->getEnv("TimedSyncFreq"));
+        } else {
+            ft = 0;
         }
     }
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
@@ -59,8 +66,17 @@ public:
             this->operation(r, p, tid);
 
             if (fs != 0 && abs((long)gen_s())%fs == 0){
-                // std::cout<<"sync called."<<std::endl;
-                rec->sync();
+                if (ft && tid == 0 && ++sync_cnt % ft == 0){
+                    auto before = std::chrono::high_resolution_clock::now();
+                    rec->sync();
+                    std::cout<<"sync() latency:"<<
+                        std::chrono::duration_cast<std::chrono::microseconds>(
+                            chrono::high_resolution_clock::now()-before).count()
+                        << "ms"<<std::endl;
+                        
+                } else {
+                    rec->sync();
+                }
             }
 
             ops++;
