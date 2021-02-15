@@ -44,8 +44,8 @@ private:
     RCUTracker<Node> tracker;
     //TODO : must be thread private
     padded<MarkPtr*> *prev;
-    padded<MarkPtr> *curr;
-    padded<MarkPtr> *next;
+    padded<Node*> *curr;
+    padded<Node*> *next;
 
     const uint64_t MARK_MASK = ~0x1;
 
@@ -70,8 +70,8 @@ public:
     SSHashTable(int task_num) : tracker(task_num, 100, 1000, true){
         buckets = new padded<MarkPtr>[size.load()] {};
         prev = new padded<MarkPtr*>[task_num];
-        curr = new padded<MarkPtr>[task_num];
-        next = new padded<MarkPtr>[task_num];
+        curr = new padded<Node*>[task_num];
+        next = new padded<Node*>[task_num];
     };
     ~SSHashTable(){};
 
@@ -125,6 +125,14 @@ K SSHashTable<K, V>::so_regularkey(K key)
     return reverse_bits(key | (1ULL << (sizeof(K) * 8 - 1)));
 }
 
+
+template <class K, class V>
+K SSHashTable<K, V>::so_dummykey(K key)
+{
+    return reverse_bits(key);
+}
+
+
 template <class K, class V>
 void SSHashTable<K, V>::initialize_bucket(int bucket, int tid)
 {
@@ -141,7 +149,7 @@ void SSHashTable<K, V>::initialize_bucket(int bucket, int tid)
     if (!list_insert(&(buckets[parent].ui), dummy, tid))
     {
         delete dummy;
-        dummy = curr[tid].ui.ptr.load();
+        dummy = curr[tid].ui;
     }
 
     Node* expected = nullptr;
@@ -302,7 +310,7 @@ bool SSHashTable<K, V>::list_find(MarkPtr* head, K key, int tid)
 
         prev[tid].ui = head;
 
-        curr[tid].ui = getPtr(prev[tid].ui->ptr.load());
+        curr[tid].ui = prev[tid].ui->ptr.load();
 
         while (true)
         { //to lock old and curr
@@ -322,7 +330,7 @@ bool SSHashTable<K, V>::list_find(MarkPtr* head, K key, int tid)
             }
             else
             {
-                if (prev[tid].ui->ptr.compare_exchange_strong(curr[tid].ui, next))
+                if (prev[tid].ui->ptr.compare_exchange_strong(curr[tid].ui, curr[tid].ui))
                 {
                     tracker.retire(curr[tid].ui, tid);
                 }
@@ -331,7 +339,7 @@ bool SSHashTable<K, V>::list_find(MarkPtr* head, K key, int tid)
                     break; //retry
                 }
             }
-            curr[tid].ui = next;
+            curr[tid].ui = next[tid].ui;
         }
     }
 }
