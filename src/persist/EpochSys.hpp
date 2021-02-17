@@ -161,7 +161,7 @@ public:
         }
     }
 
-    ~EpochSys(){
+    virtual ~EpochSys(){
         // std::cout<<"epochsys descructor called"<<std::endl;
         trans_tracker->finalize();
         // flush(); // flush is done in epoch_advancer's destructor.

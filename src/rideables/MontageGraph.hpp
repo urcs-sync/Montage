@@ -24,7 +24,7 @@
 /**
  * SimpleGraph class.  Labels are of templated type K.
  */
-template <size_t numVertices = 1024, size_t meanEdgesPerVertex=20, size_t vertexLoad=50>
+template <int numVertices = 1024, int meanEdgesPerVertex=20, int vertexLoad=50>
 class MontageGraph : public RGraph, public Recoverable{
 
     public:
@@ -500,7 +500,7 @@ class MontageGraph : public RGraph, public Recoverable{
             bool retval = true;
             // Randomly sample vertices...
             std::vector<int> vec;
-            for (size_t i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
+            for (int i = 0; i < meanEdgesPerVertex * 100 / vertexLoad; i++) {
                 int u = uniformVertex(vertexGen);
                 if (u == i) {
                     continue;
