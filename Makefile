@@ -162,7 +162,7 @@ CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-
 # define these build configurations).
 # To run a build, e.g. release, you would invoke:
 # make release
-BUILDS :=release debug ngc release32 debug32 mnemosyne pronto-full pronto-sync graph-rec
+BUILDS :=release debug ngc release32 debug32 mnemosyne pronto-full pronto-sync pronto-buf graph-rec
 DEFAULT_BUILD :=release
 
 # -------------------------------
@@ -200,6 +200,17 @@ LDIRS+=$(PRONTO_PATH)/src
 LIBS+=-lsavitar_sync -lpmem -luuid -lstdc++fs -lstdc++
 CFLAGS+=-DPRONTO -fno-stack-protector -U__STRICT_ANSI__ -DPRONTO_SYNC
 CXXFLAGS+=-DPRONTO -fno-stack-protector -U__STRICT_ANSI__ -DPRONTO_SYNC
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
+ifeq ($(BUILD),pronto-buf)
+IDIRS+=$(PRONTO_PATH)/src
+LDIRS+=$(PRONTO_PATH)/src
+LIBS+=-lsavitar_buf -lpmem -luuid -lstdc++fs -lstdc++
+CFLAGS+=-DPRONTO -fno-stack-protector -U__STRICT_ANSI__ -DPRONTO_BUF
+CXXFLAGS+=-DPRONTO -fno-stack-protector -U__STRICT_ANSI__ -DPRONTO_BUF
 # we can add additional release customization here
 # e.g. link against different libraries, 
 # define enviroment vars, etc.

@@ -14,7 +14,11 @@ typedef struct RedoLog {
     uint64_t checksum;
     uuid_t object_id;
     uint64_t size;
+#ifndef PRONTO_BUF
     uint64_t head;
+#else
+    uint64_t ltail;
+#endif
     uint64_t tail;
     uint64_t last_commit;
     uint64_t snapshot_lock; // temporary value

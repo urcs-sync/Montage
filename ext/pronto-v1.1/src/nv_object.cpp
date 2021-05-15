@@ -73,6 +73,44 @@ inline bool operator< (const CommitRecord& lhs, const CommitRecord& rhs) {
     return lhs.getCommitId() > rhs.getCommitId(); // Force ASC order for priority queue
 }
 
+#ifdef PRONTO_BUF
+uint64_t PersistentObject::log_cleanup(uint64_t head, uint64_t tail) {
+    char *ptr = (char *) head;
+    // if commit is not the last valid in the log
+    while (*((uint64_t *) ptr) != last_played_commit_id) {
+        // if the next commit should be aborted, wipe the magic
+        if (*((uint64_t *) ptr) > last_played_commit_id) {
+            *((uint64_t *) ptr) = 0;
+            ptr += sizeof(uint64_t);
+            *((uint64_t *) ptr) = 0;
+            ptr += sizeof(uint64_t);
+        // If the next section should be ignored
+        } else if (*((uint64_t *) (ptr + sizeof(uint64_t))) == 0){
+            // Get the pointer of where the magic should be
+            ptr += sizeof(uint64_t);
+            while (*((uint64_t *) ptr) != REDO_LOG_MAGIC) {
+                ptr += CACHE_LINE_WIDTH;
+            }
+            // Reset the pointer to commit id
+            ptr -= sizeof(uint64_t);
+            continue;
+        } else {
+            ptr += 2 * sizeof(uint64_t);
+        }
+        uint64_t method_tag = *((uint64_t *) ptr);
+        ptr += sizeof(uint64_t);
+        size_t bytes_processed = sizeof(uuid_t);
+        if ((method_tag & NESTED_TX_TAG) == 0) { // dry run
+            bytes_processed = Play(method_tag, (uint64_t *)ptr, true);
+        }
+        ptr += bytes_processed;
+        ptr += CACHE_LINE_WIDTH - ((24 + bytes_processed) % CACHE_LINE_WIDTH);
+    }
+    pmem_persist((char *) head, tail - head);
+    return (ptr - (char *) log);
+}
+#endif
+
 /*
  * [General rules]
  * NVM manager is responsible for recovering all persistent objects through calling their Recover()
@@ -115,7 +153,11 @@ void PersistentObject::Recover() {
 
     // Calculating head and limit pointers
     uint64_t logHead = RecoveryContext::getInstance().queryLogHeadOffset(uuid_str);
+#ifndef PRONTO_BUF
     if (logHead == 0) logHead = log->head;
+#else
+    if (logHead == 0) logHead = sizeof(SavitarLog);
+#endif
     char *ptr = (char *)log + logHead;
     const char *limit = (char *)log + log->tail;
 
@@ -124,7 +166,11 @@ void PersistentObject::Recover() {
     memcpy(uuid_prefix, uuid_str, 8);
     uuid_prefix[8] = '\0';
     PRINT("[%s] Started recovering %s\n", uuid_prefix, uuid_str);
+#ifndef PRONTO_BUF
     PRINT("[%s] Log head: %zu\n", uuid_prefix, log->head);
+#else
+    PRINT("[%s] Log head: %zu\n", uuid_prefix, sizeof(SavitarLog));
+#endif
     PRINT("[%s] New head: %zu\n", uuid_prefix, logHead);
     PRINT("[%s] Log tail: %zu\n", uuid_prefix, log->tail);
 
@@ -139,6 +185,7 @@ void PersistentObject::Recover() {
         ptr += sizeof(uint64_t);
 
         uint64_t magic = *((uint64_t *)ptr);
+#ifndef PRONTO_BUF
         if (commit_id == 0 && magic != REDO_LOG_MAGIC) { // partial transaction
             do {
                 ptr += CACHE_LINE_WIDTH;
@@ -146,6 +193,17 @@ void PersistentObject::Recover() {
             } while (magic != REDO_LOG_MAGIC);
         }
         // TODO bug fix: update commit_id when skipping partial transactions
+#else
+        if (magic != REDO_LOG_MAGIC) { // partial transaction
+            while (magic != REDO_LOG_MAGIC && ptr < limit) {
+                ptr += CACHE_LINE_WIDTH;
+                commit_id = *((uint64_t *)(ptr - sizeof(uint64_t)));
+                magic = *((uint64_t *)ptr);
+            }
+        }
+
+        if (ptr < limit) {
+#endif
 
         ptr += sizeof(uint64_t);
         assert(magic == REDO_LOG_MAGIC);
@@ -165,6 +223,10 @@ void PersistentObject::Recover() {
         // 3. Update iterator to point to the next entry
         ptr += bytes_processed;
         ptr += CACHE_LINE_WIDTH - ((24 + bytes_processed) % CACHE_LINE_WIDTH);
+
+#ifdef PRONTO_BUF
+        }
+#endif
 
         // 4. Use the priority queue to play entries in order
         while (!commit_queue.empty() &&
@@ -203,6 +265,17 @@ void PersistentObject::Recover() {
         }
     }
 
+#ifndef PRONTO_BUF
     assert(commit_queue.empty());
+#else
+    if (!commit_queue.empty()) {
+        PRINT("[%s] Detected invalid log entries, attempting log cleanup\n", uuid_prefix);
+        log->tail = log_cleanup(uint64_t (((char *) log) + logHead), log->tail);
+        log->last_commit = last_played_commit_id;
+        pmem_persist(log, sizeof(SavitarLog));
+        PRINT("[%s] Log cleanup complete\n", uuid_prefix);
+    }
+    log->ltail = log->tail;
+#endif
     PRINT("[%s] Finished recovering %s\n", uuid_prefix, uuid_str);
 }

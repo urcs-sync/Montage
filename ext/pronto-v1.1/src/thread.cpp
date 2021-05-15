@@ -147,12 +147,16 @@ void Savitar_core_free(int core_id) {
  */
 static __thread NvMethodCall *sync_buffer;
 
+#ifndef PRONTO_BUF
 /*
  * Contains offset of redo-log entries for active transactions
  * tx_buffer[0]: number of active transactions for current thread
  * tx_buffer[1+]: redo-log offset
  */
 static __thread uint64_t *tx_buffer;
+#else
+static __thread uint64_t buffer_head = 0;
+#endif
 
 static void *routine_wrapper(void *arg) {
 
@@ -185,8 +189,17 @@ static void *routine_wrapper(void *arg) {
         NVManager::getInstance().lock();
         NVManager::getInstance().unregisterThread(pthread_self());
         NVManager::getInstance().unlock();
+#ifndef PRONTO_BUF
         assert(tx_buffer[0] == 0); // No active transactions
         cfg->buffer[0].method_tag = UINT64_MAX; // Signals logger thread to terminate
+#else
+        // Wait for active transactions
+        while (tx_buffer[0] > 0) {
+            PRINT("[%d] Waiting for log persist: %lu remaining txs\n",
+                    (int)thread, tx_buffer[0]);
+        };
+        cfg->tx_buffer[0] = UINT64_MAX; // Signals logger thread to terminate
+#endif
 // #ifndef SYNC_SL
         Savitar_core_free(cfg->core_id);
 // #endif // SYNC_SL
@@ -209,9 +222,17 @@ int Savitar_thread_create(pthread_t *thread, const pthread_attr_t *attr,
     memset(buffer, 0, sizeof(NvMethodCall) * MAX_ACTIVE_TXS);
 
     // Allocate transaction buffer
+#ifndef PRONTO_BUF
     uint64_t *tx_buffer = (uint64_t *)calloc(MAX_ACTIVE_TXS + 1, sizeof(uint64_t));
+#else
+    uint64_t *tx_buffer = (uint64_t *)malloc(sizeof(uint64_t));
+#endif
     assert(tx_buffer != NULL);
+#ifndef PRONTO_BUF
     memset(tx_buffer, 0, sizeof(uint64_t) * (MAX_ACTIVE_TXS + 1));
+#else
+    *tx_buffer = 0;
+#endif
 
     // Get cores which host main and logger threads
     int core_ids[2];
@@ -316,24 +337,45 @@ void Savitar_thread_notify(int num, ...) {
         context.pushParentObject(me);
         return;
     }
+#ifndef PRONTO_BUF
     assert(tx_buffer[0] < MAX_ACTIVE_TXS);
 
     sync_buffer[tx_buffer[0]].obj_ptr = object_ptr;
+#else
+    // Wait on buffer slot if buffer is full
+    while (tx_buffer[0] >= MAX_ACTIVE_TXS) {
+        PRINT("[%d] transaction buffer full, waiting for insert\n", (int) pthread_self());
+    };
+   
+    sync_buffer[buffer_head].obj_ptr = object_ptr;
+#endif
     for (int i = 2; i < num; i++) {
+#ifndef PRONTO_BUF
         sync_buffer[tx_buffer[0]].arg_ptrs[i - 2] = va_arg(valist, uint64_t);
+#else
+        sync_buffer[buffer_head].arg_ptrs[i - 2] = va_arg(valist, uint64_t);
+#endif
     }
     va_end(valist);
 
+#ifndef PRONTO_BUF
     tx_buffer[0]++;
     tx_buffer[tx_buffer[0]] = 0;
+#endif
 #ifndef SYNC_SL
     asm volatile("sfence" : : : "memory");
 #endif // SYNC_SL
 
     // Don't wait if inside a nested transaction
+#ifndef PRONTO_BUF
     if (tx_buffer[0] == 1 && obj->isWaitingForSnapshot()) {
+#else
+    if (obj->isWaitingForSnapshot()) {
+#endif
         PRINT("[%d] Worker thread is now blocked!\n", (int)pthread_self());
+#ifndef PRONTO_BUF
         tx_buffer[0] = 0;
+#endif
         pthread_mutex_t *ckptLock = NVManager::getInstance().ckptLock();
         pthread_cond_t *ckptCond = NVManager::getInstance().ckptCondition();
         pthread_mutex_lock(ckptLock);
@@ -341,11 +383,22 @@ void Savitar_thread_notify(int num, ...) {
             pthread_cond_wait(ckptCond, ckptLock);
         }
         pthread_mutex_unlock(ckptLock);
+#ifndef PRONTO_BUF
         tx_buffer[0] = 1;
+#endif
         PRINT("[%d] Worker thread is now unblocked!\n", (int)pthread_self());
     }
 
+#ifndef PRONTO_BUF
     sync_buffer[tx_buffer[0] - 1].method_tag = method_tag;
+#else
+    sync_buffer[buffer_head].method_tag = method_tag;
+    // no need for tx_buffer[i] = 0; anymore, as commit_id is set in the persister
+    __sync_add_and_fetch(tx_buffer, 1);
+
+    // update the buffer head to behave like a circular queue
+    buffer_head = (buffer_head + 1) % MAX_ACTIVE_TXS;
+#endif
 #ifdef SYNC_SL
     Savitar_persister_log(tx_buffer[0] - 1);
     PRINT("[%d] Finished creating synchronous semantic log\n", (int)pthread_self());
@@ -375,11 +428,13 @@ void Savitar_thread_wait(PersistentObject *object, SavitarLog *log) {
         RecoveryContext::getInstance().popParentObject();
         return;
     }
+#ifndef PRONTO_BUF
 #ifndef SYNC_SL
     while (sync_buffer[tx_buffer[0] - 1].method_tag != 0) { }
 #endif // SYNC_SL
     assert(tx_buffer[0] > 0);
     Savitar_log_commit(log, tx_buffer[tx_buffer[0]--]);
+#endif // PRONTO_BUF
 #ifdef DEBUG
     cycles[3] = rdtscp();
     fprintf(stdout, "%zu,%zu,%zu,%zu\n",
@@ -389,3 +444,9 @@ void Savitar_thread_wait(PersistentObject *object, SavitarLog *log) {
             cycles[3] - cycles[2]);
 #endif
 }
+
+#ifdef PRONTO_BUF
+int tx_buffer_empty() {
+    return *tx_buffer == 0;
+}
+#endif

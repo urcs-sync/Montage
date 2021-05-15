@@ -5,6 +5,10 @@
 #include "AllocatorMacro.hpp"
 #include "Persistent.hpp"
 
+#ifdef PRONTO_BUF
+#include "savitar.hpp"
+#endif
+
 class ChurnTest : public Test{
 #ifdef PRONTO
 	// some necessary var and func for running pronto
@@ -158,6 +162,10 @@ int ChurnTest::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
 		// TODO: replace this with __rdtsc
 		// or use hrtimer (high-resolution timer API in linux.)
 	}
+#ifdef PRONTO_BUF
+	// Wait for buffered persist to complete
+	while (!tx_buffer_empty()) {};
+#endif
 	return ops;
 }
 

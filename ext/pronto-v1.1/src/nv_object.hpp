@@ -1,6 +1,9 @@
 #pragma once
 
 #include <uuid/uuid.h>
+#ifdef PRONTO_BUF
+#include <libpmem.h>
+#endif
 #include <assert.h>
 #include <cstdio>
 #include <cstdlib>
@@ -81,9 +84,19 @@ class PersistentObject {
             return true;
         }
 
+#ifdef PRONTO_BUF
+        SavitarLog *getLog() {
+            return log;
+        }
+#endif
+
     protected:
         // Called by NVM Manager during the recovery process
         void Recover();
+
+#ifdef PRONTO_BUF
+        uint64_t log_cleanup(uint64_t head, uint64_t tail);
+#endif
 
         // Called by the NVM Manager through Recover()
         virtual size_t Play(uint64_t tag, uint64_t *args, bool dry) = 0;

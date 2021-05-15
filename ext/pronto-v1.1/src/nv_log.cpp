@@ -53,7 +53,11 @@ SavitarLog *Savitar_log_create(uuid_t id, size_t size) {
         uuid_copy(log->object_id, id);
         assert(sizeof(struct RedoLog) == CACHE_LINE_WIDTH);
         log->tail = sizeof(struct RedoLog);
+#ifndef PRONTO_BUF
         log->head = log->tail;
+#else
+        log->ltail = log->tail;
+#endif
         log->last_commit = 0;
         log->snapshot_lock = 0;
         log->checksum = CHECKSUM(log);
@@ -83,19 +87,33 @@ uint64_t Savitar_log_append(struct RedoLog *log, ArgVector *v, size_t v_size) {
         entry_size += CACHE_LINE_WIDTH - (entry_size % CACHE_LINE_WIDTH);
     }
 
+#ifndef PRONTO_BUF
     uint64_t offset = __sync_fetch_and_add(&log->tail, entry_size);
+#else
+    uint64_t offset = __sync_fetch_and_add(&log->ltail, entry_size);
+#endif
     assert(offset + entry_size <= log->size);
     char *dst = (char *)log + offset + sizeof(uint64_t); // Hole for commit_id
 
+#ifndef PRONTO_BUF
     pmem_memcpy_nodrain(dst, &LogMagic, sizeof(LogMagic));
+#else
+    *((uint64_t *) dst) = LogMagic;
+#endif
     dst += sizeof(uint64_t);
     for (size_t i = 0; i < v_size; i++) {
+#ifndef PRONTO_BUF
         pmem_memcpy_nodrain(dst, v[i].addr, v[i].len);
+#else
+        memcpy(dst, v[i].addr, v[i].len);
+#endif
         dst += v[i].len;
     }
 
+#ifndef PRONTO_BUF
     pmem_drain();
     pmem_persist(&log->tail, sizeof(log->tail));
+#endif
 
     return offset;
 }

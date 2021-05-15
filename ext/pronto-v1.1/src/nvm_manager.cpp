@@ -205,7 +205,11 @@ void *NVManager::buildAbortChains(void *arg) {
 
 
     uint64_t max_committed_tx = 0;
+#ifndef PRONTO_BUF
     uint64_t offset = log->head;
+#else
+    uint64_t offset = sizeof(SavitarLog);
+#endif
     const char *data = (const char *)object->log;
     while (offset < log->tail) {
         assert(offset % CACHE_LINE_WIDTH == 0);

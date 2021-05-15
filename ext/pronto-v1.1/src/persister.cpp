@@ -1,4 +1,7 @@
 #include <stdio.h>
+#ifdef PRONTO_BUF
+#include <libpmem.h>
+#endif
 #include "persister.hpp"
 #include "nv_object.hpp"
 #include "thread.hpp"
@@ -19,6 +22,7 @@ void *Savitar_persister_worker(void *arg) {
     int thread_id = ((TxBuffers *)arg)->thread_id;
     PersistentObject *nv_object = NULL;
 
+#ifndef PRONTO_BUF
     /*
      * [Support for nested transactions]
      * Transaction ID for the first uncommitted transaction
@@ -96,6 +100,78 @@ void *Savitar_persister_worker(void *arg) {
         asm volatile("mfence" : : : "memory");
         buffer[active_tx_id].method_tag = 0;
     }
+#else // ifndef PRONTO_BUF
+    PersistentObject *last_object = NULL;
+    uint64_t logical_buffer_head = 0;
+    uint64_t active_txs_count = 0;
+
+
+    while (true) {
+        SavitarLog *log = NULL;
+        uint64_t log_offset;
+        uint64_t cached_tail;
+        uint64_t cached_ltail;
+        uint64_t commit_id;
+        uint64_t *ptr;
+        // if waiting on operation or unsaved exceeds limit, persist last log
+        if (last_object && (tx_buffer[0] == 0 || active_txs_count >= MAX_ACTIVE_TXS)) {
+            log = last_object->getLog();
+            cached_tail = log->tail;
+            cached_ltail = log->ltail;
+            pmem_persist((char *)log + cached_tail, cached_ltail - cached_tail);
+            while(__sync_val_compare_and_swap(&log->tail, cached_tail, cached_ltail) < cached_ltail) {
+                cached_tail = log->tail;
+            };
+            pmem_persist(&log->tail, sizeof(log->tail));
+            active_txs_count = 0;
+        }
+
+        // Wait for buffer to contain transaction
+        while (tx_buffer[0] == 0) {
+            continue;
+        }
+
+        // Check for TERM signal from main thread
+        if (tx_buffer[0] == UINT64_MAX) {
+            PRINT("[%d] Received TERM signal from the main thread\n", thread_id);
+            break;
+        }
+
+        nv_object = (PersistentObject *)buffer[logical_buffer_head].obj_ptr;
+        // if data structures changed, force persist
+        if (nv_object != last_object && active_txs_count > 0 && last_object) {
+            log = last_object->getLog();
+            cached_tail = log->tail;
+            cached_ltail = log->ltail;
+            pmem_persist((char *)log + log->tail, log->ltail - log->tail);
+            while(__sync_val_compare_and_swap(&log->tail, cached_tail, cached_ltail) < cached_ltail) {
+                cached_tail = log->tail;
+            };
+            pmem_persist(&log->tail, sizeof(log->tail));
+            // store the tail of the new object
+            active_txs_count = 0;
+        }
+
+        // Logging
+        log = nv_object->getLog();
+        log_offset = nv_object->Log(buffer[logical_buffer_head].method_tag,
+                                    buffer[logical_buffer_head].arg_ptrs);
+        commit_id = __sync_add_and_fetch(&log->last_commit, 1);
+        assert(commit_id < UINT64_MAX);
+        ptr = (uint64_t *) ((char *) log + log_offset);
+        *ptr = commit_id;
+        //pmem_persist(ptr, sizeof(commit_id));
+        PRINT("* [%d] Marked log entry (%zu) as committed with id = %zu\n",
+                (int)pthread_self(), log_offset, commit_id);
+        buffer[logical_buffer_head].method_tag = 0;
+        __sync_sub_and_fetch(tx_buffer, 1);
+
+        // increment logical buffer head to next position
+        last_object = nv_object;
+        logical_buffer_head = (logical_buffer_head + 1) % MAX_ACTIVE_TXS;
+        active_txs_count++;
+    }
+#endif
 
     return NULL;
 }

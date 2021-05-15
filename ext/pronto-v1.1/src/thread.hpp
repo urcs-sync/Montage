@@ -43,3 +43,9 @@ void Savitar_thread_notify(int, ...);
  * through calling this function.
  */
 void Savitar_thread_wait(PersistentObject *, SavitarLog *log);
+
+#ifdef PRONTO_BUF
+static __thread uint64_t *tx_buffer;
+
+int tx_buffer_empty();
+#endif

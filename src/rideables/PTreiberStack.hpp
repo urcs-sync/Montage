@@ -12,6 +12,7 @@
 #include "CustomTypes.hpp"
 
 using namespace std;
+using namespace persist_func;
 
 template <typename T>
 class PTreiberStack : public RStack<T>

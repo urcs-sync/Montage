@@ -140,6 +140,8 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new MneHashTableFactory<string>(), "MneHashTable");
 #endif
 #ifdef PRONTO
+	PersistentFactory::registerFactory<ProntoQueue>();
+	PersistentFactory::registerFactory<ProntoHashTable>();
 	gtc.addRideableOption(new ProntoQueueFactory(), "ProntoQueue");
 	gtc.addRideableOption(new ProntoHashTableFactory(), "ProntoHashTable");
 #endif
@@ -185,7 +187,11 @@ int main(int argc, char *argv[])
   #ifdef PRONTO_SYNC
 		rideable_name = "Sync"+rideable_name;
   #else
+    #ifdef PRONTO_BUF
+		rideable_name = "Buffered"+rideable_name;
+    #else
 		rideable_name = "Full"+rideable_name;
+    #endif
   #endif
 #endif
 		printf("%d,%ld,%s,%s\n",gtc.task_num,(uint64_t)(gtc.total_operations/gtc.interval),rideable_name.c_str(),gtc.getTestName().c_str());
