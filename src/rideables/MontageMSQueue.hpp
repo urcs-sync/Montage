@@ -12,7 +12,7 @@
 #include "Recoverable.hpp"
 
 template<typename T>
-class MontageMSQueue : public RQueue<T>, Recoverable{
+class MontageMSQueue : public RQueue<T>, public Recoverable{
 public:
     class Payload : public pds::PBlk{
         GENERATE_FIELD(T, val, Payload);
@@ -55,7 +55,7 @@ private:
     pds::atomic_lin_var<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
 
 public:
     MontageMSQueue(GlobalTestConfig* gtc): 
@@ -63,7 +63,7 @@ public:
         tracker(gtc->task_num, 100, 1000, true){
 
         Node* dummy = new Node(this);
-        head.store(dummy);
+        head.store(this,dummy);
         tail.store(dummy);
     }
 
@@ -91,12 +91,12 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
         // Node* cur_head = head.load();
         cur_tail = tail.load();
         uint64_t s = global_sn.fetch_add(1);
-        pds::lin_var next = cur_tail->next.load(this);
+        Node* next = cur_tail->next.load(this);
         if(cur_tail == tail.load()){
-            if(next.get_val<Node*>() == nullptr) {
+            if(next == nullptr) {
                 // directly set m_sn and BEGIN_OP will flush it
                 new_node->set_sn(s);
-                begin_op();
+                // begin_op();
                 /* set_sn must happen before PDELETE of payload since it's 
                  * before linearization point.
                  * Also, this must set sn in place since we still remain in
@@ -104,12 +104,12 @@ void MontageMSQueue<T>::enqueue(T v, int tid){
                  */
                 // new_node->set_sn(s);
                 if((cur_tail->next).CAS_verify(this, next, new_node)){
-                    end_op();
+                    // end_op();
                     break;
                 }
-                abort_op();
+                // abort_op();
             } else {
-                tail.compare_exchange_strong(cur_tail, next.get_val<Node*>()); // try to swing tail to next node
+                tail.compare_exchange_strong(cur_tail, next); // try to swing tail to next node
             }
         }
     }
@@ -122,12 +122,12 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
     optional<T> res = {};
     tracker.start_op(tid);
     while(true){
-        pds::lin_var cur_head = head.load(this);
+        Node* cur_head = head.load(this);
         Node* cur_tail = tail.load();
-        Node* next = cur_head.get_val<Node*>()->next.load_val(this);
+        Node* next = cur_head->next.load(this);
 
         if(cur_head == head.load(this)){
-            if(cur_head.get_val<Node*>() == cur_tail){
+            if(cur_head == cur_tail){
                 // queue is empty
                 if(next == nullptr) {
                     res.reset();
@@ -135,17 +135,17 @@ optional<T> MontageMSQueue<T>::dequeue(int tid){
                 }
                 tail.compare_exchange_strong(cur_tail, next); // tail is falling behind; try to update
             } else {
-                begin_op();
+                // begin_op();
                 Payload* payload = next->payload;// get payload for PDELETE
+                pretire(payload); // semantically we are tentatively removing next from queue
                 if(head.CAS_verify(this, cur_head, next)){
-                    res = (T)payload->get_val(this);// old see new is impossible
-                    pretire(payload); // semantically we are removing next from queue
-                    end_op();
-                    cur_head.get_val<Node*>()->payload = payload; // let payload have same lifetime as dummy node
-                    tracker.retire(cur_head.get_val<Node*>(), tid);
+                    res = (T)payload->get_unsafe_val(this);// old see new is impossible
+                    // end_op();
+                    cur_head->payload = payload; // let payload have same lifetime as dummy node
+                    tracker.retire(cur_head, tid);
                     break;
                 }
-                abort_op();
+                // abort_op();
             }
         }
     }

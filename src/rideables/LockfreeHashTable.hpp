@@ -39,7 +39,7 @@ private:
     padded<MarkPtr>* buckets=new padded<MarkPtr>[idxSize]{};
     bool findNode(MarkPtr* &prev, Node* &curr, Node* &next, K key, int tid);
 
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
 
     const uint64_t MARK_MASK = ~0x1;
     inline Node* getPtr(Node* mptr){

@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <omp.h>
 
 #include <iostream>
 #include <atomic>
@@ -18,8 +19,8 @@
 #include "CustomTypes.hpp"
 #include "Recoverable.hpp"
 
-template <class K, class V>
-class MontageLfHashTable : public RMap<K,V>, Recoverable{
+template <class K, class V, int idxSize=1000000>
+class MontageLfHashTable : public RMap<K,V>, public Recoverable{
 public:
     class Payload : public pds::PBlk{
         GENERATE_FIELD(K, key, Payload);
@@ -29,7 +30,7 @@ public:
         Payload(K x, V y): m_key(x), m_val(y){}
         Payload(const Payload& oth): pds::PBlk(oth), m_key(oth.m_key), m_val(oth.m_val){}
         void persist(){}
-    };
+    }__attribute__((aligned(CACHELINE_SIZE)));
 private:
     struct Node;
 
@@ -41,18 +42,24 @@ private:
 
     struct Node{
         MontageLfHashTable* ds;
-        K key;
         MarkPtr next;
         Payload* payload;// TODO: does it have to be atomic?
+        K key;
         Node(MontageLfHashTable* ds_, K k, V v, Node* n):
-            ds(ds_),key(k),next(n),payload(ds_->pnew<Payload>(k,v)){
+            ds(ds_),next(n),key(k){
+            payload = ds->pnew<Payload>(k,v);
             // assert(ds->epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
             };
+        Node(Payload* _payload) : payload(_payload),key(_payload->get_unsafe_key(ds)) {} // for recovery
+        K get_key(){
+            return key;
+        }
         ~Node(){
-            ds->preclaim(payload);
+            if(payload)
+                ds->preclaim(payload);
         }
 
-        void rm_payload(){
+        void retire_payload(){
             // call it before END_OP but after linearization point
             assert(payload!=nullptr && "payload shouldn't be null");
             ds->pretire(payload);
@@ -65,39 +72,124 @@ private:
         V get_unsafe_val(){
             return (V)payload->get_unsafe_val(ds);
         }
-    };
+    }__attribute__((aligned(CACHELINE_SIZE)));
     std::hash<K> hash_fn;
-    const int idxSize=1000000;//number of buckets for hash table
     padded<MarkPtr>* buckets=new padded<MarkPtr>[idxSize]{};
-    bool findNode(MarkPtr* &prev, pds::lin_var &curr, pds::lin_var &next, K key, int tid);
+    bool findNode(MarkPtr* &prev, Node* &curr, Node* &next, K key, int tid);
 
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
+    GlobalTestConfig* gtc;
 
     const uint64_t MARK_MASK = ~0x1;
-    inline pds::lin_var getPtr(const pds::lin_var& d){
-        return pds::lin_var(d.val & MARK_MASK, d.cnt);
+    inline Node* getPtr(Node* d){
+        return reinterpret_cast<Node*>((uint64_t)d & MARK_MASK);
     }
-    inline bool getMark(const pds::lin_var& d){
-        return (bool)(d.val & 1);
+    inline bool getMark(Node* d){
+        return (bool)((uint64_t)d & 1);
     }
-    inline pds::lin_var mixPtrMark(const pds::lin_var& d, bool mk){
-        return pds::lin_var(d.val | mk, d.cnt);
+    inline Node* mixPtrMark(Node* d, bool mk){
+        return reinterpret_cast<Node*>((uint64_t)d | mk);
     }
-    inline Node* setMark(const pds::lin_var& d){
-        return reinterpret_cast<Node*>(d.val | 1);
+    inline Node* setMark(Node* d){
+        return reinterpret_cast<Node*>((uint64_t)d | 1);
     }
 public:
-    MontageLfHashTable(GlobalTestConfig* gtc) : Recoverable(gtc), tracker(gtc->task_num, 100, 1000, true) {
+    MontageLfHashTable(GlobalTestConfig* gtc) : Recoverable(gtc), tracker(gtc->task_num, 100, 1000, true), gtc(gtc) {
     };
     ~MontageLfHashTable(){};
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         Recoverable::init_thread(gtc, ltc);
     }
-
+    void clear(){
+        //single-threaded; for recovery test only
+        for (uint64_t i = 0; i < idxSize; i++){
+            Node* curr = buckets[i].ui.ptr.load(this);
+            Node* next = nullptr;
+            while(curr){
+                next = curr->next.ptr.load(this);
+                delete curr;
+                curr = next;
+            }
+            buckets[i].ui.ptr.store(this,nullptr);
+        }
+    }
     int recover(bool simulated){
-        errexit("recover of MontageLfHashTable not implemented.");
-        return 0;
+        if (simulated){
+            recover_mode(); // PDELETE --> noop
+            // clear transient structures.
+            clear();
+            online_mode(); // re-enable PDELETE.
+        }
+
+        int rec_cnt = 0;
+        int rec_thd = gtc->task_num;
+        if (gtc->checkEnv("RecoverThread")){
+            rec_thd = stoi(gtc->getEnv("RecoverThread"));
+        }
+        auto begin = chrono::high_resolution_clock::now();
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd); 
+        auto end = chrono::high_resolution_clock::now();
+        auto dur = end - begin;
+        auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+        std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+        std::vector<Payload*> payloadVector;
+        payloadVector.reserve(recovered->size());
+        begin = chrono::high_resolution_clock::now();
+        for (auto itr = recovered->begin(); itr != recovered->end(); itr++){
+            rec_cnt++;
+            Payload* payload = reinterpret_cast<Payload*>(itr->second);
+            payloadVector.push_back(payload);
+        }
+        end = chrono::high_resolution_clock::now();
+        dur = end - begin;
+        auto dur_ms_vec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+        std::cout << "Spent " << dur_ms_vec << "ms building vector" << std::endl;
+        begin = chrono::high_resolution_clock::now();
+        std::vector<std::thread> workers;
+        for (int rec_tid = 0; rec_tid < rec_thd; rec_tid++) {
+            workers.emplace_back(std::thread([&, rec_tid]() {
+                Recoverable::init_thread(rec_tid);
+                hwloc_set_cpubind(gtc->topology,
+                                  gtc->affinities[rec_tid]->cpuset,
+                                  HWLOC_CPUBIND_THREAD);
+                for (size_t i = rec_tid; i < payloadVector.size(); i += rec_thd) {
+                    // re-insert payload.
+                    Node* tmpNode = new Node(payloadVector[i]);
+                    K key = tmpNode->get_key();
+                    size_t idx = hash_fn(key) % idxSize;
+                    MarkPtr* prev = nullptr;
+                    Node* curr;
+                    Node* next;
+                    while (true) {
+                        if (findNode(prev, curr, next, key, rec_tid)) {
+                            errexit("conflicting keys recovered.");
+                        } else {
+                            // does not exist, insert.
+                            tmpNode->next.ptr.store(this, curr);
+                            // begin_op();
+                            if (prev->ptr.CAS(this,curr, tmpNode)) {
+                                // end_op();
+                                break;
+                            }
+                            // abort_op();
+                        }
+                    }
+                }
+            }));  // workers.emplace_back()
+        }// for (rec_thd)
+        for (auto& worker : workers) {
+                if (worker.joinable()) {
+                    worker.join();
+                }
+        }
+        end = chrono::high_resolution_clock::now();
+        dur = end - begin;
+        auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+        std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
+        std::cout << "Total time to recover: " << dur_ms+dur_ms_vec+dur_ms_ins << "ms" << std::endl;
+        delete recovered;
+        return rec_cnt;
     }
 
     optional<V> get(K key, int tid);
@@ -116,64 +208,64 @@ class MontageLfHashTableFactory : public RideableFactory{
 
 
 //-------Definition----------
-template <class K, class V> 
-optional<V> MontageLfHashTable<K,V>::get(K key, int tid) {
+template <class K, class V, int idxSize> 
+optional<V> MontageLfHashTable<K,V,idxSize>::get(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    pds::lin_var curr;
-    pds::lin_var next;
+    Node* curr;
+    Node* next;
 
     tracker.start_op(tid);
     // hold epoch from advancing so that the node we find won't be deleted
     if(findNode(prev,curr,next,key,tid)) {
-        MontageOpHolder _holder(this);
-        res=curr.get_val<Node*>()->get_unsafe_val();//never old see new as we find node before BEGIN_OP
+        // MontageOpHolder _holder(this);
+        res=curr->get_unsafe_val();//never old see new as we find node before BEGIN_OP
     }
     tracker.end_op(tid);
 
     return res;
 }
 
-template <class K, class V> 
-optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
+template <class K, class V, int idxSize> 
+optional<V> MontageLfHashTable<K,V,idxSize>::put(K key, V val, int tid) {
     optional<V> res={};
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    pds::lin_var curr;
-    pds::lin_var next;
+    Node* curr;
+    Node* next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
     while(true) {
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
-            tmpNode->next.ptr.store(curr);
-            begin_op();
-            res=curr.get_val<Node*>()->get_val();
+            tmpNode->next.ptr.store(this,curr);
+            // begin_op();
+            res=curr->get_unsafe_val();
+            curr->retire_payload();
             if(prev->ptr.CAS_verify(this,curr,tmpNode)) {
-                curr.get_val<Node*>()->rm_payload();
-                end_op();
+                // end_op();
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr.get_val<Node*>()->next.ptr.CAS(next,setMark(next)));
-                if(tmpNode->next.ptr.CAS(curr,next)) {
-                    tracker.retire(curr.get_val<Node*>(),tid);
+                while(!curr->next.ptr.CAS(this,next,setMark(next)));
+                if(tmpNode->next.ptr.CAS(this,curr,next)) {
+                    tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
                 }
                 break;
             }
-            abort_op();
+            // abort_op();
         }
         else {
             //does not exist; insert.
             res={};
-            tmpNode->next.ptr.store(curr);
-            begin_op();
+            tmpNode->next.ptr.store(this,curr);
+            // begin_op();
             if(prev->ptr.CAS_verify(this,curr,tmpNode)) {
-                end_op();
+                // end_op();
                 break;
             }
-            abort_op();
+            // abort_op();
         }
     }
     tracker.end_op(tid);
@@ -181,13 +273,13 @@ optional<V> MontageLfHashTable<K,V>::put(K key, V val, int tid) {
     return res;
 }
 
-template <class K, class V> 
-bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
+template <class K, class V, int idxSize> 
+bool MontageLfHashTable<K,V,idxSize>::insert(K key, V val, int tid){
     bool res=false;
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    pds::lin_var curr;
-    pds::lin_var next;
+    Node* curr;
+    Node* next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
@@ -199,14 +291,14 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
         }
         else {
             //does not exist, insert.
-            tmpNode->next.ptr.store(curr);
-            begin_op();
+            tmpNode->next.ptr.store(this,curr);
+            // begin_op();
             if(prev->ptr.CAS_verify(this,curr,tmpNode)) {
-                end_op();
+                // end_op();
                 res=true;
                 break;
             }
-            abort_op();
+            // abort_op();
         }
     }
     tracker.end_op(tid);
@@ -214,12 +306,12 @@ bool MontageLfHashTable<K,V>::insert(K key, V val, int tid){
     return res;
 }
 
-template <class K, class V> 
-optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
+template <class K, class V, int idxSize> 
+optional<V> MontageLfHashTable<K,V,idxSize>::remove(K key, int tid) {
     optional<V> res={};
     MarkPtr* prev=nullptr;
-    pds::lin_var curr;
-    pds::lin_var next;
+    Node* curr;
+    Node* next;
 
     tracker.start_op(tid);
     while(true) {
@@ -227,16 +319,16 @@ optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
             res={};
             break;
         }
-        begin_op();
-        res=curr.get_val<Node*>()->get_val();
-        if(!curr.get_val<Node*>()->next.ptr.CAS_verify(this,next,setMark(next))) {
-            abort_op();
+        // begin_op();
+        res=curr->get_unsafe_val();
+        curr->retire_payload();
+        if(!curr->next.ptr.CAS_verify(this,next,setMark(next))) {
+            // abort_op();
             continue;
         }
-        curr.get_val<Node*>()->rm_payload();
-        end_op();
-        if(prev->ptr.CAS(curr,next)) {
-            tracker.retire(curr.get_val<Node*>(),tid);
+        // end_op();
+        if(prev->ptr.CAS(this,curr,next)) {
+            tracker.retire(curr,tid);
         } else {
             findNode(prev,curr,next,key,tid);
         }
@@ -247,34 +339,34 @@ optional<V> MontageLfHashTable<K,V>::remove(K key, int tid) {
     return res;
 }
 
-template <class K, class V> 
-optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
+template <class K, class V, int idxSize> 
+optional<V> MontageLfHashTable<K,V,idxSize>::replace(K key, V val, int tid) {
     optional<V> res={};
     Node* tmpNode = nullptr;
     MarkPtr* prev=nullptr;
-    pds::lin_var curr;
-    pds::lin_var next;
+    Node* curr;
+    Node* next;
     tmpNode = new Node(this, key, val, nullptr);
 
     tracker.start_op(tid);
     while(true){
         if(findNode(prev,curr,next,key,tid)){
-            tmpNode->next.ptr.store(curr);
-            begin_op();
-            res=curr.get_val<Node*>()->get_val();
+            tmpNode->next.ptr.store(this,curr);
+            // begin_op();
+            res=curr->get_unsafe_val();
+            curr->retire_payload();
             if(prev->ptr.CAS_verify(this,curr,tmpNode)){
-                curr.get_val<Node*>()->rm_payload();
-                end_op();
+                // end_op();
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr.get_val<Node*>()->next.ptr.CAS(next,setMark(next)));
-                if(tmpNode->next.ptr.CAS(curr,next)) {
-                    tracker.retire(curr.get_val<Node*>(),tid);
+                while(!curr->next.ptr.CAS(this,next,setMark(next)));
+                if(tmpNode->next.ptr.CAS(this,curr,next)) {
+                    tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
                 }
                 break;
             }
-            abort_op();
+            // abort_op();
         }
         else{//does not exist
             res={};
@@ -286,27 +378,27 @@ optional<V> MontageLfHashTable<K,V>::replace(K key, V val, int tid) {
     return res;
 }
 
-template <class K, class V> 
-bool MontageLfHashTable<K,V>::findNode(MarkPtr* &prev, pds::lin_var &curr, pds::lin_var &next, K key, int tid){
+template <class K, class V, int idxSize> 
+bool MontageLfHashTable<K,V,idxSize>::findNode(MarkPtr* &prev, Node* &curr, Node* &next, K key, int tid){
+    size_t idx=hash_fn(key)%idxSize;
     while(true){
-        size_t idx=hash_fn(key)%idxSize;
         bool cmark=false;
         prev=&buckets[idx].ui;
         curr=getPtr(prev->ptr.load(this));
 
-        while(true){//to lock old and curr
-            if(curr.get_val<Node*>()==nullptr) return false;
-            next=curr.get_val<Node*>()->next.ptr.load(this);
+        while(true){
+            if(curr==nullptr) return false;
+            next=curr->next.ptr.load(this);
             cmark=getMark(next);
             next=getPtr(next);
-            auto ckey=curr.get_val<Node*>()->key;
+            auto ckey=curr->get_key();
             if(prev->ptr.load(this)!=curr) break;//retry
             if(!cmark) {
                 if(ckey>=key) return ckey==key;
-                prev=&(curr.get_val<Node*>()->next);
+                prev=&(curr->next);
             } else {
-                if(prev->ptr.CAS(curr,next)) {
-                    tracker.retire(curr.get_val<Node*>(),tid);
+                if(prev->ptr.CAS(this,curr,next)) {
+                    tracker.retire(curr,tid);
                 } else {
                     break;//retry
                 }

@@ -3,6 +3,7 @@
 
 #include "TestConfig.hpp"
 #include "EpochSys.hpp"
+#include <immintrin.h>
 // TODO: report recover errors/exceptions
 
 class Recoverable;
@@ -54,140 +55,6 @@ namespace pds{
             return "Epoch in which operation wants to linearize has passed; retry required.";
         }
     };
-
-    struct sc_desc_t;
-
-    template <class T>
-    class atomic_lin_var;
-    class lin_var{
-        template <class T>
-        friend class atomic_lin_var;
-        inline bool is_desc() const {
-            return (cnt & 3UL) == 1UL;
-        }
-        inline sc_desc_t* get_desc() const {
-            assert(is_desc());
-            return reinterpret_cast<sc_desc_t*>(val);
-        }
-    public:
-        uint64_t val;
-        uint64_t cnt;
-        template <typename T=uint64_t>
-        inline T get_val() const {
-            static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
-            return reinterpret_cast<T>(val);
-        }
-        lin_var(uint64_t v, uint64_t c) : val(v), cnt(c) {};
-        lin_var() : lin_var(0, 0) {};
-
-        inline bool operator==(const lin_var & b) const{
-            return val==b.val && cnt==b.cnt;
-        }
-        inline bool operator!=(const lin_var & b) const{
-            return !operator==(b);
-        }
-    }__attribute__((aligned(16)));
-
-    template <class T = uint64_t>
-    class atomic_lin_var{
-        static_assert(sizeof(T) == sizeof(uint64_t), "sizes do not match");
-    public:
-        // for cnt in var:
-        // desc: ....01
-        // real val: ....00
-        std::atomic<lin_var> var;
-        lin_var load(Recoverable* ds);
-        lin_var load_verify(Recoverable* ds);
-        inline T load_val(Recoverable* ds){
-            return reinterpret_cast<T>(load(ds).val);
-        }
-        bool CAS_verify(Recoverable* ds, lin_var expected, const T& desired);
-        inline bool CAS_verify(Recoverable* ds, lin_var expected, const lin_var& desired){
-            return CAS_verify(ds, expected,desired.get_val<T>());
-        }
-        // CAS doesn't check epoch nor cnt
-        bool CAS(lin_var expected, const T& desired);
-        inline bool CAS(lin_var expected, const lin_var& desired){
-            return CAS(expected,desired.get_val<T>());
-        }
-        void store(const T& desired);
-        inline void store(const lin_var& desired){
-            store(desired.get_val<T>());
-        }
-        atomic_lin_var(const T& v) : var(lin_var(reinterpret_cast<uint64_t>(v), 0)){};
-        atomic_lin_var() : atomic_lin_var(T()){};
-    };
-
-    struct sc_desc_t{
-    private:
-        // for cnt in var:
-        // in progress: ....01
-        // committed: ....10 
-        // aborted: ....11
-        std::atomic<lin_var> var;
-        const uint64_t old_val;
-        const uint64_t new_val;
-        const uint64_t cas_epoch;
-        inline bool abort(lin_var _d){
-            // bring cnt from ..01 to ..11
-            lin_var expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
-            lin_var desired(expected);
-            desired.cnt += 2;
-            return var.compare_exchange_strong(expected, desired);
-        }
-        inline bool commit(lin_var _d){
-            // bring cnt from ..01 to ..10
-            lin_var expected (_d.val, (_d.cnt & ~0x3UL) | 1UL); // in progress
-            lin_var desired(expected);
-            desired.cnt += 1;
-            return var.compare_exchange_strong(expected, desired);
-        }
-        inline bool committed(lin_var _d) const {
-            return (_d.cnt & 0x3UL) == 2UL;
-        }
-        inline bool in_progress(lin_var _d) const {
-            return (_d.cnt & 0x3UL) == 1UL;
-        }
-        inline bool match(lin_var old_d, lin_var new_d) const {
-            return ((old_d.cnt & ~0x3UL) == (new_d.cnt & ~0x3UL)) && 
-                (old_d.val == new_d.val);
-        }
-        void cleanup(lin_var old_d){
-            // must be called after desc is aborted or committed
-            lin_var new_d = var.load();
-            if(!match(old_d,new_d)) return;
-            assert(!in_progress(new_d));
-            lin_var expected(reinterpret_cast<uint64_t>(this),(new_d.cnt & ~0x3UL) | 1UL);
-            if(committed(new_d)) {
-                // bring cnt from ..10 to ..00
-                reinterpret_cast<atomic_lin_var<>*>(
-                    new_d.val)->var.compare_exchange_strong(
-                    expected, 
-                    lin_var(new_val,new_d.cnt + 2));
-            } else {
-                //aborted
-                // bring cnt from ..11 to ..00
-                reinterpret_cast<atomic_lin_var<>*>(
-                    new_d.val)->var.compare_exchange_strong(
-                    expected, 
-                    lin_var(old_val,new_d.cnt + 1));
-            }
-        }
-    public:
-        inline bool committed() const {
-            return committed(var.load());
-        }
-        inline bool in_progress() const {
-            return in_progress(var.load());
-        }
-        // TODO: try_complete used to be inline. Try to make it inline again when refactoring is finished.
-        void try_complete(Recoverable* ds, uint64_t addr);
-        
-        sc_desc_t( uint64_t c, uint64_t a, uint64_t o, 
-                    uint64_t n, uint64_t e) : 
-            var(lin_var(a,c)), old_val(o), new_val(n), cas_epoch(e){};
-        sc_desc_t() : sc_desc_t(0,0,0,0,0){};
-    };
 }
 
 class Recoverable{
@@ -199,9 +66,8 @@ class Recoverable{
     padded<uint64_t>* last_epochs = nullptr;
     // containers for pending allocations
     padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
-    // local descriptors for DCSS
-    // TODO: maybe put this into a derived class for NB data structures?
-    padded<pds::sc_desc_t>* local_descs = nullptr;
+    // pending retires; each pair is <original payload, anti-payload>
+    padded<std::vector<pair<pds::PBlk*,pds::PBlk*>>>* pending_retires = nullptr;
 public:
     // return num of blocks recovered.
     virtual int recover(bool simulated = false) = 0;
@@ -219,6 +85,13 @@ public:
     void begin_op(){
         assert(epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
         epochs[pds::EpochSys::tid].ui = _esys->begin_transaction();
+        for(auto & r : pending_retires[pds::EpochSys::tid].ui) {
+            // for nonblocking, create anti-nodes for retires called
+            // before begin_op, place anti-nodes into pending_retires,
+            // and set tid_sn
+            // for blocking, just noop
+            _esys->prepare_retire_pblk(r,epochs[pds::EpochSys::tid].ui);
+        }
         // TODO: any room for optimization here?
         // TODO: put pending_allocs-related stuff into operations?
         for (auto b = pending_allocs[pds::EpochSys::tid].ui.begin(); 
@@ -230,6 +103,15 @@ public:
     }
     void end_op(){
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        if (!pending_retires[pds::EpochSys::tid].ui.empty()){
+            for(const auto& r : pending_retires[pds::EpochSys::tid].ui){
+                // for nbEpochSys, link anti-node to payload
+                // for EpochSys,in-place retire or create anti-node,
+                // and register in to_be_persisted
+                _esys->retire_pblk(r.first, epochs[pds::EpochSys::tid].ui, r.second);
+            }
+            pending_retires[pds::EpochSys::tid].ui.clear();
+        }
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
             last_epochs[pds::EpochSys::tid].ui = epochs[pds::EpochSys::tid].ui;
@@ -245,14 +127,21 @@ public:
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
         }
         assert(pending_allocs[pds::EpochSys::tid].ui.empty());
+        assert(pending_retires[pds::EpochSys::tid].ui.empty());
     }
     void abort_op(){
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
+        if(!pending_retires[pds::EpochSys::tid].ui.empty()){
+            for(const auto& r : pending_retires[pds::EpochSys::tid].ui){
+                _esys->withdraw_retire_pblk(r.second,epochs[pds::EpochSys::tid].ui);
+            }
+            pending_retires[pds::EpochSys::tid].ui.clear();
+        }
         // TODO: any room for optimization here?
         for (auto b = pending_allocs[pds::EpochSys::tid].ui.begin(); 
             b != pending_allocs[pds::EpochSys::tid].ui.end(); b++){
             // reset epochs registered in pending blocks
-            _esys->reset_alloc_pblk(*b);
+            _esys->reset_alloc_pblk(*b,epochs[pds::EpochSys::tid].ui);
         }
         _esys->abort_transaction(epochs[pds::EpochSys::tid].ui);
         epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
@@ -298,6 +187,7 @@ public:
         }
         return ret;
     }
+
     template<typename T>
     void register_update_pblk(T* b){
         _esys->register_update_pblk(b, epochs[pds::EpochSys::tid].ui);
@@ -317,25 +207,65 @@ public:
                     assert(pos != pending_allocs[pds::EpochSys::tid].ui.rend());
                     pending_allocs[pds::EpochSys::tid].ui.erase((pos+1).base());
                 }
-                _esys->delete_pblk(b);
+                _esys->delete_pblk(b, epochs[pds::EpochSys::tid].ui);
             }
         }
     }
+    /* 
+     * pretire() must be called BEFORE lin point, i.e., CAS_verify()!
+     *
+     * For nonblocking persistence, retirement will be initiated (by
+     * craeating anti-node) at (if called before) begin_op, and will
+     * be committed in end_op or withdrew (by deleting anti-node) at
+     * abort_op;
+     *
+     * For blocking persistence, retirement will be buffered until
+     * end_op, at which it will be initiated and commited (by creating
+     * anti-node), or will withdrew (by deleting anti-node) at
+     * abort_op.
+     */
     template<typename T>
     void pretire(T* b){
-        assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
-        _esys->retire_pblk(b, epochs[pds::EpochSys::tid].ui);
+        if(epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+            // buffer retirement in pending_retires; it will be
+            // initiated at begin_op
+            pending_retires[pds::EpochSys::tid].ui.emplace_back(b, nullptr);
+        } else {
+            // for nonblocking, place anti-nodes and retires into
+            // pending_retires and set tid_sn
+            // for blocking, buffer retire request in pending_retires
+            // to be committed at end_op or withdrew at abort_op
+            _esys->prepare_retire_pblk(b, epochs[pds::EpochSys::tid].ui, pending_retires[pds::EpochSys::tid].ui);
+        }
     }
     template<typename T>
     void preclaim(T* b){
-        bool not_in_operation = false;
-        if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
-            not_in_operation = true;
-            begin_op();
-        }
-        _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
-        if (not_in_operation){
-            end_op();
+        if (_esys->sys_mode == pds::ONLINE){
+            bool not_in_operation = false;
+            if (epochs[pds::EpochSys::tid].ui == NULL_EPOCH){
+                not_in_operation = true;
+                epochs[pds::EpochSys::tid].ui = _esys->begin_reclaim_transaction();
+                if(!b->retired()){
+                    // WARNING!!!
+                    // Wentao: here we optimize so that only nodes not
+                    // ever published (and thus not ever retired) will
+                    // get into this part. This is only applicable for
+                    // nonblocking data structures. For blocking ones,
+                    // don't call nb-specific pretire and preclaim,
+                    // but instead call pdelete!
+                    std::reverse_iterator pos = std::find(pending_allocs[pds::EpochSys::tid].ui.rbegin(),
+                            pending_allocs[pds::EpochSys::tid].ui.rend(), b);
+                    if(pos != pending_allocs[pds::EpochSys::tid].ui.rend()){
+                        pending_allocs[pds::EpochSys::tid].ui.erase((pos+1).base());
+                    }
+                }
+            }
+            _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
+            if (not_in_operation){
+                _esys->end_reclaim_transaction(epochs[pds::EpochSys::tid].ui);
+                last_epochs[pds::EpochSys::tid].ui = epochs[pds::EpochSys::tid].ui;
+                epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
+            }
         }
     }
     template<typename T>
@@ -372,14 +302,17 @@ public:
         _esys->sys_mode = pds::ONLINE;
     }
     void flush(){
-        _esys->flush();
+        for (int i = 0; i < 2; i++){
+            sync();
+        }
+        // _esys->flush();
     }
     void simulate_crash(){
         _esys->simulate_crash();
     }
 
     pds::sc_desc_t* get_dcss_desc(){
-        return &local_descs[pds::EpochSys::tid].ui;
+        return _esys->get_dcss_desc();
     }
     uint64_t get_local_epoch(){
         return epochs[pds::EpochSys::tid].ui;
@@ -452,16 +385,35 @@ T* TOKEN_CONCAT(set_, n)(Recoverable* ds, int i, t TOKEN_CONCAT(tmp_, n)){\
 
 namespace pds{
 
+#ifdef VISIBLE_READ
+    // implementation of load, store, and cas for visible reads
+
     template<typename T>
-    void atomic_lin_var<T>::store(const T& desired){
-        // this function must be used only when there's no data race
-        lin_var r = var.load();
-        lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt);
-        var.store(new_r);
+    void atomic_lin_var<T>::store(Recoverable* ds,const T& desired){
+        lin_var r;
+        while(true){
+            r = var.load();
+            lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt+1);
+            if(var.compare_exchange_strong(r, new_r))
+                break;
+        }
     }
 
-#ifdef VISIBLE_READ
-    // implementation of load and cas for visible reads
+    template<typename T>
+    void atomic_lin_var<T>::store_verify(Recoverable* ds,const T& desired){
+        lin_var r;
+        while(true){
+            r = var.load();
+            if(ds->check_epoch()){
+                lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt+1);
+                if(var.compare_exchange_strong(r, new_r)){
+                    break;
+                }
+            } else {
+                throw EpochVerifyException();
+            }
+        }
+    }
 
     template<typename T>
     lin_var atomic_lin_var<T>::load(Recoverable* ds){
@@ -480,7 +432,7 @@ namespace pds{
         lin_var r;
         while(true){
             r = var.load();
-            if(ds->_esys->check_epoch()){
+            if(ds->check_epoch()){
                 lin_var ret(r.val,r.cnt+1);
                 if(var.compare_exchange_strong(r, ret)){
                     return r;
@@ -493,11 +445,23 @@ namespace pds{
 
     template<typename T>
     bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
+        bool not_in_operation = false;
+        if(ds->get_local_epoch() == NULL_EPOCH){
+            ds->begin_op();
+            not_in_operation = true;
+        }
         assert(ds->get_local_epoch() != NULL_EPOCH);
-        if(ds->_esys->check_epoch()){
+        if(ds->check_epoch()){
             lin_var new_r(reinterpret_cast<uint64_t>(desired),expected.cnt+1);
-            return var.compare_exchange_strong(expected, new_r);
+            bool ret = var.compare_exchange_strong(expected, new_r);
+            if(ret == true){
+                if(not_in_operation) ds->end_op();
+            } else {
+                if(not_in_operation) ds->abort_op();
+            }
+            return ret;
         } else {
+            if(not_in_operation) ds->abort_op();
             return false;
         }
     }
@@ -512,7 +476,46 @@ namespace pds{
     /* implementation of load and cas for invisible reads */
 
     template<typename T>
-    lin_var atomic_lin_var<T>::load(Recoverable* ds){
+    void atomic_lin_var<T>::store(Recoverable* ds,const T& desired){
+        lin_var r;
+        while(true){
+            r = var.load();
+            if(r.is_desc()) {
+                sc_desc_t* D = r.get_desc();
+                D->try_complete(ds, reinterpret_cast<uint64_t>(this));
+                r.cnt &= (~0x3ULL);
+                r.cnt+=4;
+            }
+            lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt+4);
+            if(var.compare_exchange_strong(r, new_r))
+                break;
+        }
+    }
+
+    template<typename T>
+    void atomic_lin_var<T>::store_verify(Recoverable* ds,const T& desired){
+        lin_var r;
+        while(true){
+            r = var.load();
+            if(r.is_desc()){
+                sc_desc_t* D = r.get_desc();
+                D->try_complete(ds, reinterpret_cast<uint64_t>(this));
+                r.cnt &= (~0x3ULL);
+                r.cnt+=4;
+            }
+            if(ds->check_epoch()){
+                lin_var new_r(reinterpret_cast<uint64_t>(desired),r.cnt+4);
+                if(var.compare_exchange_strong(r, new_r)){
+                    break;
+                }
+            } else {
+                throw EpochVerifyException();
+            }
+        }
+    }
+
+    template<typename T>
+    T atomic_lin_var<T>::load(Recoverable* ds){
         lin_var r;
         do { 
             r = var.load();
@@ -521,86 +524,104 @@ namespace pds{
                 D->try_complete(ds, reinterpret_cast<uint64_t>(this));
             }
         } while(r.is_desc());
-        return r;
+        return (T)r.val;
     }
 
     template<typename T>
-    lin_var atomic_lin_var<T>::load_verify(Recoverable* ds){
+    T atomic_lin_var<T>::load_verify(Recoverable* ds){
         // invisible read doesn't need to verify epoch even if it's a
         // linearization point
         // this saves users from catching EpochVerifyException
         return load(ds);
     }
 
-    // extern std::atomic<size_t> abort_cnt;
-    // extern std::atomic<size_t> total_cnt;
-
     template<typename T>
-    bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, lin_var expected, const T& desired){
+    bool atomic_lin_var<T>::CAS_verify(Recoverable* ds, T expected, const T& desired){
+        bool not_in_operation = false;
+        if(ds->get_local_epoch() == NULL_EPOCH){
+            ds->begin_op();
+            not_in_operation = true;
+        }
         assert(ds->get_local_epoch() != NULL_EPOCH);
-        // total_cnt.fetch_add(1);
 #ifdef USE_TSX
+        // total_cnt.fetch_add(1);
         unsigned status = _xbegin();
         if (status == _XBEGIN_STARTED) {
             lin_var r = var.load();
             if(!r.is_desc()){
-                if( r.cnt!=expected.cnt ||
-                    r.val!=expected.val ||
+                if( r.val!=reinterpret_cast<uint64_t>(expected) ||
                     !ds->check_epoch()){
                     _xend();
+                    if(not_in_operation) ds->abort_op();
                     return false;
                 } else {
                     lin_var new_r (reinterpret_cast<uint64_t>(desired), r.cnt+4);
                     var.store(new_r);
                     _xend();
+                    if(not_in_operation) ds->end_op();
                     return true;
                 }
             } else {
                 // we only help complete descriptor, but not retry
                 _xend();
                 r.get_desc()->try_complete(ds, reinterpret_cast<uint64_t>(this));
+                if(not_in_operation) ds->abort_op();
                 return false;
             }
             // execution won't reach here; program should have returned
             assert(0);
         }
+        // abort_cnt.fetch_add(1);
 #endif
         // txn fails; fall back routine
-        // abort_cnt.fetch_add(1);
         lin_var r = var.load();
         if(r.is_desc()){
             sc_desc_t* D = r.get_desc();
             D->try_complete(ds, reinterpret_cast<uint64_t>(this));
+            if(not_in_operation) ds->abort_op();
             return false;
         } else {
-            if( r.cnt!=expected.cnt || 
-                r.val!=expected.val) {
+            if( r.val!=reinterpret_cast<uint64_t>(expected)) {
+                if(not_in_operation) ds->abort_op();
                 return false;
             }
         }
         // now r.cnt must be ..00, and r.cnt+1 is ..01, which means "var
         // contains a descriptor" and "a descriptor is in progress"
         assert((r.cnt & 3UL) == 0UL);
-        new (ds->get_dcss_desc()) sc_desc_t(r.cnt+1, 
+        ds->get_dcss_desc()->set_up_var(r.cnt+1, 
                                     reinterpret_cast<uint64_t>(this), 
-                                    expected.val, 
-                                    reinterpret_cast<uint64_t>(desired), 
-                                    ds->get_local_epoch());
+                                    reinterpret_cast<uint64_t>(expected), 
+                                    reinterpret_cast<uint64_t>(desired));
         lin_var new_r(reinterpret_cast<uint64_t>(ds->get_dcss_desc()), r.cnt+1);
         if(!var.compare_exchange_strong(r,new_r)){
+            if(not_in_operation) ds->abort_op();
             return false;
         }
         ds->get_dcss_desc()->try_complete(ds, reinterpret_cast<uint64_t>(this));
-        if(ds->get_dcss_desc()->committed()) return true;
-        else return false;
+        if(ds->get_dcss_desc()->committed()) {
+            if(not_in_operation) ds->end_op();
+            return true;
+        }
+        else {
+            if(not_in_operation) ds->abort_op();
+            return false;
+        }
     }
 
     template<typename T>
-    bool atomic_lin_var<T>::CAS(lin_var expected, const T& desired){
+    bool atomic_lin_var<T>::CAS(Recoverable* ds, T expected, const T& desired){
         // CAS doesn't check epoch; just cas ptr to desired, with cnt+=4
-        assert(!expected.is_desc());
-        lin_var new_r(reinterpret_cast<uint64_t>(desired), expected.cnt + 4);
-        if(!var.compare_exchange_strong(expected,new_r)){
+        // assert(!expected.is_desc());
+        lin_var r = var.load();
+        if(r.is_desc()){
+            sc_desc_t* D = r.get_desc();
+            D->try_complete(ds, reinterpret_cast<uint64_t>(this));
+            return false;
+        }
+        lin_var old_r(reinterpret_cast<uint64_t>(expected), r.cnt);
+        lin_var new_r(reinterpret_cast<uint64_t>(desired), r.cnt + 4);
+        if(!var.compare_exchange_strong(old_r,new_r)){
             return false;
         }
         return true;

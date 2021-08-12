@@ -1,6 +1,7 @@
 #ifndef PERSIST_UTILS_HPP
 #define PERSIST_UTILS_HPP
 
+#include "common_macros.hpp"
 #include "ConcurrentPrimitives.hpp"
 #include "HarnessUtils.hpp"
 #include <atomic>
@@ -8,32 +9,40 @@
 #include <unordered_set>
 #include <functional>
 
-#define EPOCH_WINDOW 4
-
 namespace pds{
-    template<typename A, typename B>
     struct pair{
-        A first;
-        B second;
-        pair(A f, B s): first(f), second(s){}
+        void* first;
+        size_t second;
+        pair(void* f, size_t s): first(f), second(s){}
         pair(){}
-    };
-    template<typename A, typename B>
-    struct padded_pair{
-        A first;
-        B second;
-        padded_pair(A f, B s): first(f), second(s){}
-        padded_pair(const pair<A,B>& p): first(p.first), second(p.second){}
-        padded_pair(){}
-        operator pair<A,B>() const {
-            return pair<A,B>(first, second);
-        }
-        friend bool operator != (const padded_pair<A,B>& x, const pair<A,B>& y){
+        friend bool operator != (const pair& x, const pair& y){
             return (x.first != y.first || x.second != y.second);
         }
-        friend bool operator == (const padded_pair<A,B>& x, const pair<A,B>& y){
+        friend bool operator == (const pair& x, const pair& y){
             return (x.first == y.first && x.second == y.second);
         }
+    };
+    // template<typename A, typename B>
+    // struct padded_pair{
+    //     A first;
+    //     B second;
+    //     padded_pair(A f, B s): first(f), second(s){}
+    //     padded_pair(const pair<A,B>& p): first(p.first), second(p.second){}
+    //     padded_pair(){}
+    //     operator pair<A,B>() const {
+    //         return pair<A,B>(first, second);
+    //     }
+    //     friend bool operator != (const padded_pair<A,B>& x, const pair<A,B>& y){
+    //         return (x.first != y.first || x.second != y.second);
+    //     }
+    //     friend bool operator == (const padded_pair<A,B>& x, const pair<A,B>& y){
+    //         return (x.first == y.first && x.second == y.second);
+    //     }
+    // }__attribute__((aligned(CACHE_LINE_SIZE)));
+    struct padded_pair{
+        // std::atomic<pair<A,B>> ui;
+        pair ui;
+        padded_pair(void* a, size_t b): ui({a,b}){}
     }__attribute__((aligned(CACHE_LINE_SIZE)));
 };
 
@@ -341,76 +350,68 @@ class FixedHashSet{
     int cap;
     // I could never get it to compile with one star,
     // because for non-trivial atomic type, default constructor is deleted.
-    std::atomic<pds::padded_pair<void*, size_t>>** payloads;
+    paddedAtomic<void*>* payloads = nullptr;
     std::atomic<int> last_pop;
 public:
     FixedHashSet(int cap_) : cap(cap_){
-        payloads = new std::atomic<pds::padded_pair<void*, size_t>>*[cap];
+        payloads = new paddedAtomic<void*>[cap];
         for (int i = 0; i < cap; i++){
-            payloads[i] = new std::atomic<pds::padded_pair<void*, size_t>>({nullptr, 0});
+            payloads[i] = nullptr;
         }
         last_pop = 0;
     }
     ~FixedHashSet(){
-        for (int i = 0; i < cap; i++){
-            delete payloads[i];
-        }
         delete payloads;
     }
-    void push(pds::pair<void*, size_t> x, const std::function<void(pds::pair<void*, size_t>& x)>& func){
-        auto idx = (((uint64_t)x.first) >> 6) % cap;
-        auto exp = payloads[idx]->load();
+    void push(void* x, const std::function<void(void*& x)>& func){
+        auto idx = (((uint64_t)x) >> 6) % cap;
+        auto exp = payloads[idx].ui.load();
         if (exp == x){
             return;
         }
-        if (exp.first != nullptr){
-            if (exp.first != x.first){
-                pds::pair<void*, size_t> res = exp;
-                func(res);
-            }
+        if (exp != nullptr){
+            func(exp);
         }
         // we can simply store new value here rather than CAS, because
         // we can only overwrite either exp or (nullptr, 0).
         // (actually the latter case will only happen with nbMontage, and
         // x's operation must have been aborted.)
-        payloads[idx]->store(x);
+        payloads[idx].ui.store(x);
     }
-    bool try_pop(const std::function<void(pds::pair<void*, size_t>& x)>& func){
+    bool try_pop(const std::function<void(void*& x)>& func){
         // pop a random bucket (actually the next bucket of the previous one)
         auto idx = last_pop.fetch_add(1)%cap;
-        auto exp = payloads[idx]->load();
-        if (exp.first == nullptr){
+        auto exp = payloads[idx].ui.load();
+        if (exp == nullptr){
             // returning false doesn't mean the container is empty.
             return false;
         }
-        pds::pair<void*, size_t> res = exp;
-        func(res);
-        payloads[idx]->compare_exchange_strong(exp, pds::pair<void*, size_t>({nullptr, 0}));
+        func(exp);
+        payloads[idx].ui.compare_exchange_strong(exp, nullptr);
         return true;
     }
-    bool try_pop(pds::pair<void*, size_t>& x){
+    bool try_pop(void*& x){
         errexit("FixedHashSet::try_pop(pair& x) not implemented.");
         return false;
     }
-    void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func){
+    void pop_all(const std::function<void(void*& x)>& func){
         for (int i = 0; i < cap; i++){
-            auto exp = payloads[i]->load();
-            if (exp.first == nullptr){
+            auto exp = payloads[i].ui.load();
+            if (exp == nullptr){
                 continue;
             }
-            pds::pair<void*, size_t> res = exp;
-            func(res);
+            func(exp);
             // we need to use CAS rather than a store here because we may get preempted
             // here and wake up several epochs later.
             // but, there won't be any correctness issues if we don't overwrite
             // with 0; we're only doing this to prevent redundant persisting.
 
-            // payloads[i]->compare_exchange_strong(exp, pds::pair<void*, size_t>({nullptr, 0}));
+            // payloads[i]->compare_exchange_strong(exp, pds::pair(nullptr));
         }
     }
     void clear(){
         for (int i = 0; i < cap; i++){
-            payloads[i]->store({nullptr, 0});
+            payloads[i].ui.store(nullptr);
         }
     }
 };

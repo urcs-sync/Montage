@@ -46,7 +46,7 @@ private:
     atomic_pptr<Node>* head;
     atomic_pptr<Node>* tail;
     pptr<T>* returnedVal;
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
 
 public:
     FriedmanQueue(int task_num): tracker(task_num, 100, 1000, true){
@@ -58,15 +58,15 @@ public:
         returnedVal = (pptr<T>*)RP_malloc(sizeof(pptr<T>)*task_num);
         new (returnedVal) pptr<T>();
         Node* node = new Node();
-        clwb_range(node,sizeof(Node));
+        clwb_obj_nofence(node);
         head->store(node);
-        flush_fence(head);
+        clwb_obj_fence(head);
         tail->store(node);
-        flush_fence(tail);
+        clwb_obj_fence(tail);
         for(int i = 0; i < task_num; ++i){
             returnedVal[i] = (T*)RP_malloc(sizeof(T));
             // new (returnedVal[i]) T("");
-            flush_fence(&returnedVal[i]);
+            clwb_obj_fence(&returnedVal[i]);
         }
     }
 
@@ -98,12 +98,12 @@ void FriedmanQueue::enqueue(std::string val, int tid){
         if(last == tail->load()){
             if(next == nullptr){
                 if((last->next).compare_exchange_strong(next, node)){
-                    flush_fence(&(last->next));
+                    clwb_obj_fence(&(last->next));
                     tail->compare_exchange_strong(last, node);
                     break;
                 }
             } else{
-                flush_fence(&(last->next));
+                clwb_obj_fence(&(last->next));
                 tail->compare_exchange_strong(last, next);
             }
         }
@@ -128,13 +128,13 @@ optional<std::string> FriedmanQueue::dequeue(int tid){
                     res.reset();
                     break;
                 }
-                flush_fence(&(last->next));
+                clwb_obj_fence(&(last->next));
                 tail->compare_exchange_strong(last, next);
             } else{
                 std::string value = std::string(std::begin(next->value), std::end(next->value));
                 int i = -1;
                 if(next->deqTid.compare_exchange_strong(i, tid)){
-                    flush_fence(&(first->next.load()->deqTid));
+                    clwb_obj_fence(&(first->next.load()->deqTid));
                     std::copy(value.begin(), value.end(), returnedVal[tid]->data());
                     clwb_range((void*)returnedVal[tid],sizeof(T));
                     Node* to_retire = first;// failed CAS will write new head into first
@@ -146,7 +146,7 @@ optional<std::string> FriedmanQueue::dequeue(int tid){
                 } else{
                     auto addr = returnedVal[next->deqTid.load()];
                     if(head->load() == first){
-                        flush_fence(&(first->next.load()->deqTid));
+                        clwb_obj_fence(&(first->next.load()->deqTid));
                         std::copy(value.begin(), value.end(), addr->data());
                         clwb_range((void*)addr,sizeof(T));
                         head->compare_exchange_strong(first, next);

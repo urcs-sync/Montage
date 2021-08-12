@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 
+#include "EpochSys.hpp"
 #include "pptr.hpp"
 
 namespace pds{
@@ -60,39 +61,106 @@ namespace pds{
 
 template<size_t cap=1025>
 class PString{
-    size_t size;
-    char char_array[cap];
+    size_t size_;
+    char char_array[cap+1];
 public:
-    PString(PBlk* owner, const std::string& str) : size(str.size()){
-        assert(size<=cap);
-        memcpy(char_array, str.c_str(), str.size());
+    PString(PBlk* owner, const std::string& str) : size_(str.size()){
+        assert(size_<=cap);
+        memcpy(char_array, str.c_str(), str.size()+1);
+        assert(char_array[size_] == '\0');
     }
     PString(const PString<cap>& oth){
-        size = oth.size;
-        assert(size<=cap);
-        memcpy(char_array, oth.char_array, oth.size);
+        size_ = oth.size();
+        assert(size_<=cap);
+        memcpy(char_array, oth.char_array, size_+1);
+        assert(char_array[size_] == '\0');
+    }
+    PString(const std::string& str) : size_(str.size()){
+        assert(size_<=cap);
+        memcpy(char_array, str.c_str(), str.size()+1);
+        assert(char_array[size_] == '\0');
+    }
+    PString() : size_(0){
+        char_array[0] = '\0';
     }
     PString<cap>& operator = (const PString<cap> &oth){ //assignment
-        size = oth.size;
-        assert(size<=cap);
-        memcpy(char_array, oth.char_array, oth.size);
+        size_ = oth.size();
+        assert(size_<=cap);
+        memcpy(char_array, oth.char_array, size_+1);
+        assert(char_array[size_] == '\0');
         return *this;
     }
 
     PString<cap>& operator=(const std::string& str){
-        size = str.size();
-        assert(size<=cap);
-        memcpy(char_array, str.data(), str.size());
+        size_ = str.size();
+        assert(size_<=cap);
+        memcpy(char_array, str.c_str(), size_+1);
+        assert(char_array[size_] == '\0');
         return *this;
+    }
+    int compare(const std::string &s){
+        assert(c_str()[size()] == '\0');
+        return strcmp(c_str(), s.c_str());
+    }
+    friend bool operator == (const std::string& a, const PString<cap>& b){
+        assert(b.c_str()[b.size()] == '\0');
+        if (a.size() != b.size()){
+            return false;
+        }
+        return (strcmp(a.c_str(), b.c_str()) == 0);
+    }
+    friend bool operator == (const PString<cap>& a, const std::string& b){
+        return (b == a);
+    }
+    friend bool operator != (const std::string& a, const PString<cap>& b){
+        return !(a == b);
+    }
+    friend bool operator != (const PString<cap>& a, const std::string& b){
+        return !(b == a);
+    }
+    friend bool operator < (const std::string& a, const PString<cap>& b){
+        assert(b.c_str()[b.size()] == '\0');
+        return (strcmp(a.c_str(), b.c_str()) < 0);
+    }
+    friend bool operator < (const PString<cap>& a, const std::string& b){
+        assert(a.c_str()[a.size()] == '\0');
+        return (strcmp(a.c_str(), b.c_str()) < 0);
+    }
+    friend bool operator > (const std::string& a, const PString<cap>& b){
+        return (b < a);
+    }
+    friend bool operator > (const PString<cap>& a, const std::string& b){
+        return (b < a);
+    }
+    friend bool operator <= (const std::string& a, const PString<cap>& b){
+        return !(a > b);
+    }
+    friend bool operator <= (const PString<cap>& a, const std::string& b){
+        return !(a > b);
+    }
+    friend bool operator >= (const std::string& a, const PString<cap>& b){
+        return !(a < b);
+    }
+    friend bool operator >= (const PString<cap>& a, const std::string& b){
+        return !(a < b);
     }
 
     std::string std_str()const{
         // size-1 since the last char is NULL
-        return std::string(char_array, size);
+        return std::string(char_array, size_);
     }
 
     operator std::string() const {
         return std_str();
+    }
+
+    const char* c_str() const {
+        assert(char_array[size_] == '\0');
+        return char_array;
+    }
+
+    size_t size() const {
+        return size_;
     }
 };
 

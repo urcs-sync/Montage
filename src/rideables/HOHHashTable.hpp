@@ -78,7 +78,7 @@ public:
                     curr = curr->next;
                 }
                 return {};
-            } catch(OldSeeNewException& e){
+            } catch(pds::OldSeeNewException& e){
                 continue;
             }
         }
@@ -113,7 +113,7 @@ public:
                 }
                 prev->next = new_node;
                 return {};
-            } catch (OldSeeNewException& e){
+            } catch (pds::OldSeeNewException& e){
                 continue;
             }
         }
@@ -146,7 +146,7 @@ public:
                 }
                 prev->next = new_node;
                 return {};
-            } catch (OldSeeNewException& e){
+            } catch (pds::OldSeeNewException& e){
                 continue;
             }
         }
@@ -182,7 +182,7 @@ public:
                     }
                 }
                 return {};
-            } catch (OldSeeNewException& e){
+            } catch (pds::OldSeeNewException& e){
                 continue;
             }
         }
@@ -201,8 +201,8 @@ class HOHHashTableFactory : public RideableFactory{
 #include "PString.hpp"
 template <>
 class HOHHashTable<std::string, std::string, 1000000>::Payload : public pds::PBlk{
-    GENERATE_FIELD(PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(PString<TESTS_VAL_SIZE>, val, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(std::string k, std::string v) : m_key(this, k), m_val(this, v){}

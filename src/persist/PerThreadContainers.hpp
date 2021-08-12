@@ -143,7 +143,7 @@ public:
     }
 };
 
-class FixedHashSetContainer: public FixedContainer<pds::pair<void*, size_t>>{
+class FixedHashSetContainer: public FixedContainer<void*>{
     int thread_cnt;
     FixedHashSet** containers[EPOCH_WINDOW];
 public:
@@ -164,22 +164,22 @@ public:
             delete containers[i];
         }
     }
-    void push(pds::pair<void*, size_t> x, const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid, uint64_t c){
+    void push(void* x, const std::function<void(void*& x)>& func, int tid, uint64_t c){
         return containers[c%EPOCH_WINDOW][tid]->push(x, func);
     }
-    // bool try_push(pds::pair<void*, size_t> x, int tid, uint64_t c){
+    // bool try_push(void* x, int tid, uint64_t c){
     //     return containers[c%EPOCH_WINDOW][tid]->try_push(x);
     // }
-    void pop_all(const std::function<void(pds::pair<void*, size_t>& x)>& func, uint64_t c){
+    void pop_all(const std::function<void(void*& x)>& func, uint64_t c){
         for (int i = 0; i < thread_cnt; i++){
             containers[c%EPOCH_WINDOW][i]->pop_all(func);
         }
     }
-    void pop_all_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid, uint64_t c){
+    void pop_all_local(const std::function<void(void*& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         containers[c%EPOCH_WINDOW][tid]->pop_all(func);
     }
-    bool try_pop_local(const std::function<void(pds::pair<void*, size_t>& x)>& func, int tid, uint64_t c){
+    bool try_pop_local(const std::function<void(void*& x)>& func, int tid, uint64_t c){
         assert(tid != -1);
         return containers[c%EPOCH_WINDOW][tid]->try_pop(func);
     }

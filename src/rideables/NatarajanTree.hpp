@@ -33,7 +33,7 @@ private:
 	};
 
 	/* variables */
-	RCUTracker<Node> tracker;
+	RCUTracker tracker;
 	K infK{};
 	V defltV{};
 	Node r{infK,defltV,nullptr,nullptr,2};
@@ -71,6 +71,11 @@ private:
 		int i2=getInfLevel(n2);
 		return i1<i2 || (i1==-1&&i2==-1&&n1->key<n2->key);
 	}
+	inline bool nodeLess(const K& key, Node* n){
+		n=getPtr(n);
+		int i=getInfLevel(n);
+		return -1<i || (i==-1&&key<n->key);
+	}
 	inline bool nodeEqual(Node* n1, Node* n2){
 		n1=getPtr(n1);
 		n2=getPtr(n2);
@@ -89,6 +94,7 @@ private:
 	/* private interfaces */
 	void seek(K key, int tid);
 	bool cleanup(K key, int tid);
+	void retire_path(Node* start, Node* end, int tid);
 	// void doRangeQuery(Node& k1, Node& k2, int tid, Node* root, std::map<K,V>& res);
 public:
 	NatarajanTree(int task_num): tracker(task_num, 100, 1000, true){
@@ -196,9 +202,27 @@ bool NatarajanTree<K,V>::cleanup(K key, int tid){
 
 	if(res==true){
 		tracker.retire(getPtr(tmpChild),tid);
-		tracker.retire(successor,tid);
+		// retire everything on the path [successor, parent]:
+		retire_path(successor, parent, tid);
 	}
 	return res;
+}
+
+// retire everything on the path [start, end]
+template <class K, class V>
+void NatarajanTree<K,V>::retire_path(Node* start, Node* end, int tid){
+    K key = end->key;
+    Node* curr = start;
+    while(curr!=end){
+		assert(curr != nullptr && "curr shouldn't be null");
+		tracker.retire(curr, tid);
+        if (nodeLess(key, curr)){
+            curr = getPtr(curr->left.load());
+        } else {
+            curr = getPtr(curr->right.load());
+        }
+    }
+	tracker.retire(curr, tid);
 }
 
 /* to test rangeQuery */

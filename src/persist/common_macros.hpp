@@ -4,6 +4,7 @@
 namespace pds{
 #define INIT_EPOCH 3
 #define NULL_EPOCH 0
+#define EPOCH_WINDOW 4
 
 #define ASSERT_DERIVE(der, base)\
     static_assert(std::is_convertible<der*, base*>::value,\

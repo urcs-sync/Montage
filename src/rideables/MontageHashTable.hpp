@@ -54,7 +54,7 @@ public:
         }
     }__attribute__((aligned(CACHELINE_SIZE)));
     struct Bucket{
-        mutex lock;
+        std::mutex lock;
         ListNode head;
         Bucket():head(){};
     }__attribute__((aligned(CACHELINE_SIZE)));
@@ -209,7 +209,7 @@ public:
         }
 
         int rec_cnt = 0;
-        int rec_thd = 10;
+        int rec_thd = gtc->task_num;
         if (gtc->checkEnv("RecoverThread")){
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
@@ -232,32 +232,41 @@ public:
         auto dur_ms_vec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_vec << "ms building vector" << std::endl;
         begin = chrono::high_resolution_clock::now();
-        #pragma omp parallel num_threads(rec_thd)
-        {
-            Recoverable::init_thread(omp_get_thread_num());
-            #pragma omp for
-            for(size_t i = 0; i < payloadVector.size(); ++i){
-                //re-insert payload.
-                ListNode* new_node = new ListNode(payloadVector[i]);
-                K key = new_node->get_key();
-                size_t idx=hash_fn(key)%idxSize;
-                std::lock_guard<std::mutex> lk(buckets[idx].lock);
-                ListNode* curr = buckets[idx].head.next;
-                ListNode* prev = &buckets[idx].head;
-                while(curr){
-                    K curr_key = curr->get_key();
-                    if (curr_key == key){
-                        errexit("conflicting keys recovered.");
-                    } else if (curr_key > key){
-                        new_node->next = curr;
-                        prev->next = new_node;
-                        break;
-                    } else {
-                        prev = curr;
-                        curr = curr->next;
+        std::vector<std::thread> workers;
+        for (int rec_tid = 0; rec_tid < rec_thd; rec_tid++) {
+            workers.emplace_back(std::thread([&, rec_tid]() {
+                Recoverable::init_thread(rec_tid);
+                hwloc_set_cpubind(gtc->topology,
+                                  gtc->affinities[rec_tid]->cpuset,
+                                  HWLOC_CPUBIND_THREAD);
+                for (size_t i = rec_tid; i < payloadVector.size(); i += rec_thd){
+                    //re-insert payload.
+                    ListNode* new_node = new ListNode(payloadVector[i]);
+                    K key = new_node->get_key();
+                    size_t idx = hash_fn(key) % idxSize;
+                    std::lock_guard<std::mutex> lk(buckets[idx].lock);
+                    ListNode* curr = buckets[idx].head.next;
+                    ListNode* prev = &buckets[idx].head;
+                    while (curr) {
+                        K curr_key = curr->get_key();
+                        if (curr_key == key) {
+                            errexit("conflicting keys recovered.");
+                        } else if (curr_key > key) {
+                            new_node->next = curr;
+                            prev->next = new_node;
+                            break;
+                        } else {
+                            prev = curr;
+                            curr = curr->next;
+                        }
                     }
+                    prev->next = new_node;
                 }
-                prev->next = new_node;
+            }));  // workers.emplace_back()
+        }// for (rec_thd)
+        for (auto& worker : workers) {
+            if (worker.joinable()) {
+                worker.join();
             }
         }
         end = chrono::high_resolution_clock::now();
@@ -268,7 +277,7 @@ public:
         delete recovered;
         return rec_cnt;
     }
-};
+        };
 
 template <class T> 
 class MontageHashTableFactory : public RideableFactory{

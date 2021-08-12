@@ -26,7 +26,7 @@ private:
     std::atomic<Node*> head;
     // enqueue pushes node to tail
     std::atomic<Node*> tail;
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
 
 public:
     MSQueue(int task_num): 

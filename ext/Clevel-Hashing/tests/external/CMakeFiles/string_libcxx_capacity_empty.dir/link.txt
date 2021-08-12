@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/string_libcxx_capacity_empty.dir/libcxx/basic_string/string.capacity/empty.pass.cpp.o  -o string_libcxx_capacity_empty /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

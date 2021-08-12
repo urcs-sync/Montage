@@ -4,65 +4,50 @@
 
 using namespace pds;
 
-void PerThreadFreedContainer::do_free(PBlk*& x){
-    _esys->delete_pblk(x);
+void ThreadLocalFreedContainer::do_free(PBlk*& x, uint64_t c){
+    _esys->delete_pblk(x, c);
 }
-PerThreadFreedContainer::PerThreadFreedContainer(EpochSys* e, GlobalTestConfig* gtc): task_num(gtc->task_num){
+ThreadLocalFreedContainer::ThreadLocalFreedContainer(EpochSys* e, GlobalTestConfig* gtc): task_num(gtc->task_num){
     container = new VectorContainer<PBlk*>(gtc->task_num);
     threadEpoch = new padded<uint64_t>[gtc->task_num];
-    locks = new padded<std::mutex>[gtc->task_num];
     _esys = e;
     for(int i = 0; i < gtc->task_num; i++){
-        threadEpoch[i] = NULL_EPOCH;
+        threadEpoch[i] = INIT_EPOCH;
     }
 }
-PerThreadFreedContainer::~PerThreadFreedContainer(){
+ThreadLocalFreedContainer::~ThreadLocalFreedContainer(){
     delete container;
 }
-void PerThreadFreedContainer::free_on_new_epoch(uint64_t c){
-    /* there are 3 possilibities:
-        1. thread's previous transaction epoch is c, in this case, just return
-        2. thread's previous transaction epoch is c-1, in this case, free the retired blocks in epoch c-2, and update the thread's
-            most recent transaction epoch number
-        3. thread's previous transaction epoch is smaller than c-1, in this case, just return, because epoch advanver has already
-            freed all the blocks from 2 epochs ago, then update the thread's most recent transaction epoch number
-        So we need to keep the to_be_free->help_free(c-2) in epoch_advancer. */
-
-    if( c == threadEpoch[EpochSys::tid] -1){
-        std::lock_guard<std::mutex> lk(locks[EpochSys::tid].ui);
-        help_free_local(c - 2);
-        threadEpoch[EpochSys::tid] = c;
-    }else if( c < threadEpoch[EpochSys::tid] -1){
-        threadEpoch[EpochSys::tid] = c;
+void ThreadLocalFreedContainer::free_on_new_epoch(uint64_t c){
+    auto last_epoch = threadEpoch[EpochSys::tid].ui;
+    if (last_epoch == c){
+        return;
+    }
+    threadEpoch[EpochSys::tid].ui = c;
+    for (uint64_t i = last_epoch-1;
+        i <= min(last_epoch+1, c-2); i++){
+        help_free_local(i);
+        persist_func::sfence();
     }
 }
-void PerThreadFreedContainer::register_free(PBlk* blk, uint64_t c){
+void ThreadLocalFreedContainer::register_free(PBlk* blk, uint64_t c){
+    assert(blk!=nullptr);
     // container[c%4].ui->push(blk, EpochSys::tid);
     container->push(blk, EpochSys::tid, c);
 }
-void PerThreadFreedContainer::help_free(uint64_t c){
-    // try to get all the locks, spin when unable to get the target lock while holding all acquired locks
-    // optimization?
-    for(int i = 0; i < task_num; i++){
-        while(!locks[i].ui.try_lock()){}
-    }
-
-    container->pop_all([this](PBlk*& x){this->do_free(x);}, c);
-    
-    for(int i = 0; i < task_num; i++){
-        locks[i].ui.unlock();
-    }
+void ThreadLocalFreedContainer::help_free(uint64_t c){
+    // do nothing. all frees should be done by worker threads.
 }
-void PerThreadFreedContainer::help_free_local(uint64_t c){
-    container->pop_all_local([this](PBlk*& x){this->do_free(x);}, EpochSys::tid, c);
+void ThreadLocalFreedContainer::help_free_local(uint64_t c){
+    container->pop_all_local([&,this](PBlk*& x){this->do_free(x, c);}, EpochSys::tid, c);
 }
-void PerThreadFreedContainer::clear(){
+void ThreadLocalFreedContainer::clear(){
     container->clear();
 }
 
 
-void PerEpochFreedContainer::do_free(PBlk*& x){
-    _esys->delete_pblk(x);
+void PerEpochFreedContainer::do_free(PBlk*& x, uint64_t c){
+    _esys->delete_pblk(x, c);
 }
 PerEpochFreedContainer::PerEpochFreedContainer(EpochSys* e, GlobalTestConfig* gtc){
     container = new VectorContainer<PBlk*>(gtc->task_num);
@@ -73,19 +58,21 @@ PerEpochFreedContainer::~PerEpochFreedContainer(){
     delete container;
 }
 void PerEpochFreedContainer::register_free(PBlk* blk, uint64_t c){
+    assert(blk!=nullptr);
     // container[c%4].ui->push(blk, EpochSys::tid);
     container->push(blk, EpochSys::tid, c);
 }
 void PerEpochFreedContainer::help_free(uint64_t c){
-    container->pop_all([this](PBlk*& x){this->do_free(x);}, c);
+    container->pop_all([&,this](PBlk*& x){this->do_free(x, c);}, c);
 }
 void PerEpochFreedContainer::help_free_local(uint64_t c){
-    container->pop_all_local([this](PBlk*& x){this->do_free(x);}, EpochSys::tid, c);
+    container->pop_all_local([&,this](PBlk*& x){this->do_free(x, c);}, EpochSys::tid, c);
 }
 void PerEpochFreedContainer::clear(){
     container->clear();
 }
 
 void NoToBeFreedContainer::register_free(PBlk* blk, uint64_t c){
-    _esys->delete_pblk(blk);
+    assert(blk!=nullptr);
+    _esys->delete_pblk(blk, c);
 }

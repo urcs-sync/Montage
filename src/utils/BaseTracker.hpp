@@ -29,7 +29,7 @@ limitations under the License.
 #include <atomic>
 #include "ConcurrentPrimitives.hpp"
 
-template<class T> class BaseTracker{
+class BaseTracker{
 public:
 	padded<uint64_t>* retired_cnt;
 
@@ -51,42 +51,45 @@ public:
 		retired_cnt[tid].ui--;
 	}
 
-	virtual void* alloc(int tid){
-		return alloc();
-	}
+	// virtual void* alloc(int tid){
+	// 	return alloc();
+	// }
 
-	virtual void* alloc(){
-		return (void*)malloc(sizeof(T));
-	}
-	//NOTE: reclaim shall be only used to thread-local objects.
-	virtual void reclaim(T* obj){
-		assert(obj != NULL);
-		obj->~T();
-		free(obj);
-	}
+	// virtual void* alloc(){
+	// 	return (void*)malloc(sizeof(T));
+	// }
+	// //NOTE: reclaim shall be only used to thread-local objects.
+	// template<class T> 
+	// void reclaim(T* obj){
+	// 	assert(obj != NULL);
+	// 	obj->~T();
+	// 	free(obj);
+	// }
 
-	//NOTE: reclaim (obj, tid) should be used on all retired objects.
-	virtual void reclaim(T* obj, int tid){
-		reclaim(obj);
-	}
+	// //NOTE: reclaim (obj, tid) should be used on all retired objects.
+	// template<class T> 
+	// void reclaim(T* obj, int tid){
+	// 	reclaim(obj);
+	// }
 
 	virtual void start_op(int tid){}
 	
 	virtual void end_op(int tid){}
 
-	virtual T* read(std::atomic<T*>& obj, int idx, int tid){
+	template<class T> 
+	T* read(std::atomic<T*>& obj, int idx, int tid){
 		return obj.load(std::memory_order_acquire);
 	}
 	
 	virtual void transfer(int src_idx, int dst_idx, int tid){}
 
-	virtual void reserve(T* obj, int idx, int tid){}
+	// virtual void reserve(T* obj, int idx, int tid){}
 
 	virtual void release(int idx, int tid){}
 
 	virtual void clear_all(int tid){}
 
-	virtual void retire(T* obj, int tid){}
+	// virtual void retire(T* obj, int tid){}
 };
 
 //T has to be derived from BaseTracker

@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_range.dir/vector_range/vector_range.cpp.o  -o vector_range /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 

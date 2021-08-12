@@ -17,29 +17,30 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "PersistFunc.hpp"
+#include "PString.hpp"
 
 // (Non-buffered) durably linearizable lock-free hash table
 using namespace persist_func;
 class PLockfreeHashTable : public RMap<std::string,std::string>{
-    template <class T>
-    class my_alloc {
-    public:
-        typedef T value_type;
-        typedef std::size_t size_type;
-        typedef T& reference;
-        typedef const T& const_reference;
+    // template <class T>
+    // class my_alloc {
+    // public:
+    //     typedef T value_type;
+    //     typedef std::size_t size_type;
+    //     typedef T& reference;
+    //     typedef const T& const_reference;
 
-        T* allocate(std::size_t n) {
-            // assert(alloc != NULL);
-            if (auto p = static_cast<T*>(RP_malloc(n * sizeof(T)))) return p;
-            throw std::bad_alloc();
-        }
+    //     T* allocate(std::size_t n) {
+    //         // assert(alloc != NULL);
+    //         if (auto p = static_cast<T*>(RP_malloc(n * sizeof(T)))) return p;
+    //         throw std::bad_alloc();
+    //     }
 
-        void deallocate(T *ptr, std::size_t) noexcept {
-            // assert(alloc != NULL);
-            RP_free(ptr);
-        }
-    };
+    //     void deallocate(T *ptr, std::size_t) noexcept {
+    //         // assert(alloc != NULL);
+    //         RP_free(ptr);
+    //     }
+    // };
     struct Node;
 
     struct MarkPtr{
@@ -48,32 +49,15 @@ class PLockfreeHashTable : public RMap<std::string,std::string>{
         MarkPtr():ptr(nullptr){};
     };
 
-    struct Node{
-        std::basic_string<char,char_traits<char>,my_alloc<char>> key;
-        std::basic_string<char,char_traits<char>,my_alloc<char>> val;
+    struct Node : public Persistent{
+        pds::PString<TESTS_KEY_SIZE> key;
+        pds::PString<TESTS_VAL_SIZE> val;
         MarkPtr next;
         Node(std::string k, std::string v, Node* n):key(k),val(v),next(n){
-            clwb_range_nofence(key.data(), key.size());
-            clwb_range_nofence(val.data(), val.size());
+            // clwb_range_nofence(key.data(), key.size());
+            // clwb_range_nofence(val.data(), val.size());
+            clwb_obj_nofence(this);
         };
-        void* operator new(size_t size){
-            // cout<<"persistent allocator called."<<endl;
-            // void* ret = malloc(size);
-            void* ret = RP_malloc(size);
-            if (!ret){
-                cerr << "Persistent::new failed: no free memory" << endl;
-                exit(1);
-            }
-            return ret;
-        }
-
-        void* operator new (std::size_t size, void* ptr) {
-            return ptr;
-        }
-
-        void operator delete(void * p) { 
-            RP_free(p); 
-        } 
     };
 private:
     std::hash<std::string> hash_fn;
@@ -81,7 +65,7 @@ private:
     padded<MarkPtr>* buckets=new padded<MarkPtr>[idxSize]{};
     bool findNode(MarkPtr* &prev, Node* &curr, Node* &next, std::string key, int tid);
 
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
 
     const uint64_t MARK_MASK = ~0x1;
     inline Node* getPtr(Node* mptr){
@@ -132,6 +116,7 @@ optional<std::string> PLockfreeHashTable::get(std::string key, int tid) {
     tracker.start_op(tid);
     if(findNode(prev,curr,next,key,tid)) {
         res=curr->val;
+        clwb_obj_fence(&curr->val);
     }
     tracker.end_op(tid);
 
@@ -151,19 +136,18 @@ optional<std::string> PLockfreeHashTable::put(std::string key, std::string val, 
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
             res=curr->val;
+            clwb_obj_fence(&curr->val);
             tmpNode->next.ptr.store(curr);
-            clwb(tmpNode);
-            sfence();
+            clwb_obj_fence(tmpNode);
             if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                clwb(prev);
-                sfence();
+                clwb_obj_fence(prev);
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next)));
-                clwb(curr);
-                sfence();
+                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
+                    clwb_obj_fence(curr);
+                }
+                clwb_obj_fence(curr);
                 if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    clwb(tmpNode);
-                    sfence();
+                    clwb_obj_fence(tmpNode);
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -175,11 +159,9 @@ optional<std::string> PLockfreeHashTable::put(std::string key, std::string val, 
             //does not exist; insert.
             res={};
             tmpNode->next.ptr.store(curr);
-            clwb(tmpNode);
-            sfence();
+            clwb_obj_fence(tmpNode);
             if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                clwb(prev);
-                sfence();
+                clwb_obj_fence(prev);
                 break;
             }
         }
@@ -207,11 +189,9 @@ bool PLockfreeHashTable::insert(std::string key, std::string val, int tid){
         else {
             //does not exist, insert.
             tmpNode->next.ptr.store(curr);
-            clwb(tmpNode);
-            sfence();
+            clwb_obj_fence(tmpNode);
             if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                clwb(prev);
-                sfence();
+                clwb_obj_fence(&prev->ptr);
                 res=true;
                 break;
             }
@@ -235,15 +215,13 @@ optional<std::string> PLockfreeHashTable::remove(std::string key, int tid) {
             break;
         }
         res=curr->val;
-        sfence();
+        clwb_obj_fence(&curr->val);
         if(!curr->next.ptr.compare_exchange_strong(next,setMark(next))) {
             continue;
         }
-        clwb(curr);
-        sfence();
+        clwb_obj_fence(&curr->next);
         if(prev->ptr.compare_exchange_strong(curr,next)) {
-            clwb(prev);
-            sfence();
+            clwb_obj_fence(&prev->ptr);
             tracker.retire(curr,tid);
         } else {
             findNode(prev,curr,next,key,tid);
@@ -267,19 +245,18 @@ optional<std::string> PLockfreeHashTable::replace(std::string key, std::string v
     while(true){
         if(findNode(prev,curr,next,key,tid)){
             res=curr->val;
+            clwb_obj_fence(&curr->val);
             tmpNode->next.ptr.store(curr);
-            clwb(tmpNode);
-            sfence();
+            clwb_obj_fence(&tmpNode->next);
             if(prev->ptr.compare_exchange_strong(curr,tmpNode)){
                 // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                clwb(prev);
-                sfence();
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next)));
-                clwb(curr);
-                sfence();
+                clwb_obj_fence(&prev->ptr);
+                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
+                    clwb_obj_fence(&curr->next);
+                }
+                clwb_obj_fence(prev);
                 if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    clwb(tmpNode);
-                    sfence();
+                    clwb_obj_fence(&tmpNode->next);
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -304,16 +281,17 @@ bool PLockfreeHashTable::findNode(MarkPtr* &prev, Node* &curr, Node* &next, std:
         bool cmark=false;
         prev=&buckets[idx].ui;
         curr=getPtr(prev->ptr.load());
-        clwb(prev);
+        clwb_obj_nofence(prev);
         while(true){//to lock old and curr
             if(curr==nullptr) return false;
             next=curr->next.ptr.load();
-            clwb(curr);
+            clwb_obj_nofence(curr);
             cmark=getMark(next);
             next=getPtr(next);
             int cmp = curr->key.compare(key);
+            clwb_obj_fence(&curr->key);
             if(prev->ptr.load()!=curr) break;//retry
-            clwb(prev);
+            clwb_obj_nofence(prev);
             if(!cmark) {
                 if(cmp == 0) {
                     sfence();
@@ -325,8 +303,7 @@ bool PLockfreeHashTable::findNode(MarkPtr* &prev, Node* &curr, Node* &next, std:
             } else {
                 sfence();
                 if(prev->ptr.compare_exchange_strong(curr,next)) {
-                    clwb(prev);
-                    sfence();
+                    clwb_obj_fence(prev);
                     tracker.retire(curr,tid);
                 } else {
                     break;//retry

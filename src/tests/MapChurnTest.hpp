@@ -78,6 +78,10 @@ public:
 			if(gtc->verbose){
 				printf("Prefilled %d\n",i);
 			}
+			Recoverable* rec=dynamic_cast<Recoverable*>(m);
+			if(rec){
+				rec->sync();
+			}
 		}
 	}
 	void operation(uint64_t key, int op, int tid){
@@ -132,6 +136,10 @@ inline void MapChurnTest<std::string,std::string>::doPrefill(GlobalTestConfig* g
 		}
 		if(gtc->verbose){
 			printf("Prefilled %d\n",i);
+		}
+		Recoverable* rec=dynamic_cast<Recoverable*>(m);
+		if(rec){
+			rec->sync();
 		}
 	}
 }
