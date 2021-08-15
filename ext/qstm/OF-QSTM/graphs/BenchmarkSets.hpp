@@ -206,7 +206,7 @@ public:
 	hwloc_topology_load(pinconf->topology);
 	pinconf->num_procs = hwloc_get_nbobjs_by_depth(pinconf->topology,  
 	 hwloc_get_type_depth(pinconf->topology, HWLOC_OBJ_PU));
-	pinconf->buildAffinity();
+	pinconf->buildAffinity(numThreads);
 
         // Can either be a Reader or a Writer
         //auto rw_lambda = [this,&quit,&startFlag,&set,&udarray,&numElements](const int updateRatio, long long *ops, const int tid) {

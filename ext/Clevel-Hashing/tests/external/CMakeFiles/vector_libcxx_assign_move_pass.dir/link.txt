@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_libcxx_assign_move_pass.dir/libcxx/vector/vector.cons/assign_move.pass.cpp.o  -o vector_libcxx_assign_move_pass /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

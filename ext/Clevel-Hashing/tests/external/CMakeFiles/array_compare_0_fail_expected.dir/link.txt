@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/array_compare_0_fail_expected.dir/libcxx/array/compare.fail_0.cpp.o  -o array_compare_0_fail_expected 

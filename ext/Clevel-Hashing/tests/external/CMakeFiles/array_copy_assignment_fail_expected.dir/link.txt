@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/array_copy_assignment_fail_expected.dir/libcxx/array/array.cons/copy_assignment.fail.cpp.o  -o array_copy_assignment_fail_expected 

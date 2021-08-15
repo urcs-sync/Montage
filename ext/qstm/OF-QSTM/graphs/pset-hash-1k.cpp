@@ -14,11 +14,11 @@
 
 int main(void) {
     const std::string dataFilename {"data/qstm-pset-hash-1k.txt"};
-    vector<int> threadList = { 1, 2, 4, 8, 16, 32, 48, 64 };     // For the laptop or AWS c5.9xlarge
-    vector<int> ratioList = { 1000, 500, 100, 10, 1, 0 };        // Permil ratio: 100%, 50%, 10%, 1%, 0.1%, 0%
+    vector<int> threadList = { 1, 4, 8, 12, 16, 20, 24, 32, 36, 40, 48, 60 };  // For 2x20a
+    vector<int> ratioList = {500 };        // Permil ratio: 100%, 50%, 10%, 1%, 0.1%, 0%
     const int numElements = 1000;                                // Number of keys in the set
-    const int numRuns = 1;                                       // 5 runs for the paper
-    const seconds testLength = 20s;                              // 20s for the paper
+    const int numRuns = 3;                                       // 5 runs for the paper
+    const seconds testLength = 5s;                              // 20s for the paper
     const int EMAX_CLASS = 10;
     uint64_t results[EMAX_CLASS][threadList.size()][ratioList.size()];
     std::string cNames[EMAX_CLASS];

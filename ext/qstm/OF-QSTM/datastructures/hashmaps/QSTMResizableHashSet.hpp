@@ -36,12 +36,17 @@ private:
 
 
 public:
-    QSTMResizableHashSet(int maxThreads=0, uint64_t capacity=4) : capacity{capacity} {
+    QSTMResizableHashSet(int maxThreads=0, uint64_t capacity=1000000) : capacity{capacity} {
         updateTx<bool>([&] () {
             buckets = (tmtype<Node*>*)tmMalloc(capacity*sizeof(tmtype<Node*>));
-            for (int i = 0; i < capacity; i++) buckets[i] = nullptr;
             return true;
         });
+        for (int i = 0; i < capacity; i++) {
+            updateTx<bool>([&] () {
+                buckets[i] = nullptr;
+                return true;
+            });
+        }
     }
 
 
