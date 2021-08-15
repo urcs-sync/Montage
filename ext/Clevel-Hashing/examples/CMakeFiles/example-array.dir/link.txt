@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/example-array.dir/array/array.cpp.o  -o example-array /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread 

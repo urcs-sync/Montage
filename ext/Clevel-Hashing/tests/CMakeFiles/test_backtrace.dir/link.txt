@@ -1,2 +1,0 @@
-/usr/bin/ar qc libtest_backtrace.a  CMakeFiles/test_backtrace.dir/test_backtrace.c.o
-/usr/bin/ranlib libtest_backtrace.a

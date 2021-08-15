@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_iterators_access.dir/vector_iterators_access/vector_iterators_access.cpp.o  -o vector_iterators_access /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 

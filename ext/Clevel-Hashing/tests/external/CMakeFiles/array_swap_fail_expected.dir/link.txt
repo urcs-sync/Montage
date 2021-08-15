@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/array_swap_fail_expected.dir/libcxx/array/array.swap/swap.fail.cpp.o  -o array_swap_fail_expected 
