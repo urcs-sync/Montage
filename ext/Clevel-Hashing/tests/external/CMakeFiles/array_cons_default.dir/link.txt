@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/array_cons_default.dir/libcxx/array/array.cons/default.pass.cpp.o  -o array_cons_default /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/string_libcxx_move_assignment.dir/libcxx/basic_string/string.cons/move_assignment.pass.cpp.o  -o string_libcxx_move_assignment /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

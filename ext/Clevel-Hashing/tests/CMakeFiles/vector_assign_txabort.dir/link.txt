@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_assign_txabort.dir/vector_assign_txabort/vector_assign_txabort.cpp.o  -o vector_assign_txabort /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 
