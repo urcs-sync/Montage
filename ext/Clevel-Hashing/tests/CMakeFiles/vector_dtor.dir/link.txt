@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_dtor.dir/vector_dtor/vector_dtor.cpp.o  -o vector_dtor /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 
