@@ -17,7 +17,7 @@ void errexit(std::string s);
 	// a bunch needed because of recursive traversal of topologies.
 class PinConfig{
 public:
-void buildAffinity(int thd_num);
+void buildAffinity();
 void buildDFSAffinity_helper(hwloc_obj_t obj);
 void buildDFSAffinity();
 int buildDefaultAffinity_findCoresInSocket(hwloc_obj_t obj, std::vector<hwloc_obj_t>* cores);
@@ -26,7 +26,6 @@ int buildDefaultAffinity_findAndBuildSockets(hwloc_obj_t obj);
 void buildDefaultAffinity();
 void buildSingleAffinity_helper(hwloc_obj_t obj);
 void buildSingleAffinity();
-void buildSingleSocketAffinity();
 
 std::vector<hwloc_obj_t> affinities; // map from tid to CPU id
 hwloc_topology_t topology;

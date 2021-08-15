@@ -38,18 +38,11 @@ private:
 
 
 public:
-    TMHashMap(uint64_t capacity=1000000) : capacity{capacity} {
+    TMHashMap(uint64_t capacity=4) : capacity{capacity} {
 		buckets = (TMTYPE<Node*>*)TM::pmalloc(capacity*sizeof(TMTYPE<Node*>));
+		for (int i = 0; i < capacity; i++) buckets[i]=nullptr;
     }
 
-    void init_buckets(){
-        for (int i = 0; i < capacity; i++) {
-            TM::template updateTx<bool>([&] () {
-                buckets[i]=nullptr;
-                return true;
-            });
-        }
-    }
 
     ~TMHashMap() {
 		for(int i = 0; i < capacity; i++){

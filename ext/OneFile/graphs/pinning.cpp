@@ -192,36 +192,14 @@ void PinConfig::buildSingleAffinity(){
 	buildSingleAffinity_helper(hwloc_get_root_obj(topology));
 }
 
-// Single socket affinity: put all threads to the same (first) socket.
-// Follow default pattern within the socket.
-void PinConfig::buildSingleSocketAffinity(){
-	hwloc_obj_t obj = hwloc_get_root_obj(topology);
-	while(obj->type < HWLOC_OBJ_SOCKET){
-		obj = obj->children[0];
-	}
-	buildDefaultAffinity_findAndBuildSockets(obj);
-	int ori_size = affinities.size();
-	if((int)affinities.size()<thread_cnt){
-		affinities.resize(thread_cnt);
-	}
-	for(int i=ori_size; i<thread_cnt; i++){
-		affinities[i] = affinities[i%ori_size];
-	}
-}
-
 // reference:
 // https://www.open-mpi.org/projects/hwloc//doc/v1.2.2/hwloc_8h.php
-void PinConfig::buildAffinity(int thd_num){
-	thread_cnt=thd_num;
-	affinity="singleSocket";
+void PinConfig::buildAffinity(){
 	if(affinity.compare("dfs")==0){
 		buildDFSAffinity();
 	}
 	else if(affinity.compare("single")==0){
 		buildSingleAffinity();
-	}
-	else if (affinity.compare("singleSocket")==0){
-		buildSingleSocketAffinity();
 	}
 	else{
 		buildDefaultAffinity();

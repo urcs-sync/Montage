@@ -14,13 +14,11 @@
 int main(void) {
     const std::string dataFilename {"data/pset-hash-1k-1w.txt"};
 //    vector<int> threadList = { 1, 2, 4, 6, 8, 12, 16, 24, 32, 40, 48, 64, 72 };
-// vector<int> threadList = { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80 };
-// // For 2x20a
-vector<int> threadList = { 1, 4, 8, 12, 16, 20, 24, 32, 36, 40, 48, 62, 72, 80, 90 };  // For 2x20a
-    // vector<int> threadList = { 1}; // For testing one core count at a time
+//    vector<int> threadList = { 1, 5, 10, 20, 30, 40, 50, 60, 70, 80 };  // For 2x20a
+    vector<int> threadList = { 1}; // For testing one core count at a time
 //    vector<int> ratioList = { 1000, 500, 100, };        // Permil ratio: 100%, 50%, 10%
     vector<int> ratioList = { 500};
-    const int numElements = 500000;                                // Number of keys in the set
+    const int numElements = 1000;                                // Number of keys in the set
     const int numRuns = 3;
     const seconds testLength = 5s;
     const int EMAX_CLASS = 10;

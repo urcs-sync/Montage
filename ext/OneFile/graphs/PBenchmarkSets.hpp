@@ -125,7 +125,7 @@ public:
 	hwloc_topology_load(pinconf->topology);
 	pinconf->num_procs = hwloc_get_nbobjs_by_depth(pinconf->topology,  
 	 hwloc_get_type_depth(pinconf->topology, HWLOC_OBJ_PU));
-	pinconf->buildAffinity(num_threads);
+	pinconf->buildAffinity();
 
         // Create all the keys in the concurrent set
         K** udarray = new K*[numElements];
@@ -135,7 +135,6 @@ public:
             set = PTM::template tmNew<S>();
             return true;
         });
-        set->init_buckets();
         // Add all the items, one at a time, otherwise the transaction is too big to fit in the logs
         set->addAll(udarray, numElements);
 
