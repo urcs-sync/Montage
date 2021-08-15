@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/example-map_cli.dir/map_cli/map_cli.cpp.o  -o example-map_cli /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread 

@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_libcxx_erase_iter_iter.dir/libcxx/vector/vector.modifiers/erase_iter_iter.pass.cpp.o  -o vector_libcxx_erase_iter_iter /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread ../libtest_backtrace.a ../libvalgrind_internal.a 

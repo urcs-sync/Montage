@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/vector_ctor_exceptions_nopmem.dir/vector_ctor_exceptions_nopmem/vector_ctor_exceptions_nopmem.cpp.o  -o vector_ctor_exceptions_nopmem /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 

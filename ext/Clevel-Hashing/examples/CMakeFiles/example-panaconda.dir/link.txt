@@ -1,1 +1,0 @@
-/usr/bin/c++   -Wall -Wpointer-arith -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/example-panaconda.dir/panaconda/panaconda.cpp.o  -o example-panaconda /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread -lncurses -ltinfo 
