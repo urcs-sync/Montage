@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Wpointer-arith -Wunused-macros -Wsign-conversion -Wsign-compare -fno-common -g -ggdb -DDEBUG  -rdynamic CMakeFiles/string_assign_tx_abort.dir/string_assign_tx_abort/string_assign_tx_abort.cpp.o  -o string_assign_tx_abort /usr/lib64/libpmemobj.so /usr/lib64/libpmem.so -lpthread libtest_backtrace.a libvalgrind_internal.a 
