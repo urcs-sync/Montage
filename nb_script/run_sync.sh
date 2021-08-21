@@ -7,7 +7,7 @@ cd "$( dirname "${BASH_SOURCE[0]}" )"
 # go to PDSHarness
 cd ..
 
-outfile_dir="data"
+outfile_dir="nb_data"
 threads=40
 TASK_LENGTH=30 # length of each workload in second
 REPEAT_NUM=2 # number of trials

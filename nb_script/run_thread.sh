@@ -7,7 +7,7 @@ cd "$( dirname "${BASH_SOURCE[0]}" )"
 # go to PDSHarness
 cd ..
 
-outfile_dir="data"
+outfile_dir="nb_data"
 # THREADS=(1 4 8 12 16 20 24 32 36 40 48 62 72 80 90)
 # TASK_LENGTH=30 # length of each workload in second
 THREADS=(1 10 20 36 40 62 80 90)
