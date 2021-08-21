@@ -4,10 +4,10 @@
 #include <limits.h>
 #include <string>
 #include "Persistent.hpp"
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 
-// typedef pds::PString<TESTS_KEY_SIZE> sval_t;
-// typedef pds::PString<TESTS_VAL_SIZE> skey_t;
+// typedef pds::InPlaceString<TESTS_KEY_SIZE> sval_t;
+// typedef pds::InPlaceString<TESTS_VAL_SIZE> skey_t;
 
 #define CACHE_ALIGN
 
@@ -36,8 +36,8 @@ struct alignas(64) node_t : public Persistent{
 struct node_t : public Persistent{
 #endif
     node_t(){}
-    pds::PString<TESTS_KEY_SIZE> key;
-    pds::PString<TESTS_VAL_SIZE> value;
+    pds::InPlaceString<TESTS_KEY_SIZE> key;
+    pds::InPlaceString<TESTS_VAL_SIZE> value;
     node_t* volatile right;
     node_t* volatile left;
     // uint8_t padding[32];

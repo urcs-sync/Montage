@@ -16,7 +16,7 @@
 #include "RMap.hpp"
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 
 // lock-free hash table placed on NVM
 template <class K, class V>
@@ -106,8 +106,8 @@ class NVMLockfreeHashTableFactory : public RideableFactory{
 
 template <>
 struct NVMLockfreeHashTable<std::string,std::string>::Node : public Persistent{
-    pds::PString<TESTS_KEY_SIZE> key;
-    pds::PString<TESTS_VAL_SIZE> val;
+    pds::InPlaceString<TESTS_KEY_SIZE> key;
+    pds::InPlaceString<TESTS_VAL_SIZE> val;
     MarkPtr next;
     Node(std::string k, std::string v, Node* n):key(k),val(v),next(n){
         // clwb_range_nofence(key.data(), key.size());

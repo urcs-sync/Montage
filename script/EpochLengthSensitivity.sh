@@ -44,7 +44,7 @@ for base in "${base_list[@]}"; do
                 rm -rf /mnt/pmem/${USER}_*; $base -dEpochLengthUnit=$unit -dEpochLength=$length $args >> $output
             done
         done
-        for length in 1 5; do
+        for length in 1 5 8 10 12 15; do
             echo -n "$args -dEpochLengthUnit=Second -dEpochLength=$length," >> $output
             rm -rf /mnt/pmem/${USER}_*; $base -dEpochLengthUnit=Second -dEpochLength=$length $args >> $output
         done

@@ -60,10 +60,10 @@
 #include "PLockfreeSkipList.hpp"
 #include "NVTLockfreeSkipList.hpp"
 
-//#include "TGraph.hpp"
-//#include "NVMGraph.hpp"
+#include "TGraph.hpp"
+#include "NVMGraph.hpp"
 // #include "DLGraph.hpp"
-//#include "MontageGraph.hpp"
+#include "MontageGraph.hpp"
 #endif
 
 #ifdef MNEMOSYNE
@@ -113,10 +113,10 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new FriedmanQueueFactory(), "FriedmanQueue");//comparison
 	gtc.addRideableOption(new MontageMSQueueFactory<string>(), "MontageMSQueue");
 #if !defined(MNEMOSYNE) and !defined(PRONTO)
-	// gtc.addRideableOption(new QueueFactory<string,PLACE_DRAM>(), "TransientQueue<DRAM>");
-	// gtc.addRideableOption(new QueueFactory<string,PLACE_NVM>(), "TransientQueue<NVM>");
+	gtc.addRideableOption(new QueueFactory<string,PLACE_DRAM>(), "TransientQueue<DRAM>");
+	gtc.addRideableOption(new QueueFactory<string,PLACE_NVM>(), "TransientQueue<NVM>");
 	gtc.addRideableOption(new MontageQueueFactory<string>(), "MontageQueue");
-	// gtc.addRideableOption(new MODQueueFactory(), "MODQueue");
+	gtc.addRideableOption(new MODQueueFactory(), "MODQueue");
 
 	/* mappings */
 	gtc.addRideableOption(new LockfreeHashTableFactory<string>(), "LfHashTable");//transient
@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new MontageLfHashTableFactory<string>(), "MontageLfHashTable");
 	gtc.addRideableOption(new DaliUnorderedMapFactory<string>(), "Dali");//comparison
 	gtc.addRideableOption(new SOFTHashTableFactory<string>(), "SOFT");
-	// gtc.addRideableOption(new MODHashTableFactory<string>(), "MODHashTable");
+	gtc.addRideableOption(new MODHashTableFactory<string>(), "MODHashTable");
 	gtc.addRideableOption(new NVMSOFTHashTableFactory<string>(), "NVMSOFT");
 	gtc.addRideableOption(new NVTHashTableFactory(), "NVTraverseHashTable");
 	gtc.addRideableOption(new CLevelHashFactory(), "CLevelHashTable");
@@ -133,8 +133,8 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new MontageSSHashTableFactory<std::string>(), "MontageSSHashTable");
 	gtc.addRideableOption(new NatarajanTreeFactory<string>(), "NataTree");//transient
 	gtc.addRideableOption(new NVMNatarajanTreeFactory(), "NVMNataTree");//transient
-	// gtc.addRideableOption(new HashTableFactory<string,PLACE_DRAM>(), "TransientHashTable<DRAM>");
-	// gtc.addRideableOption(new HashTableFactory<string,PLACE_NVM>(), "TransientHashTable<NVM>");
+	gtc.addRideableOption(new HashTableFactory<string,PLACE_DRAM>(), "TransientHashTable<DRAM>");
+	gtc.addRideableOption(new HashTableFactory<string,PLACE_NVM>(), "TransientHashTable<NVM>");
 	gtc.addRideableOption(new MontageHashTableFactory<string>(), "MontageHashTable");
 
 	gtc.addRideableOption(new PNatarajanTreeFactory(), "PNataTree");
@@ -147,16 +147,14 @@ int main(int argc, char *argv[])
 	gtc.addRideableOption(new NVTLockfreeSkipListFactory<std::string>(), "NVTLockfreeSkipList");
 
 	/* graphs */
-	// gtc.addRideableOption(new TGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "TGraph");
-	// gtc.addRideableOption(new NVMGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "NVMGraph");
+	gtc.addRideableOption(new TGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "TGraph");
+	gtc.addRideableOption(new NVMGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "NVMGraph");
 	// gtc.addRideableOption(new DLGraphFactory<numVertices>(), "DLGraph");
-	// gtc.addRideableOption(new MontageGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "MontageGraph");
+	gtc.addRideableOption(new MontageGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "MontageGraph");
 
     // gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
-    // gtc.addRideableOption(new TGraphFactory<3076727, 0, 100>(), "TransientOrkut");
+    gtc.addRideableOption(new TGraphFactory<3076727, 0, 100>(), "TransientOrkut");
 
-	// gtc.addRideableOption(new NatarajanTreeFactory<std::string>(), "NatarajanTree");
-	// gtc.addRideableOption(new MontageNatarajanTreeFactory<std::string>(), "MontageNatarajanTree");
 #endif /* !defined(MNEMOSYNE) and !defined(PRONTO) */
 #ifdef MNEMOSYNE
 	gtc.addRideableOption(new MneQueueFactory<string>(), "MneQueue");
@@ -171,9 +169,9 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new MapChurnTest<string,string>(0, 0, 50, 50, 1000000, 500000), "MapChurnTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapChurnTest<string,string>(50, 0, 25, 25, 1000000, 500000), "MapChurnTest<string>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapChurnTest<string,string>(90, 0, 5, 5, 1000000, 500000), "MapChurnTest<string>:g90p0i5rm5:range=1000000:prefill=500000");
-	gtc.addTestOption(new MapTest<string,string>(0, 0, 50, 50, 2000000, 1000000, 10000000), "MapTest<string>:g0p0i50rm50:range=2000000:prefill=1000000:op=10000000");
-	gtc.addTestOption(new MapTest<string,string>(50, 0, 25, 25, 2000000, 1000000, 10000000), "MapTest<string>:g50p0i25rm25:range=2000000:prefill=1000000:op=10000000");
-	gtc.addTestOption(new MapTest<string,string>(90, 0, 5, 5, 2000000, 1000000, 10000000), "MapTest<string>:g90p0i5rm5:range=2000000:prefill=1000000:op=10000000");
+	gtc.addTestOption(new MapTest<string,string>(0, 0, 50, 50, 1000000, 500000, 10000000), "MapTest<string>:g0p0i50rm50:range=1000000:prefill=500000:op=10000000");
+	gtc.addTestOption(new MapTest<string,string>(50, 0, 25, 25, 1000000, 500000, 10000000), "MapTest<string>:g50p0i25rm25:range=1000000:prefill=500000:op=10000000");
+	gtc.addTestOption(new MapTest<string,string>(90, 0, 5, 5, 1000000, 500000, 10000000), "MapTest<string>:g90p0i5rm5:range=1000000:prefill=500000:op=10000000");
 	gtc.addTestOption(new MapSyncTest<string, string>(0, 0, 50, 50, 1000000, 500000), "MapSyncTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapSyncTest<string, string>(50, 0, 25, 25, 1000000, 500000), "MapSyncTest<string>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new QueueSyncTest(50,50,2000), "QueueSync:eq50dq50:prefill=2000");
@@ -197,7 +195,6 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new AllocTest(1024 * 1024, DO_MONTAGE_ALLOC), "AllocTest-Montage");
 
 	gtc.parseCommandLine(argc, argv);
-
         omp_set_num_threads(gtc.task_num);
 	gtc.runTest();
 

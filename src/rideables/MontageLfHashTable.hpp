@@ -410,11 +410,11 @@ bool MontageLfHashTable<K,V,idxSize>::findNode(MarkPtr* &prev, Node* &curr, Node
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class MontageLfHashTable<std::string, std::string>::Payload : public pds::PBlk{
-    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
+    GENERATE_FIELD(pds::InPlaceString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::InPlaceString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(std::string k, std::string v) : m_key(this, k), m_val(this, v){}

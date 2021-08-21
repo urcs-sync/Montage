@@ -672,11 +672,11 @@ optional<V> NVMLockfreeSkipList<K,V>::replace(K key, V val, int tid)
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class NVMLockfreeSkipList<std::string, std::string>::Payload : public Persistent {
 public:
-    pds::PString<TESTS_VAL_SIZE> val;
+    pds::InPlaceString<TESTS_VAL_SIZE> val;
     Payload(){};
     Payload(std::string v) : val(v){};
 };

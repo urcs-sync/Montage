@@ -121,11 +121,11 @@ class PriorityQueueFactory : public RideableFactory{
 
 
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template<>
 class PriorityQueue<std::string, std::string>::Payload : public pds::PBlk{
-  GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
-  GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
+  GENERATE_FIELD(pds::InPlaceString<TESTS_KEY_SIZE>, key, Payload);
+  GENERATE_FIELD(pds::InPlaceString<TESTS_VAL_SIZE>, val, Payload);
   GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:

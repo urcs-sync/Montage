@@ -17,7 +17,7 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "PersistFunc.hpp"
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 
 // (Non-buffered) durably linearizable lock-free hash table
 using namespace persist_func;
@@ -50,8 +50,8 @@ class PLockfreeHashTable : public RMap<std::string,std::string>{
     };
 
     struct Node : public Persistent{
-        pds::PString<TESTS_KEY_SIZE> key;
-        pds::PString<TESTS_VAL_SIZE> val;
+        pds::InPlaceString<TESTS_KEY_SIZE> key;
+        pds::InPlaceString<TESTS_VAL_SIZE> val;
         MarkPtr next;
         Node(std::string k, std::string v, Node* n):key(k),val(v),next(n){
             // clwb_range_nofence(key.data(), key.size());

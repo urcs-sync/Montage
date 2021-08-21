@@ -62,7 +62,7 @@ public:
     }
 };
 
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 class NVMQueue : public RQueue<string>{
 private:
     struct Node{

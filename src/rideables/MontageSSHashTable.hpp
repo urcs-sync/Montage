@@ -324,12 +324,12 @@ optional<V> MontageSSHashTable<K, V>::replace(K key, V val, int tid)
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class MontageSSHashTable<std::string, std::string>::Payload : public pds::PBlk{
 public:
-    pds::PString<TESTS_KEY_SIZE> key;
-    pds::PString<TESTS_VAL_SIZE> val;
+    pds::InPlaceString<TESTS_KEY_SIZE> key;
+    pds::InPlaceString<TESTS_VAL_SIZE> val;
     Payload(std::string k, std::string v) : key(this, k), val(this, v){}
     Payload(const Payload& oth) : pds::PBlk(oth), key(this, oth.key), val(this, oth.val){}
     void persist(){}

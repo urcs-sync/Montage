@@ -66,7 +66,6 @@ LIBITM_PATH = ./ext/libitm
 IDIRS:=./src ./src/utils ./src/rideables ./src/tests ./src/persist ./src/persist/api
 IDIRS+=./ext/ralloc/src
 IDIRS+=$(IMMER_DIR) $(NVM_MALLOC_DIR)/src/ 
-# IDIRS+=./ext/pmdk/src/include
 
 # directory to put build artifacts (e.g. .o, .d files)
 ODIR:=./obj
@@ -82,7 +81,6 @@ LIBS+=-lnvmmalloc -lpmemobj -lpmem
 # You should avoid this in general, but it's useful for building
 # external libraries which we depend on
 RECURSEDIRS := ext/ralloc $(PRONTO_PATH)/src $(NVM_MALLOC_DIR) $(MNEMOSYNE_PATH)/usermode
-# RECURSEDIRS += ./ext/pmdk
 # root directories of sources.  Will be recursively
 # searched for .c and .cpp files.  All of them will
 # be built

@@ -17,7 +17,7 @@
 #include "RCUTracker.hpp"
 #include "CustomTypes.hpp"
 #include "PersistFunc.hpp"
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 
 // NVTraverse-based nonblocking hashtable
 // https://dl.acm.org/doi/pdf/10.1145/3385412.3386031?casa_token=wPPFarFf6NEAAAAA:iLbzTjoilFePXUceguEoYQxDBIYcJV1yYePfkzwCnO6dbeMqYZY76a9kXIhhyZUGzmzmlQ1fHBs8dSg
@@ -52,8 +52,8 @@ class NVTHashTable : public RMap<std::string,std::string>{
     };
 
     struct Node : public Persistent{
-        pds::PString<TESTS_KEY_SIZE> key;
-        pds::PString<TESTS_VAL_SIZE> val;
+        pds::InPlaceString<TESTS_KEY_SIZE> key;
+        pds::InPlaceString<TESTS_VAL_SIZE> val;
         MarkPtr next;
         Node(std::string k, std::string v, Node* n):key(k),val(v),next(n){
             clwb_obj_nofence(this); // flush after write

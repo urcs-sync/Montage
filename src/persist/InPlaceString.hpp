@@ -1,5 +1,5 @@
-#ifndef PSTRING_HPP
-#define PSTRING_HPP
+#ifndef INPLACESTRING_HPP
+#define INPLACESTRING_HPP
 
 #include <cstring>
 #include <string>
@@ -11,36 +11,36 @@ namespace pds{
 
 // extern __thread int pds::_tid;
 
-// class PString : public PBlk{
+// class InPlaceString : public PBlk{
 //     pptr<PBlkArray<char>> char_array;
 
 // public:
 //     // TODO: it's kind of cheating to use epochs[] here...
-//     PString(PBlk* owner, const std::string& str) : PBlk(owner), 
+//     InPlaceString(PBlk* owner, const std::string& str) : PBlk(owner), 
 //         char_array(esys->alloc_pblk_array<char>(owner, str.size()+1, epochs[EpochSys::tid].ui)) {
 //         memcpy(char_array->content, str.c_str(), str.size()+1);
 //         esys->register_update_pblk(char_array, epochs[EpochSys::tid].ui);
 //     }
-//     PString(const PString& oth): PBlk(oth), 
+//     InPlaceString(const InPlaceString& oth): PBlk(oth), 
 //         char_array(esys->copy_pblk_array<char>(oth.char_array, epochs[EpochSys::tid].ui)) {}
 
 //     pptr<PBlk> get_data(){
 //         return pptr<PBlk>(char_array);
 //     }
 
-//     virtual ~PString(){
-//         // It's safe to reclaim char_array directly since the owner must deep copy itself ahead, including PString and char_array
+//     virtual ~InPlaceString(){
+//         // It's safe to reclaim char_array directly since the owner must deep copy itself ahead, including InPlaceString and char_array
 //         PDELETE_DATA((PBlkArray<char>*)char_array);
 //     }
 
-//     PString& operator = (const PString &oth){ //assignment
+//     InPlaceString& operator = (const InPlaceString &oth){ //assignment
 //         // if(char_array!=nullptr) // char_array being null is impossible
 //         PDELETE_DATA((PBlkArray<char>*)char_array);
 //         char_array = esys->copy_pblk_array<char>(oth.char_array, epochs[EpochSys::tid].ui);
 //         return *this;
 //     }
 
-//     PString& operator=(const std::string& str){
+//     InPlaceString& operator=(const std::string& str){
 //         PDELETE_DATA((PBlkArray<char>*)char_array);
 //         char_array = esys->alloc_pblk_array<char>(this, str.size()+1, epochs[EpochSys::tid].ui);
 //         memcpy(char_array->content, str.c_str(), str.size()+1);
@@ -60,30 +60,30 @@ namespace pds{
 // };
 
 template<size_t cap=1025>
-class PString{
+class InPlaceString{
     size_t size_;
     char char_array[cap+1];
 public:
-    PString(PBlk* owner, const std::string& str) : size_(str.size()){
+    InPlaceString(PBlk* owner, const std::string& str) : size_(str.size()){
         assert(size_<=cap);
         memcpy(char_array, str.c_str(), str.size()+1);
         assert(char_array[size_] == '\0');
     }
-    PString(const PString<cap>& oth){
+    InPlaceString(const InPlaceString<cap>& oth){
         size_ = oth.size();
         assert(size_<=cap);
         memcpy(char_array, oth.char_array, size_+1);
         assert(char_array[size_] == '\0');
     }
-    PString(const std::string& str) : size_(str.size()){
+    InPlaceString(const std::string& str) : size_(str.size()){
         assert(size_<=cap);
         memcpy(char_array, str.c_str(), str.size()+1);
         assert(char_array[size_] == '\0');
     }
-    PString() : size_(0){
+    InPlaceString() : size_(0){
         char_array[0] = '\0';
     }
-    PString<cap>& operator = (const PString<cap> &oth){ //assignment
+    InPlaceString<cap>& operator = (const InPlaceString<cap> &oth){ //assignment
         size_ = oth.size();
         assert(size_<=cap);
         memcpy(char_array, oth.char_array, size_+1);
@@ -91,7 +91,7 @@ public:
         return *this;
     }
 
-    PString<cap>& operator=(const std::string& str){
+    InPlaceString<cap>& operator=(const std::string& str){
         size_ = str.size();
         assert(size_<=cap);
         memcpy(char_array, str.c_str(), size_+1);
@@ -102,46 +102,46 @@ public:
         assert(c_str()[size()] == '\0');
         return strcmp(c_str(), s.c_str());
     }
-    friend bool operator == (const std::string& a, const PString<cap>& b){
+    friend bool operator == (const std::string& a, const InPlaceString<cap>& b){
         assert(b.c_str()[b.size()] == '\0');
         if (a.size() != b.size()){
             return false;
         }
         return (strcmp(a.c_str(), b.c_str()) == 0);
     }
-    friend bool operator == (const PString<cap>& a, const std::string& b){
+    friend bool operator == (const InPlaceString<cap>& a, const std::string& b){
         return (b == a);
     }
-    friend bool operator != (const std::string& a, const PString<cap>& b){
+    friend bool operator != (const std::string& a, const InPlaceString<cap>& b){
         return !(a == b);
     }
-    friend bool operator != (const PString<cap>& a, const std::string& b){
+    friend bool operator != (const InPlaceString<cap>& a, const std::string& b){
         return !(b == a);
     }
-    friend bool operator < (const std::string& a, const PString<cap>& b){
+    friend bool operator < (const std::string& a, const InPlaceString<cap>& b){
         assert(b.c_str()[b.size()] == '\0');
         return (strcmp(a.c_str(), b.c_str()) < 0);
     }
-    friend bool operator < (const PString<cap>& a, const std::string& b){
+    friend bool operator < (const InPlaceString<cap>& a, const std::string& b){
         assert(a.c_str()[a.size()] == '\0');
         return (strcmp(a.c_str(), b.c_str()) < 0);
     }
-    friend bool operator > (const std::string& a, const PString<cap>& b){
+    friend bool operator > (const std::string& a, const InPlaceString<cap>& b){
         return (b < a);
     }
-    friend bool operator > (const PString<cap>& a, const std::string& b){
+    friend bool operator > (const InPlaceString<cap>& a, const std::string& b){
         return (b < a);
     }
-    friend bool operator <= (const std::string& a, const PString<cap>& b){
+    friend bool operator <= (const std::string& a, const InPlaceString<cap>& b){
         return !(a > b);
     }
-    friend bool operator <= (const PString<cap>& a, const std::string& b){
+    friend bool operator <= (const InPlaceString<cap>& a, const std::string& b){
         return !(a > b);
     }
-    friend bool operator >= (const std::string& a, const PString<cap>& b){
+    friend bool operator >= (const std::string& a, const InPlaceString<cap>& b){
         return !(a < b);
     }
-    friend bool operator >= (const PString<cap>& a, const std::string& b){
+    friend bool operator >= (const InPlaceString<cap>& a, const std::string& b){
         return !(a < b);
     }
 
@@ -167,18 +167,18 @@ public:
 #include <functional>
 #include "PersistFunc.hpp"
 template<size_t cap=1025>
-class TrivialPString {
+class TrivialInPlaceString {
     char content[cap];
     size_t sz;
 public:
     inline size_t size() const { return sz;}
-    TrivialPString(const std::string& str) {
+    TrivialInPlaceString(const std::string& str) {
         sz = str.size();
         assert(str.size()<=cap);
         memcpy((char*)content, str.data(), str.size());
     }
 
-    ~TrivialPString(){
+    ~TrivialInPlaceString(){
     }
 #ifndef MNEMOSYNE
     std::string_view std_str()const{
@@ -201,15 +201,15 @@ public:
         return std::string((char*)content, sz);
     }
 
-    bool operator==(const TrivialPString<cap> &other) const { 
+    bool operator==(const TrivialInPlaceString<cap> &other) const { 
         return std_str() == other.std_str();
     }
-    TrivialPString<cap>& operator=(const std::string& str){
+    TrivialInPlaceString<cap>& operator=(const std::string& str){
         if(str.size() <= cap){
             memcpy((char*)content, str.data(), str.size());
             sz = str.size();
         } else {
-            printf("String length exceeds TrivialPString capacity!\n");
+            printf("String length exceeds TrivialInPlaceString capacity!\n");
             exit(1);
         }
         return *this;
@@ -229,13 +229,13 @@ public:
 } // namespace pds
 
 namespace std {
-  template <size_t cap> struct hash<pds::TrivialPString<cap>> {
+  template <size_t cap> struct hash<pds::TrivialInPlaceString<cap>> {
 #ifndef MNEMOSYNE
     static hash<string_view> str_hash;
 #else
     static hash<string> str_hash;
 #endif
-    size_t operator()(const pds::TrivialPString<cap> & x) const {
+    size_t operator()(const pds::TrivialInPlaceString<cap> & x) const {
       return str_hash(x.std_str());
     }
   };

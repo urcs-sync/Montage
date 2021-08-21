@@ -720,12 +720,12 @@ optional<V> PLockfreeSkipList<K,V>::replace(K key, V val, int tid)
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class PLockfreeSkipList<std::string, std::string>::Payload : public Persistent {
 public:
-    pds::PString<TESTS_KEY_SIZE> key;
-    pds::PString<TESTS_VAL_SIZE> val;
+    pds::InPlaceString<TESTS_KEY_SIZE> key;
+    pds::InPlaceString<TESTS_VAL_SIZE> val;
     Payload(){};
     Payload(std::string k, std::string v) : key(k), val(v){};
 };
