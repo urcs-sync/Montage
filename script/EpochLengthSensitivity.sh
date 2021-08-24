@@ -8,9 +8,9 @@ make clean; make
 # base_list=("bin/main -r22 -m5 -i30 -t40")
 # base_list=("bin/main -r8 -m2 -i30 -t1")
 base_list=(
-    "bin/main -r22 -m5 -i30 -t40"
-    "bin/main -r8 -m2 -i30 -t1"
-    "bin/main -r24 -m5 -i30 -t40"
+    "bin/main -r18 -m5 -i30 -t40"
+    "bin/main -r4 -m2 -i30 -t1"
+    "bin/main -r20 -m5 -i30 -t40"
 )
 output="data/sensitivity.txt"
 

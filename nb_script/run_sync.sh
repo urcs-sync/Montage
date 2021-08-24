@@ -11,7 +11,7 @@ outfile_dir="nb_data"
 threads=40
 TASK_LENGTH=30 # length of each workload in second
 REPEAT_NUM=2 # number of trials
-BASE="bin/main -r22 -i30 -dEpochLengthUnit=Second -dEpochLength=0 -t$threads "
+BASE="bin/main -r18 -i30 -dEpochLengthUnit=Second -dEpochLength=0 -t$threads "
 STRATEGY_LIST=(
     "-dPersistStrat=BufferedWB -dContainer=HashSet -dBufferSize=8"
     "-dPersistStrat=BufferedWB -dContainer=CircBuffer -dBufferSize=64"
