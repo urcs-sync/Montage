@@ -108,6 +108,11 @@ Rscript mt_graph_plotting.R # plot graph_*_thread.pdf from graph_thread.csv
 Rscript rec_orkut_plotting.R # plot graph_recovery.pdf from graph_recovery.csv
 ```
 
+To run epoch length sensitivity test:
+```bash
+./script/EpochLengthSensitivity.sh
+```
+
 ### 2.1. Run Specific Queue or Map Test
 
 **Please read this subsection if you want to manually test specific
