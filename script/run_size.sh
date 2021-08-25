@@ -35,7 +35,7 @@ queue_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in {0..7} 
+            for rideable in (2 4 5 6 7) 
             do
                 delete_heap_file
                 queue_csv_prefix $sz
@@ -50,7 +50,7 @@ queue_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in 3 
+            for rideable in 6 
             do
                 delete_heap_file
                 queue_csv_prefix $sz

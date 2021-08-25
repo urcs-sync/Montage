@@ -34,7 +34,7 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in {0..3} 
+            for rideable in (2 4 5 6 7) 
             do
                 delete_heap_file
                 ./bin/main -r $rideable -m0 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
@@ -47,7 +47,7 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 2 
+            for rideable in 6 
             do
                 delete_heap_file
                 ./bin/main -r $rideable -m0 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
@@ -118,7 +118,7 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in {7..12} 
+            for rideable in (22 23 24 13 16 12 14) 
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
@@ -141,7 +141,7 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 10 
+            for rideable in 24
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
