@@ -35,7 +35,7 @@ queue_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in {0..3} 
+            for rideable in {0..7} 
             do
                 delete_heap_file
                 queue_csv_prefix $sz
@@ -50,7 +50,7 @@ queue_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in 2 
+            for rideable in 3 
             do
                 delete_heap_file
                 queue_csv_prefix $sz
@@ -125,7 +125,7 @@ map_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in {7..12} 
+            for rideable in (22 23 24 13 16 12 14) 
             do
                 delete_heap_file
                 echo -n "g0i50r50,sz=$sz,"
@@ -151,7 +151,7 @@ map_execute(){
         for sz in "${SIZES[@]}"
         do
             make clean;V_SZ=$sz make -j
-            for rideable in 10 
+            for rideable in 24 
             do
                 delete_heap_file
                 echo -n "g0i50r50,sz=$sz,"

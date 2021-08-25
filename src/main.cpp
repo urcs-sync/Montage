@@ -79,7 +79,7 @@
 #include "QueueTest.hpp"
 #include "KVTest.hpp"
 #include "YCSBTest.hpp"
-//#include "GraphTest.hpp"
+#include "GraphTest.hpp"
 
 #include "MapVerify.hpp"
 #include "QueueChurnTest.hpp"
@@ -90,7 +90,7 @@
 #include "SyncTest.hpp"
 #ifndef MNEMOSYNE
 #include "RecoverVerifyTest.hpp"
-// #include "GraphRecoveryTest.hpp"
+#include "GraphRecoveryTest.hpp"
 #include "TGraphConstructionTest.hpp"
 #include "ToyTest.hpp"
 #endif /* !MNEMOSYNE */
@@ -108,11 +108,12 @@ int main(int argc, char *argv[])
 	const int vertexLoad = 50;
 
 	/* queues */
+
+#if !defined(MNEMOSYNE) and !defined(PRONTO)
 	gtc.addRideableOption(new MSQueueFactory<string>(), "MSQueue");//transient
 	gtc.addRideableOption(new NVMMSQueueFactory(), "NVMMSQueue");//transient
 	gtc.addRideableOption(new FriedmanQueueFactory(), "FriedmanQueue");//comparison
 	gtc.addRideableOption(new MontageMSQueueFactory<string>(), "MontageMSQueue");
-#if !defined(MNEMOSYNE) and !defined(PRONTO)
 	gtc.addRideableOption(new QueueFactory<string,PLACE_DRAM>(), "TransientQueue<DRAM>");
 	gtc.addRideableOption(new QueueFactory<string,PLACE_NVM>(), "TransientQueue<NVM>");
 	gtc.addRideableOption(new MontageQueueFactory<string>(), "MontageQueue");
@@ -152,8 +153,13 @@ int main(int argc, char *argv[])
 	// gtc.addRideableOption(new DLGraphFactory<numVertices>(), "DLGraph");
 	gtc.addRideableOption(new MontageGraphFactory<numVertices, meanEdgesPerVertex, vertexLoad>(), "MontageGraph");
 
-    // gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
+    gtc.addRideableOption(new MontageGraphFactory<3072627>(), "Orkut");
     gtc.addRideableOption(new TGraphFactory<3076727, 0, 100>(), "TransientOrkut");
+
+	/* LF hash tables */
+	gtc.addRideableOption(new MontageLfHashTableFactory<uint64_t>(), "MontageLfHashTable<uint64_t>");
+	gtc.addRideableOption(new LockfreeHashTableFactory<uint64_t>(), "LfHashTable<uint64_t>");
+	gtc.addRideableOption(new NVMLockfreeHashTableFactory<uint64_t>(), "NVMLockfreeHashTable<uint64_t>");
 
 #endif /* !defined(MNEMOSYNE) and !defined(PRONTO) */
 #ifdef MNEMOSYNE
@@ -176,18 +182,16 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new MapSyncTest<string, string>(50, 0, 25, 25, 1000000, 500000), "MapSyncTest<string>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new QueueSyncTest(50,50,2000), "QueueSync:eq50dq50:prefill=2000");
 
-	gtc.addRideableOption(new MontageLfHashTableFactory<uint64_t>(), "MontageLfHashTable<uint64_t>");
-	gtc.addRideableOption(new LockfreeHashTableFactory<uint64_t>(), "LfHashTable<uint64_t>");
-	gtc.addRideableOption(new NVMLockfreeHashTableFactory<uint64_t>(), "NVMLockfreeHashTable<uint64_t>");
+	
 	gtc.addTestOption(new MapChurnTest<uint64_t,uint64_t>(50, 0, 25, 25, 1000000, 500000), "MapChurnTest<uint64_t>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapVerify<string, string>(50, 0, 25, 25, 1000000, 10000), "MapVerify");
 #ifndef MNEMOSYNE
 	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
 
-//	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:80edge20vertex:degree32");
-//	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:99.8edge.2vertex:degree32");
+	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:80edge20vertex:degree32");
+	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:99.8edge.2vertex:degree32");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
-    // gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
+    gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");
 #endif /* !MNEMOSYNE */
 	gtc.addTestOption(new AllocTest(1024 * 1024, DO_JEMALLOC_ALLOC), "AllocTest-JEMalloc");

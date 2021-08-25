@@ -28,13 +28,13 @@ graph_thread_execute(){
     graph_thread_init
     for ((i=1; i<=REPEAT_NUM; ++i)); do
         for threads in "${THREADS[@]}"; do
-            for test in {10..11}; do
-                for rideable in {16..17}; do
+            for test in {14..15}; do
+                for rideable in (33 35); do
                     delete_heap_file
                     bin/main -r $rideable -m $test -t $threads -i $TASK_LENGTH -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
                 done
                 delete_heap_file
-                bin/main -r 18 -m $test -t $threads -i $TASK_LENGTH $STRATEGY | tee -a $outfile_dir/graph_thread.csv
+                bin/main -r 35 -m $test -t $threads -i $TASK_LENGTH $STRATEGY | tee -a $outfile_dir/graph_thread.csv
             done
         done
     done
@@ -54,9 +54,9 @@ graph_recovery_execute(){
     for ((i=1; i<=REPEAT_NUM; ++i)); do
         for threads in "${THREADS[@]}"; do
             delete_heap_file
-            bin/main -r 19 -m 11 -t $threads &> $tmp_file_path
+            bin/main -r 36 -m 16 -t $threads &> $tmp_file_path
             if [ $? -ne 0 ]; then
-                tput setaf 1; echo "Orkut dataset failed on configuration \"-r 19 -m 11 -t ${threads}\""; tput sgr0
+                tput setaf 1; echo "Orkut dataset failed on configuration \"-r 36 -m 16 -t ${threads}\""; tput sgr0
             fi;
             output=`grep -oP "(?<=Parallel Initialization took )[0-9]+" $tmp_file_path`
             echo "$threads,$output,MontageCreation" | tee -a $outfile_dir/graph_recovery.csv
@@ -69,9 +69,9 @@ graph_recovery_execute(){
     for threads in "${THREADS[@]}"; do
         for ((i=1; i<=REPEAT_NUM; ++i)); do
             delete_heap_file
-            bin/main -r 20 -m 12 -t $threads &> $tmp_file_path
+            bin/main -r 37 -m 17 -t $threads &> $tmp_file_path
             if [ $? -ne 0 ]; then
-                tput setaf 1; echo "Orkut[TGraph] dataset failed on configuration \"-r 20 -m 12 -t ${threads}\""; tput sgr0
+                tput setaf 1; echo "Orkut[TGraph] dataset failed on configuration \"-r 37 -m 17 -t ${threads}\""; tput sgr0
             fi;
             output=`grep -oP "(?<=Time to initialize graph: )[0-9]+" $tmp_file_path`
             echo "$threads,$output,TGraphRecovery" | tee -a $outfile_dir/graph_recovery.csv

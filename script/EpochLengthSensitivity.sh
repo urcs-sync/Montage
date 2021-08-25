@@ -8,9 +8,9 @@ make clean; make
 # base_list=("bin/main -r22 -m5 -i30 -t40")
 # base_list=("bin/main -r8 -m2 -i30 -t1")
 base_list=(
-    "bin/main -r18 -m5 -i30 -t40"
-    "bin/main -r4 -m2 -i30 -t1"
-    "bin/main -r20 -m5 -i30 -t40"
+    "bin/main -r24 -m3 -i30 -t40" # MontageHashTable + MapChurn-50-50
+    "bin/main -r6 -m0 -i30 -t1" # MontageQueue + QueueChurn
+    "bin/main -r26 -m3 -i30 -t40" # MontageNataTree + MapChurn-50-50
 )
 output="data/sensitivity.txt"
 
