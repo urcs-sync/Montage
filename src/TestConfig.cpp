@@ -6,6 +6,7 @@
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -47,7 +48,7 @@ void GlobalTestConfig::parseCommandLine(int argc, char** argv){
 	}
 
 	// Read command line
-	while ((c = getopt (argc, argv, "s:d:w:o:i:t:m:a:r:vhz")) != -1){
+	while ((c = getopt (argc, argv, "s:d:w:o:i:t:m:M:a:r:R:vhz")) != -1){
 		switch (c) {
 			case 's':
 				NumString::length = atoi(optarg);
@@ -71,11 +72,35 @@ void GlobalTestConfig::parseCommandLine(int argc, char** argv){
 					printargdef();
 				}
 				break;
+			case 'M':
+				{
+					std::string n(optarg);
+					auto idx = std::find(testNames.begin(), testNames.end(), n);
+					if (idx == testNames.end()){
+						fprintf(stderr, "Invalid test mode (-M) option.\n");
+						printargdef();
+					} else {
+						this->testType = idx - testNames.begin();
+					}
+				}
+				break;
 			case 'r':
 				this->rideableType = atoi(optarg);
 				if(rideableType>=(int)rideableFactories.size()){
 					fprintf(stderr, "Invalid rideable (-r) option.\n");
 					printargdef();
+				}
+				break;
+			case 'R':
+				{
+					std::string n(optarg);
+					auto idx = std::find(rideableNames.begin(), rideableNames.end(), n);
+					if (idx == rideableNames.end()){
+						fprintf(stderr, "Invalid rideable mode (-R) option.\n");
+						printargdef();
+					} else {
+						this->rideableType = idx - rideableNames.begin();
+					}
 				}
 				break;
 			case 'a':
