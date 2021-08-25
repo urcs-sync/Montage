@@ -7,10 +7,13 @@ make clean; make
 
 # base_list=("bin/main -r22 -m5 -i30 -t40")
 # base_list=("bin/main -r8 -m2 -i30 -t1")
+map_test="MapChurnTest<string>:g50p0i25rm25:range=1000000:prefill=500000"
+queue_test="QueueChurn:eq50dq50:prefill=2000"
+
 base_list=(
-    "bin/main -r24 -m3 -i30 -t40" # MontageHashTable + MapChurn-50-50
-    "bin/main -r6 -m0 -i30 -t1" # MontageQueue + QueueChurn
-    "bin/main -r26 -m3 -i30 -t40" # MontageNataTree + MapChurn-50-50
+    "bin/main -RMontageHashTable -M$map_test -i30 -t40"
+    "bin/main -RMontageQueue -M$queue_test -i30 -t1"
+    "bin/main -RMontageNataTree -M$map_test -i30 -t40"
 )
 output="data/sensitivity.txt"
 

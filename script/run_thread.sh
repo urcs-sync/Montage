@@ -14,6 +14,28 @@ TASK_LENGTH=30 # length of each workload in second
 REPEAT_NUM=3 # number of trials
 SNAPSHOT_FREQ=15 # interval between two snapshot in pronto (not enabled)
 
+queues_plain=(
+    "FriedmanQueue"
+    "TransientQueue<DRAM>"
+    "TransientQueue<NVM>"
+    "MontageQueue"
+    "MODQueue"
+)
+queue_test="QueueChurn:eq50dq50:prefill=2000"
+
+maps_plain=(
+    "TransientHashTable<DRAM>"
+    "TransientHashTable<NVM>"
+    "MontageHashTable"
+    "SOFT"
+    "NVTraverseHashTable"
+    "Dali"
+    "MODHashTable"
+)
+map_test_write="MapChurnTest<string>:g0p0i50rm50:range=1000000:prefill=500000"
+map_test_readmost="MapChurnTest<string>:g90p0i5rm5:range=1000000:prefill=500000"
+map_test_5050="MapChurnTest<string>:g50p0i25rm25:range=1000000:prefill=500000"
+
 delete_heap_file(){
     rm -rf /mnt/pmem/${USER}* /mnt/pmem/savitar.cat /mnt/pmem/psegments
     rm -f /mnt/pmem/*.log /mnt/pmem/snapshot*
@@ -34,10 +56,10 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in (2 4 5 6 7) 
+            for rideable in ${queues_plain[@]} 
             do
                 delete_heap_file
-                ./bin/main -r $rideable -m0 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
+                ./bin/main -R $rideable -M$queue_test -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
             done
         done
     done
@@ -47,10 +69,10 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 6 
+            for rideable in "MontageQueue"
             do
                 delete_heap_file
-                ./bin/main -r $rideable -m0 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
+                ./bin/main -R $rideable -M$queue_test -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
             done
         done
     done
@@ -61,10 +83,10 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 0 
+            for rideable in "MneQueue" 
             do
                 delete_heap_file
-                ./bin/main -r $rideable -m0 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
+                ./bin/main -R $rideable -M$queue_test -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
             done
         done
     done
@@ -75,11 +97,11 @@ queue_execute(){
     do
         for threads in "${THREADS_HALF[@]}"
         do
-            for rideable in 0 
+            for rideable in "ProntoQueue"
             do
                 delete_heap_file
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m0 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
+                ./bin/main -R $rideable -M$queue_test -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
                 wait
             done
         done
@@ -91,11 +113,11 @@ queue_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 0 
+            for rideable in "ProntoQueue"
             do
                 delete_heap_file
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m0 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
+                ./bin/main -R $rideable -M$queue_test -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/queues_thread.csv
                 wait
             done
         done
@@ -118,19 +140,19 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in (22 23 24 13 16 12 14) 
+            for rideable in ${maps_plain[@]}
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
-                ./bin/main -r $rideable -m 2 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
+                ./bin/main -R $rideable -M $map_test_write -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
 
                 delete_heap_file
                 echo -n "g50i25r25,"
-                ./bin/main -r $rideable -m 3 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
+                ./bin/main -R $rideable -M $map_test_5050 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
 
                 delete_heap_file
                 echo -n "g90i5r5,"
-                ./bin/main -r $rideable -m 4 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
+                ./bin/main -R $rideable -M $map_test_readmost -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
             done
         done
     done
@@ -141,19 +163,19 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 24
+            for rideable in "MontageHashTable"
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
-                ./bin/main -r $rideable -m 2 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
+                ./bin/main -R $rideable -M $map_test_write -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
 
                 delete_heap_file
                 echo -n "g50i25r25,"
-                ./bin/main -r $rideable -m 3 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
+                ./bin/main -R $rideable -M $map_test_5050 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
 
                 delete_heap_file
                 echo -n "g90i5r5,"
-                ./bin/main -r $rideable -m 4 -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
+                ./bin/main -R $rideable -M $map_test_readmost -t $threads -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
             done
         done
     done
@@ -164,19 +186,19 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 1 
+            for rideable in "MneHashTable"
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
-                ./bin/main -r $rideable -m 2 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
+                ./bin/main -R $rideable -M $map_test_write -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
 
                 delete_heap_file
                 echo -n "g50i25r25,"
-                ./bin/main -r $rideable -m 3 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
+                ./bin/main -R $rideable -M $map_test_5050 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
 
                 delete_heap_file
                 echo -n "g90i5r5,"
-                ./bin/main -r $rideable -m 4 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
+                ./bin/main -R $rideable -M $map_test_readmost -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
             done
         done
     done
@@ -188,24 +210,24 @@ map_execute(){
     do
         for threads in "${THREADS_HALF[@]}"
         do
-            for rideable in 1 
+            for rideable in "ProntoHashTable"
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 2 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
+                ./bin/main -R $rideable -M $map_test_write -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
                 wait
 
                 delete_heap_file
                 echo -n "g50i25r25,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 3 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
+                ./bin/main -R $rideable -M $map_test_5050 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
                 wait
 
                 delete_heap_file
                 echo -n "g90i5r5,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 4 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
+                ./bin/main -R $rideable -M $map_test_readmost -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
                 wait
             done
         done
@@ -217,24 +239,24 @@ map_execute(){
     do
         for threads in "${THREADS[@]}"
         do
-            for rideable in 1 
+            for rideable in "ProntoHashTable"
             do
                 delete_heap_file
                 echo -n "g0i50r50,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 2 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
+                ./bin/main -R $rideable -M $map_test_write -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g0i50r50_thread.csv
                 wait
 
                 delete_heap_file
                 echo -n "g50i25r25,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 3 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
+                ./bin/main -R $rideable -M $map_test_5050 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g50i25r25_thread.csv
                 wait
 
                 delete_heap_file
                 echo -n "g90i5r5,"
                 # ./pronto_snapshot.sh main $SNAPSHOT_FREQ &
-                ./bin/main -r $rideable -m 4 -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
+                ./bin/main -R $rideable -M $map_test_readmost -t $threads -dPersistStrat=No -i $TASK_LENGTH | tee -a $outfile_dir/maps_g90i5r5_thread.csv
                 wait
             done
         done
