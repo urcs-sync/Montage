@@ -23,7 +23,7 @@ Rideable* GlobalTestConfig::allocRideable(){
 
 void GlobalTestConfig::printargdef(){
 	uint64_t i;
-	fprintf(stderr, "usage: %s [-m <test_mode>] [-r <rideable_test_object>] [-a single|dfs|default] [-i <interval>] [-t <num_threads>] [-o <output_csv_file>] [-w <warm_up_MBs>] [-d <env_variable>=<value>] [-z] [-v] [-h]\n", argv0);
+	fprintf(stderr, "usage: %s [-m <test_mode_index>] [-M <test_mode_name>] [-r <rideable_test_object_index>] [-R <rideable_test_object_name>] [-a single|dfs|default] [-i <interval>] [-t <num_threads>] [-o <output_csv_file>] [-w <warm_up_MBs>] [-d <env_variable>=<value>] [-z] [-v] [-h]\n", argv0);
 	for(i = 0; i< rideableFactories.size(); i++){
 		fprintf(stderr, "Rideable %lu : %s\n",i,rideableNames[i].c_str());
 	}
