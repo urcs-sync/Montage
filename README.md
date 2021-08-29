@@ -45,7 +45,7 @@ refer to
 [ext/README.md](https://github.com/urcs-sync/Montage/blob/master/ext/README.md)
 for more information of those libraries.
 [CLevel](https://github.com/chenzhangyu/Clevel-Hashing) is also
-included in `./ext` as comparison to nbMontage.
+included in `./ext` for comparison to nbMontage.
 
 
 Other than those in `./ext`, this repository also depends on

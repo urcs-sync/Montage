@@ -5,7 +5,7 @@ scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
 # for memcached
-tests<-c("_striped")
+tests<-c("")
 for (t in tests){
 lindata<-do.call(rbind,lapply(paste("./ycsbc_a",t,".csv",sep=""),read.csv,header=TRUE,row.names=NULL))
 

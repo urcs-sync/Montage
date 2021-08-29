@@ -19,9 +19,13 @@ library(ggplot2)
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("Orkut")
+tests<-c("graph_recovery")
 for (t in tests){
 read.csv(paste("./",t,".csv",sep=""))->montagedata
+
+montagedata$ds<-as.factor(gsub("TGraphRecovery","DRAM (T)",montagedata$ds))
+montagedata$ds<-as.factor(gsub("MontageCreation","Montage (T)",montagedata$ds))
+montagedata$ds<-as.factor(gsub("MontageRecovery","Montage",montagedata$ds))
 
 ddply(.data=montagedata,.(Threads),mutate,latency= mean(TGraph_Creation)/1000,ds="DRAM (T)",thread=Threads)->d1
 ddply(.data=montagedata,.(Threads),mutate,latency= mean(MontageGraph_Creation)/1000,ds="Montage (T)",thread=Threads)->d2

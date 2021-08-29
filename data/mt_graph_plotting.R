@@ -25,7 +25,7 @@ no_zero <- function(x) {
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("thread_striped")
+tests<-c("thread")
 for (t in tests){
 read.csv(paste("./graph_",t,".csv",sep=""))->montagedata
 

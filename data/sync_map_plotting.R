@@ -19,7 +19,7 @@ library(ggplot2)
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("g0i50r50_sync_striped","g50i25r25_sync_striped","g90i5r5_sync_striped")
+tests<-c("g50i25r25_sync")
 for (t in tests){
 read.csv(paste("./",t,".csv",sep=""))->montagedata
 
@@ -72,9 +72,9 @@ names(line_key) <- levels(lindata$ds)
 legend_pos=c(0.45,0.85)
 y_name="Throughput (Mops/s)"
 y_range_down = 0
-if(t=="g0i50r50_sync_striped"){
+if(t=="g0i50r50_sync"){
   y_range_up=10
-} else if(t=="g50i25r25_sync_striped"){
+} else if(t=="g50i25r25_sync"){
   y_range_up=8
 } else{
   y_range_up=20

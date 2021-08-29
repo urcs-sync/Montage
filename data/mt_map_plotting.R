@@ -19,7 +19,7 @@ library(ggplot2)
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("g0i50r50_thread_striped","g50i25r25_thread_striped","g90i5r5_thread_striped","g0i50r50_thread_single","g50i25r25_thread_single","g90i5r5_thread_single")
+tests<-c("g0i50r50_thread","g50i25r25_thread","g90i5r5_thread")
 for (t in tests){
 read.csv(paste("./maps_",t,".csv",sep=""))->montagedata
 
