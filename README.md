@@ -1,4 +1,4 @@
-# Montage: A General System for Buffered Durably Linearizable Data Structures
+# Montage: A Fast, General System for Buffered Persistent Data Structures
 
 Montage is a system for building fast buffered persistent data
 structures, developed at the University of Rochester by H. Wen, W.
@@ -9,12 +9,14 @@ Montage appears in ICPP' 21
 As a fully nonblocking variant of Montage, nbMontage has a better
 API for buildilng CAS-based nonblocking data structures and, most
 importantly, nbMontage provides _wait-free sync_. The paper of
-nbMontage appears in DISC' 21. 
+nbMontage, _Fast Nonblocking Persistence for Concurrent Data Structures_ 
+by W. Cai, H. Wen, V. Maksimovski, M. Du, R. Sanna, S. Abdallah, and
+M. L. Scott, appears in DISC' 21. 
 
 The testing harness is based on J. Izraelevitz's
 [parHarness](https://github.com/izrajoe/parHarness).
 
-- [Montage: A General System for Buffered Durably Linearizable Data Structures](#montage-a-general-system-for-buffered-durably-linearizable-data-structures)
+- [Montage: A Fast, General System for Buffered Persistent Data Structures](#montage-a-fast-general-system-for-buffered-persistent-data-structures)
   - [1. Required Libraries](#1-required-libraries)
   - [2. Commands](#2-commands)
     - [2.1. Run Specific Queue or Map Test](#21-run-specific-queue-or-map-test)
