@@ -2,9 +2,9 @@
 # THREADS=(1 4 8 12 16 20 24 32 36 40 48 62 72 80 90)
 # VALUE_SIZES=(64 128 256 512 1024 2048 4096)
 
-# go to PDSHarness/script
+# go to Montage/script
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-# go to PDSHarness
+# go to Montage
 cd ..
 
 outfile_dir="data"

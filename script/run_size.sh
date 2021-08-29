@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# go to PDSHarness/script
+# go to Montage/script
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-# go to PDSHarness
+# go to Montage
 cd ..
 
 outfile_dir="data"
