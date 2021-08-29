@@ -26,26 +26,28 @@ read.csv(paste("./queues_",t,".csv",sep=""))->montagedata
 montagedata$ds<-as.factor(gsub("FriedmanQueue","Friedman",montagedata$ds))
 montagedata$ds<-as.factor(gsub("nbMontageMSQueue","nbMontage",montagedata$ds))
 montagedata$ds<-as.factor(gsub("MontageMSQueue","Montage",montagedata$ds))
+montagedata$ds<-as.factor(gsub("NVMMSQueue","NVM (T)",montagedata$ds))
 montagedata$ds<-as.factor(gsub("MSQueue","DRAM (T)",montagedata$ds))
 d1<-subset(montagedata,ds=="DRAM (T)")
-d2<-subset(montagedata,ds=="nbMontage")
-d3<-subset(montagedata,ds=="Montage")
-d4<-subset(montagedata,ds=="Friedman")
-lkdata = rbind(d1,d2,d3,d4)
+d2<-subset(montagedata,ds=="NVM (T)")
+d3<-subset(montagedata,ds=="nbMontage")
+d4<-subset(montagedata,ds=="Montage")
+d5<-subset(montagedata,ds=="Friedman")
+lkdata = rbind(d1,d2,d3,d4,d5)
 
 ddply(.data=lkdata,.(ds,thread),mutate,mops= mean(ops)/1000000)->lkdata_
 lindata = rbind(lkdata_[,c("ds","thread","mops")])
-lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)","nbMontage", "Montage","Friedman"))
+lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)","NVM (T)","nbMontage", "Montage","Friedman"))
 
 # Set up colors and shapes (invariant for all plots)
-color_key = c("#12E1EA","#C11B14",
-              "#1245EA","#FF69B4")
+color_key = c("#12E1EA","#1245EA",
+              "#C11B14","#FF69B4","#809900")
 names(color_key) <- levels(lindata$ds)
 
-shape_key = c(2,18,4,20)
+shape_key = c(2,1,18,4,20)
 names(shape_key) <- levels(lindata$ds)
 
-line_key = c(2,1,1,1)
+line_key = c(2,2,1,1,1)
 names(line_key) <- levels(lindata$ds)
 
 # legend_pos=c(0.5,0.92)
@@ -68,18 +70,18 @@ linchart<-ggplot(data=lindata,
   guides(color=guide_legend(title=NULL,ncol=1))+
   guides(linetype=guide_legend(title=NULL,ncol=1))+
   scale_color_manual(values=color_key[names(color_key) %in% lindata$ds])+
-  scale_x_continuous(breaks=c(1,10,20,30,40,50,60,70,80,90),
-      minor_breaks=c(4,8,12,16,24,32,36,48,62,72))+
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90,100),
+      minor_breaks=c(-10))+
   # scale_y_continuous(trans='log2',label=scientific_10,breaks=c(1000,10000,100000,1000000,1000000,10000000),
   #               minor_breaks=c(3000,4000,5000,6000,7000,8000,9000,20000,30000,40000,50000,60000,70000,80000,90000,200000,300000,400000,500000,600000,700000,800000,900000,2000000,3000000,4000000,5000000,6000000,7000000,8000000,9000000,20000000,30000000,40000000,50000000,60000000,70000000,80000000,90000000,200000000,300000000,400000000,500000000,600000000,700000000,800000000,900000000,2000000000))+
-  coord_cartesian(xlim = c(-5, 60), ylim = c(0,5.8))+
+  coord_cartesian(xlim = c(-2, 40), ylim = c(0,11))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(legend.position=legend_pos,
   legend.background = element_blank(),
   legend.key = element_rect(colour = NA, fill = "transparent"))+
-  theme(text = element_text(size = 18))+
+  theme(text = element_text(size = 12))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.19,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.13,vjust = 13.5,margin = margin(t = 22, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./queues_",t,".pdf",sep=""),linchart,width=4, height = 4, units = "in", dpi=300, title = paste("queues_",t,".pdf",sep=""))

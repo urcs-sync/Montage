@@ -24,8 +24,11 @@ for (t in tests){
 read.csv(paste("./maps_",t,".csv",sep=""))->montagedata
 
 montagedata$ds<-as.factor(gsub("PLockfreeHashTable","Izraelevitz",montagedata$ds))
+montagedata$ds<-as.factor(gsub("nbMontageSSHashTable","nbMontage-SS",montagedata$ds))
+montagedata$ds<-as.factor(gsub("SSHashTable","DRAM (T)-SS",montagedata$ds))
 montagedata$ds<-as.factor(gsub("nbMontageLfHashTable","nbMontage",montagedata$ds))
 montagedata$ds<-as.factor(gsub("MontageLfHashTable","Montage",montagedata$ds))
+montagedata$ds<-as.factor(gsub("NVMLockfreeHashTable","NVM (T)",montagedata$ds))
 montagedata$ds<-as.factor(gsub("LfHashTable","DRAM (T)",montagedata$ds))
 montagedata$ds<-as.factor(gsub("Dali","Dalí",montagedata$ds))
 montagedata$ds<-as.factor(gsub("NVMSOFT","NVMSOFT",montagedata$ds))
@@ -33,48 +36,60 @@ montagedata$ds<-as.factor(gsub("SOFT","SOFT",montagedata$ds))
 montagedata$ds<-as.factor(gsub("NVTraverseHashTable","NVTraverse",montagedata$ds))
 montagedata$ds<-as.factor(gsub("CLevelHashTable","CLevel",montagedata$ds))
 d1<-subset(montagedata,ds=="DRAM (T)")
-d2<-subset(montagedata,ds=="nbMontage")
-d3<-subset(montagedata,ds=="Montage")
-d4<-subset(montagedata,ds=="Izraelevitz")
-d5<-subset(montagedata,ds=="Dalí")
-d6<-subset(montagedata,ds=="SOFT")
-d7<-subset(montagedata,ds=="NVMSOFT")
-d8<-subset(montagedata,ds=="NVTraverse")
-d9<-subset(montagedata,ds=="CLevel")
-lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9)
+d2<-subset(montagedata,ds=="NVM (T)")
+d3<-subset(montagedata,ds=="nbMontage")
+d4<-subset(montagedata,ds=="Montage")
+d5<-subset(montagedata,ds=="Izraelevitz")
+d6<-subset(montagedata,ds=="Dalí")
+d7<-subset(montagedata,ds=="SOFT")
+d8<-subset(montagedata,ds=="NVMSOFT")
+d9<-subset(montagedata,ds=="NVTraverse")
+d10<-subset(montagedata,ds=="CLevel")
+d11<-subset(montagedata,ds=="nbMontage-SS")
+d12<-subset(montagedata,ds=="DRAM (T)-SS")
+lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12)
+# lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10)
 
 ddply(.data=lkdata,.(ds,thread),mutate,mops= mean(ops)/1000000)->lkdata
 lindata = rbind(lkdata[,c("ds","thread","mops")])
-lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)", "nbMontage", "Montage", "Izraelevitz", "NVTraverse", "NVMSOFT", "SOFT", "CLevel", "Dalí"))
+lindata$ds <- factor(lindata$ds, 
+    levels= c("DRAM (T)", "NVM (T)", "nbMontage", 
+              "Montage", "Izraelevitz", "NVTraverse", 
+              "NVMSOFT", "SOFT", 
+              "CLevel", "Dalí", "DRAM (T)-SS", "nbMontage-SS"))
 
 # Set up colors and shapes (invariant for all plots)
-color_key = c("#12E1EA","#C11B14","#1245EA",
+color_key = c("#12E1EA","#1245EA","#C11B14",
               "#FF69B4","#809900","#1BC40F",
+              "#FF8C00","#F86945",
               "#660099","#5947ff",
-              "#FF8C00", "#F86945",
-              "#191970")
+              "#191970","#8601b3")
 names(color_key) <- levels(lindata$ds)
 
-shape_key = c(2,18,4,19,62,17,0,15,1)
+shape_key = c(2,1,18,4,20,62,15,0,17,3,2,6)
 names(shape_key) <- levels(lindata$ds)
 
-line_key = c(2,1,1,1,1,1,1,1,1)
+line_key = c(2,2,1,1,1,1,1,4,1,1,2,1)
 names(line_key) <- levels(lindata$ds)
 
 # legend_pos=c(0.5,0.92)
 # y_range_up = 2000
 
 # Benchmark-specific plot formatting
-legend_pos=c(0.5,0.85)
+if(t=="g50i25r25_thread")
+  legend_pos=c(0.25,0.8)
+else
+  legend_pos=c(25,0.8)
+# legend_pos=c(-10,-10)
 # y_range_up=300
 y_name="Throughput (Mops/s)"
 y_range_down = 0
 # if(t=="g0i50r50_thread")
-#   y_range_up = 18
+#   y_range_up = 32
 # else if (t=="g50i25r25_thread")
-#   y_range_up = 22
+#   y_range_up = 42
 # else
-  y_range_up = 27
+  y_range_up = 30
 
 # Generate the plots
 linchart<-ggplot(data=lindata,
@@ -86,21 +101,21 @@ linchart<-ggplot(data=lindata,
   guides(color=guide_legend(title=NULL,ncol=2))+
   guides(linetype=guide_legend(title=NULL,ncol=2))+
   scale_color_manual(values=color_key[names(color_key) %in% lindata$ds])+
-  scale_x_continuous(breaks=c(1,10,20,30,40,50,60,70,80,90),
-      minor_breaks=c(4,8,12,16,24,32,36,48,62,72))+
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90,100),
+      minor_breaks=c(-10))+
   # scale_y_continuous(trans='log2',label=scientific_10,breaks=c(10000,100000,1000000,1000000,10000000,100000000),
   #               minor_breaks=c(20000,30000,40000,50000,60000,70000,80000,90000,200000,300000,400000,500000,600000,700000,800000,900000,2000000,3000000,4000000,5000000,6000000,7000000,8000000,9000000,20000000,30000000,40000000,50000000,60000000,70000000,80000000,90000000,200000000,300000000,400000000,500000000,600000000,700000000,800000000,900000000,2000000000))+
-  coord_cartesian(xlim = c(-5, 60), ylim = c(y_range_down,y_range_up))+
+  coord_cartesian(xlim = c(0, 40), ylim = c(y_range_down,y_range_up))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(
     legend.position=legend_pos,
     legend.background = element_blank(),
     legend.key = element_rect(colour = NA, fill = "transparent"))+
-  theme(text = element_text(size = 18))+
+  theme(text = element_text(size = 12))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.24,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.095,vjust = 13.5,margin = margin(t = 22, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
-ggsave(filename = paste("./hashtables_",t,".pdf",sep=""),linchart,width=4, height = 6, units = "in", dpi=300, title = paste("hashtables_",t,".pdf",sep=""))
+ggsave(filename = paste("./hashtables_",t,".pdf",sep=""),linchart,width=6, height = 4, units = "in", dpi=300, title = paste("hashtables_",t,".pdf",sep=""))
 }
 # width=15.95
