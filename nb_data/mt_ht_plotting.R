@@ -48,7 +48,6 @@ d10<-subset(montagedata,ds=="CLevel")
 d11<-subset(montagedata,ds=="nbMontage-SS")
 d12<-subset(montagedata,ds=="DRAM (T)-SS")
 lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12)
-# lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10)
 
 ddply(.data=lkdata,.(ds,thread),mutate,mops= mean(ops)/1000000)->lkdata
 lindata = rbind(lkdata[,c("ds","thread","mops")])
@@ -72,24 +71,14 @@ names(shape_key) <- levels(lindata$ds)
 line_key = c(2,2,1,1,1,1,1,4,1,1,2,1)
 names(line_key) <- levels(lindata$ds)
 
-# legend_pos=c(0.5,0.92)
-# y_range_up = 2000
-
 # Benchmark-specific plot formatting
 if(t=="g50i25r25_thread")
   legend_pos=c(0.25,0.8)
 else
   legend_pos=c(25,0.8)
-# legend_pos=c(-10,-10)
-# y_range_up=300
 y_name="Throughput (Mops/s)"
 y_range_down = 0
-# if(t=="g0i50r50_thread")
-#   y_range_up = 32
-# else if (t=="g50i25r25_thread")
-#   y_range_up = 42
-# else
-  y_range_up = 30
+y_range_up = 30
 
 # Generate the plots
 linchart<-ggplot(data=lindata,
@@ -103,8 +92,6 @@ linchart<-ggplot(data=lindata,
   scale_color_manual(values=color_key[names(color_key) %in% lindata$ds])+
   scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90,100),
       minor_breaks=c(-10))+
-  # scale_y_continuous(trans='log2',label=scientific_10,breaks=c(10000,100000,1000000,1000000,10000000,100000000),
-  #               minor_breaks=c(20000,30000,40000,50000,60000,70000,80000,90000,200000,300000,400000,500000,600000,700000,800000,900000,2000000,3000000,4000000,5000000,6000000,7000000,8000000,9000000,20000000,30000000,40000000,50000000,60000000,70000000,80000000,90000000,200000000,300000000,400000000,500000000,600000000,700000000,800000000,900000000,2000000000))+
   coord_cartesian(xlim = c(0, 40), ylim = c(y_range_down,y_range_up))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(
@@ -118,4 +105,3 @@ linchart<-ggplot(data=lindata,
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./hashtables_",t,".pdf",sep=""),linchart,width=6, height = 4, units = "in", dpi=300, title = paste("hashtables_",t,".pdf",sep=""))
 }
-# width=15.95
