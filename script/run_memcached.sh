@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# go to PDSHarness/script
+# go to Montage/script
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-# go to PDSHarness/ext/ycsb-tcd
+# go to Montage/ext/ycsb-tcd
 cd ../ext/ycsb-tcd
 
 outfile_dir="../../data"

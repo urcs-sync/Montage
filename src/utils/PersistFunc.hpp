@@ -23,11 +23,9 @@ limitations under the License.
 
 // #include "sysextend.h"
 
+#include "ConcurrentPrimitives.hpp"
+#include <cstddef>
 namespace persist_func{
-	inline void nop(){
-		asm volatile ("nop");
-	}
-
 	inline void clflush(void *p){
 		asm volatile ("clflush (%0)" :: "r"(p));
 	}
@@ -70,6 +68,22 @@ namespace persist_func{
 		sfence();
 	}
 
+	inline void clwb_fence(void *p){
+		clwb(p);
+		sfence();
+	}
+
+	template<typename T>
+	inline void clwb_obj_nofence(T* p){
+		clwb_range_nofence(p, sizeof(T));
+	}
+
+	template<typename T>
+	inline void clwb_obj_fence(T* p){
+		clwb_obj_nofence(p);
+		sfence();
+	}
+
 	inline void wholewb(){
 		//sysextend(__NR_whole_cache_flush, NULL);
 		return;
@@ -79,21 +93,6 @@ namespace persist_func{
 		clwb(p);
 		sfence();
 	}
-
-	inline void clwb_emulated(){
-		// this ends up as around 400 instructions.
-        for (size_t i = 0; i < 50; i++){
-            persist_func::nop();
-        }
-	}
-
-	inline void sfence_emulated(){
-		// this ends up as around 16000 instructions.
-        for (size_t i = 0; i < 2000; i++){
-            persist_func::nop();
-        }
-	}
-
 }
 
 #endif

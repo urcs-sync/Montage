@@ -136,10 +136,10 @@ class MontageQueueFactory : public RideableFactory{
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class MontageQueue<std::string>::Payload : public pds::PBlk{
-    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
+    GENERATE_FIELD(pds::InPlaceString<TESTS_VAL_SIZE>, val, Payload);
     GENERATE_FIELD(uint64_t, sn, Payload);
 
 public:

@@ -32,105 +32,59 @@ class EpochSys;
 
 class ToBePersistContainer{
 public:
-    virtual void register_persist(PBlk* blk, size_t sz, uint64_t c) = 0;
-    virtual void register_persist_raw(PBlk* blk, uint64_t c){
-        persist_func::clwb(blk);
-    }
+    Ralloc* ral = nullptr;
+    int task_num = -1;
+    padded<void*>* descs_p = nullptr;
+    paddedAtomic<bool>* desc_persist_indicators[EPOCH_WINDOW];
+    virtual void init_desc_local(void* addr, int tid);
+    virtual void register_persist_desc_local(uint64_t c, int tid);
+    virtual void do_persist_desc_local(uint64_t c, int tid);
+    virtual void register_persist(PBlk* blk, uint64_t c) = 0;
+    virtual void register_persist_raw(PBlk* blk, uint64_t c) = 0;
     virtual void persist_epoch(uint64_t c) = 0;
+    virtual void persist_epoch_local(uint64_t c, int tid) = 0;
     virtual void help_persist_external(uint64_t c) {}
     virtual void clear() = 0;
-    virtual ~ToBePersistContainer() {}
-};
-
-class PerEpoch : public ToBePersistContainer{
-    class Persister{
-    public:
-        PerEpoch* con = nullptr;
-        Persister(PerEpoch* _con) : con(_con){}
-        virtual ~Persister() {}
-        virtual void persist_epoch(uint64_t c) = 0;
-    };
-
-    class AdvancerPersister : public Persister{
-    public:
-        AdvancerPersister(PerEpoch* _con): Persister(_con){}
-        void persist_epoch(uint64_t c);
-    };
-
-    class PerThreadDedicatedWait : public Persister{
-        struct Signal {
-            std::mutex bell;
-            std::condition_variable ring;
-            uint64_t epoch = INIT_EPOCH;
-            std::atomic<int> finish_counter;
-        }__attribute__((aligned(CACHE_LINE_SIZE)));
-        
-        GlobalTestConfig* gtc;
-        std::vector<std::thread> persisters;
-        std::vector<hwloc_obj_t> persister_affinities;
-        uint64_t last_persisted = NULL_EPOCH;
-        
-        std::atomic<bool> exit;
-        Signal signal;
-        // TODO: explain in comment what's going on here.
-        void persister_main(int worker_id);
-    public:
-        PerThreadDedicatedWait(PerEpoch* _con, GlobalTestConfig* _gtc);
-        ~PerThreadDedicatedWait();
-        void persist_epoch(uint64_t c);
-    };
-
-    PerThreadContainer<pds::pair<void*, size_t>>* container = nullptr;
-    Persister* persister = nullptr;
-    static void do_persist(pds::pair<void*, size_t>& addr_size);
-public:
-    PerEpoch(GlobalTestConfig* gtc){
-        if (gtc->checkEnv("Container")){
-            std::string env_container = gtc->getEnv("Container");
-            if (env_container == "CircBuffer"){
-                container = new CircBufferContainer<pds::pair<void*, size_t>>(gtc->task_num);
-            } else if (env_container == "Vector"){
-                container = new VectorContainer<pds::pair<void*, size_t>>(gtc->task_num);
-            }
-            // else if (env_container == "HashSet"){
-            //     container = new HashSetContainer<pds::pair<void*, size_t>, PairHash<const void*, size_t>>(gtc->task_num);
-            // }
-            else {
-                errexit("unsupported container type by PerEpoch to-be-freed container.");
-            }
-        } else {
-            container = new VectorContainer<pds::pair<void*, size_t>>(gtc->task_num);
+    ToBePersistContainer(Ralloc* r, int tn): ral(r), task_num(tn){
+        descs_p = new padded<void*>[task_num];
+        for (int i = 0; i < EPOCH_WINDOW; i++){
+            desc_persist_indicators[i] = new paddedAtomic<bool>[task_num];
         }
-
-        if (gtc->checkEnv("Persister")){
-            std::string env_persister = gtc->getEnv("Persister");
-            if (env_persister == "PerThreadWait"){
-                persister = new PerThreadDedicatedWait(this, gtc);
-            } else if (env_persister == "Advancer"){
-                persister = new AdvancerPersister(this);
-            } else {
-                errexit("unsupported persister type by PerEpoch to-be-freed container.");
+        for (int i = 0; i < task_num; i++){
+            descs_p[i].ui = nullptr;
+            for (int j = 0; j < EPOCH_WINDOW; j++){
+                desc_persist_indicators[j][i].ui = false;
             }
-        } else {
-            persister = new AdvancerPersister(this);
         }
     }
-    ~PerEpoch(){
-        delete persister;
-        delete container;
+    ToBePersistContainer(){}
+    virtual ~ToBePersistContainer() {
+        if (task_num > 0){
+            delete descs_p;
+            for (int i = 0; i < EPOCH_WINDOW; i++){
+                delete desc_persist_indicators[i];
+            }
+        }
     }
-    void register_persist(PBlk* blk, size_t sz, uint64_t c);
-    void register_persist_raw(PBlk* blk, uint64_t c);
-    void persist_epoch(uint64_t c);
-    void clear();
 };
 
 class DirWB : public ToBePersistContainer{
 public:
-    void register_persist(PBlk* blk, size_t sz, uint64_t c){
-        persist_func::clwb_range_nofence(blk, sz);
+    DirWB(Ralloc* r, int task_num) : ToBePersistContainer(r, task_num){}
+    void register_persist_desc_local(uint64_t c, int tid) {
+        void* blk = descs_p[tid].ui;
+        persist_func::clwb_range_nofence(
+            blk, ral->malloc_size(blk));
+    }
+    void register_persist(PBlk* blk, uint64_t c){
+        assert(blk!=nullptr);
+        persist_func::clwb_range_nofence(blk, ral->malloc_size(blk));
+    }
+    void register_persist_raw(PBlk* blk, uint64_t c){
+        persist_func::clwb(blk);
     }
     void persist_epoch(uint64_t c){}
+    void persist_epoch_local(uint64_t c, int tid){}
     void clear(){}
 };
 
@@ -190,33 +144,33 @@ class BufferedWB : public ToBePersistContainer{
     //     void help_persist_local(uint64_t c);
     // };
 
-    // FixedCircBufferContainer<pds::pair<void*, size_t>>* container = nullptr;
-    FixedContainer<pds::pair<void*, size_t>>* container = nullptr;
+    // FixedCircBufferContainer<pds::pair>* container = nullptr;
+    FixedContainer<void*>* container = nullptr;
     GlobalTestConfig* gtc;
     // Persister* persister = nullptr;
-    int task_num;
-    int buffer_size = 2048;
-    static void do_persist(pds::pair<void*, size_t>& addr_size);
+    int buffer_size = 64;
+    void do_persist(void*& addr);
     // void dump(uint64_t c);
 public:
-    BufferedWB (GlobalTestConfig* _gtc): gtc(_gtc), task_num(_gtc->task_num){
+    BufferedWB (GlobalTestConfig* _gtc, Ralloc* r): 
+        ToBePersistContainer(r, _gtc->task_num), gtc(_gtc){
         if (gtc->checkEnv("BufferSize")){
             buffer_size = stoi(gtc->getEnv("BufferSize"));
         } else {
-            buffer_size = 2048;
+            buffer_size = 64;
         }
         // persister = new WorkerThreadPersister(this);
         if (gtc->checkEnv("Container")){
             std::string env_container = gtc->getEnv("Container");
             if (env_container == "CircBuffer"){
-                container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
+                container = new FixedCircBufferContainer<void*>(task_num, buffer_size);
             } else if (env_container == "HashSet"){
                 container = new FixedHashSetContainer(task_num, buffer_size);
             } else {
                 errexit("unsupported container type by BufferedWB");
             }
         } else {
-            container = new FixedCircBufferContainer<pds::pair<void*, size_t>>(task_num, buffer_size);
+            container = new FixedCircBufferContainer<void*>(task_num, buffer_size);
         }
         
         // if (gtc->checkEnv("Persister")){
@@ -240,18 +194,25 @@ public:
         delete container;
         // delete persister;
     }
-    void push(pds::pair<void*, size_t> entry, uint64_t c);
-    void register_persist(PBlk* blk, size_t sz, uint64_t c);
+    inline void* mark_raw(void* ptr) {return (void*)((uint64_t)ptr | 0x1ULL);}
+    inline bool is_raw(void* ptr) {return (((uint64_t)ptr & 0x1ULL) == 0x1ULL);}
+    inline void* unmark_raw(void* ptr) {return (void*)((uint64_t)ptr & ~0x1ULL);}
+    void register_persist(PBlk* blk, uint64_t c);
     void register_persist_raw(PBlk* blk, uint64_t c);
     void persist_epoch(uint64_t c);
+    void persist_epoch_local(uint64_t c, int tid);
     void clear();
 };
 
 class NoToBePersistContainer : public ToBePersistContainer{
     // a to-be-persist container that does absolutely nothing.
-    void register_persist(PBlk* blk, size_t sz, uint64_t c){}
+    void init_desc_local(void* addr, int tid){}
+    void register_persist_desc_local(uint64_t c, int tid){}
+    void do_persist_desc_local(uint64_t c, int tid){}
+    void register_persist(PBlk* blk, uint64_t c){}
     void register_persist_raw(PBlk* blk, uint64_t c){}
     void persist_epoch(uint64_t c){}
+    void persist_epoch_local(uint64_t c, int tid){}
     void clear(){}
 };
 

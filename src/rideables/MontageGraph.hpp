@@ -26,7 +26,7 @@
  */
 template <int numVertices = 1024, int meanEdgesPerVertex=20, int vertexLoad=50>
 class MontageGraph : public RGraph, public Recoverable{
-
+    GlobalTestConfig* gtc;
     public:
 
         class tVertex;
@@ -125,7 +125,7 @@ class MontageGraph : public RGraph, public Recoverable{
             uint32_t vertexSeqs;// Transient sequence numbers for transactional operations on vertices
         };
 
-        MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc) {
+        MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc), gtc(gtc) {
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
             std::mt19937_64 gen(time(NULL));
@@ -135,9 +135,9 @@ class MontageGraph : public RGraph, public Recoverable{
             // Fill to vertexLoad
             for (int i = 0; i < numVertices; i++) {
                 if (coinflipRNG(gen) <= vertexLoad) {
-                    vertex(i) = new tVertex(this, i,i);
+                    vMeta[i].idxToVertex = new tVertex(this, i,i);
                 } else {
-                    vertex(i) = nullptr;
+                    vMeta[i].idxToVertex = nullptr;
                 }
                 vMeta[i].vertexSeqs = 0;
             }
@@ -145,13 +145,13 @@ class MontageGraph : public RGraph, public Recoverable{
 
             // Fill to mean edges per vertex
             for (int i = 0; i < numVertices; i++) {
-                if (vertex(i) == nullptr) continue;
+                if (vMeta[i].idxToVertex == nullptr) continue;
                 for (int j = 0; j < meanEdgesPerVertex * 100 / vertexLoad; j++) {
                     int k = verticesRNG(gen);
                     if (k == i) {
                         continue;
                     }
-                    if (vertex(k) != nullptr) {
+                    if (vMeta[k].idxToVertex != nullptr) {
                         Relation *r = pnew<Relation>(i, k, -1);
                         auto p = make_pair(i,k);
                         auto ret1 = source(i).emplace(p,r);
@@ -178,7 +178,7 @@ class MontageGraph : public RGraph, public Recoverable{
             int *degrees = new int[numVertices];
             double averageEdgeDegree = 0;
             for (auto i = 0; i < numVertices; i++) {
-                if (vertex(i) != nullptr) {
+                if (vMeta[i].idxToVertex != nullptr) {
                     numV++;
                     numE += source(i).size();
                     degrees[i] = source(i).size() + destination(i).size();
@@ -330,168 +330,212 @@ class MontageGraph : public RGraph, public Recoverable{
         }
         
         int recover(bool simulated) {
-            assert(0&&"recover() not implemented!");
-            // if (simulated) {
-            //     recover_mode();
-            //     delete idxToVertex;
-            //     idxToVertex = new tVertex*[numVertices];
-            //     #pragma omp parallel for
-            //     for (size_t i = 0; i < numVertices; i++) {
-            //         idxToVertex[i] = nullptr;
-            //     }
-            //     online_mode();
-            // }
+            struct RelationWrapper{
+                int v1;
+                int v2;
+                Relation* e;
+            } __attribute__((aligned(CACHE_LINE_SIZE)));
 
-            // int block_cnt = 0;
-            // auto begin = chrono::high_resolution_clock::now();
-            // std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks();
-            // auto end = chrono::high_resolution_clock::now();
-            // auto dur = end - begin;
-            // auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-            // std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+            // assert(0&&"recover() not implemented!");
+            if (simulated) {
+                recover_mode();
+                delete vMeta;
+                vMeta = new VertexMeta[numVertices];
+                // #pragma omp parallel for
+                for (size_t i = 0; i < numVertices; i++) {
+                     vertex(i) = nullptr;
+                }
+                online_mode();
+            }
+
+            int rec_thd = gtc->task_num; 
+            int block_cnt = 0;
+            auto begin = chrono::high_resolution_clock::now();
+            std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks();
+            auto end = chrono::high_resolution_clock::now();
+            auto dur = end - begin;
+            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
             
-            // begin = chrono::high_resolution_clock::now();
-            // std::vector<Relation*> relationVector;
-            // std::vector<Vertex*> vertexVector;
-            // {
-            //     MontageOpHolder _holder(this);
-            //     for (auto itr = recovered->begin(); itr != recovered->end(); ++itr) {
-            //         // iterate through all recovered blocks.  Sort the blocks into vectors containing the different
-            //         // payloads to be iterated over later.
-            //         block_cnt ++;
+            begin = chrono::high_resolution_clock::now();
+            std::vector<Relation*> relationVector;
+            std::vector<Vertex*> vertexVector;
+            {
+                MontageOpHolder _holder(this);
+                for (auto itr = recovered->begin(); itr != recovered->end(); ++itr) {
+                    // iterate through all recovered blocks.  Sort the blocks into vectors containing the different
+                    // payloads to be iterated over later.
+                    block_cnt ++;
 
+                    // Should these be parallel?  I'm not sure..
+                    BasePayload* b = reinterpret_cast<BasePayload*>(itr->second);
 
-            //         // Should these be parallel?  I'm not sure..
-            //         BasePayload* b = reinterpret_cast<BasePayload*>(itr->second);
+                    switch (b->get_unsafe_tag(this)) {
+                        case 0: {
+                            Vertex* v = reinterpret_cast<Vertex*>(itr->second);
+                            vertexVector.push_back(v);
+                            break;
+                        }
+                        case 1: {
+                            Relation* r =
+                                reinterpret_cast<Relation*>(itr->second);
+                            relationVector.push_back(r);
+                            break;
+                        }
+                        default: {
+                            std::cerr << "Found bad tag "
+                                      << b->get_unsafe_tag(this) << std::endl;
+                        }
+                    }
+                }
+            }
+            end = chrono::high_resolution_clock::now();
+            dur = end - begin;
+            dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms gathering vertices(" << vertexVector.size() << ") and edges(" << relationVector.size() << ")..." << std::endl;
+            begin = chrono::high_resolution_clock::now();
 
-            //         switch (b->get_unsafe_tag(this)) {
-            //             case 0:
-            //                 {
-            //                     Vertex* v = reinterpret_cast<Vertex*>(itr->second);
-            //                     vertexVector.push_back(v);
-            //                     break;
-            //                 }
-            //             case 1:
-            //                 {
-            //                     Relation* r = reinterpret_cast<Relation*>(itr->second);
-            //                     relationVector.push_back(r);
-            //                     break;
-            //                 }
-            //             default:
-            //                 {
-            //                     std::cerr << "Found bad tag " << b->get_unsafe_tag(this) << std::endl;
-            //                 }
-            //         }
-            //     }
-            // }
-            // end = chrono::high_resolution_clock::now();
-            // dur = end - begin;
-            // dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-            // std::cout << "Spent " << dur_ms << "ms gathering vertices(" << vertexVector.size() << ") and edges(" << relationVector.size() << ")..." << std::endl;
-            // begin = chrono::high_resolution_clock::now();
-            // #pragma omp parallel
-            // {
-            //     Recoverable::init_thread(omp_get_thread_num());
-            //     #pragma omp for
-            //     for (size_t i = 0; i < vertexVector.size(); ++i) {
-            //         int id = vertexVector[i]->get_unsafe_id(this);
-            //         if (idxToVertex[id] != nullptr) {
-            //             std::cerr << "Somehow recovered vertex " << id << " twice!" << std::endl;
-            //             continue;
-            //         }
-            //         tVertex* new_node = new tVertex(this, vertexVector[i]);
-            //         idxToVertex[id] = new_node;
-            //     }
-            // }
-            // end = chrono::high_resolution_clock::now();
-            // dur = end - begin;
-            // dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-            // std::cout << "Spent " << dur_ms << "ms creating vertices..." << std::endl;
-            // begin = chrono::high_resolution_clock::now();
+            std::vector<std::thread> workers;
+            pthread_barrier_t sync_point;
+            pthread_barrier_init(&sync_point, NULL, rec_thd);
+            std::vector<RelationWrapper>* buffers =
+                new std::vector<RelationWrapper>[rec_thd * rec_thd];
+
+            for (int rec_tid = 0; rec_tid < rec_thd; rec_tid++) {
+                workers.emplace_back(std::thread([&, rec_tid]() {
+                    Recoverable::init_thread(rec_tid);
+                    hwloc_set_cpubind(gtc->topology,
+                                      gtc->affinities[rec_tid]->cpuset,
+                                      HWLOC_CPUBIND_THREAD);
+                    // Recover vertexes:
+                    for (size_t i = rec_tid; i < vertexVector.size(); i += rec_thd){
+                        int id = vertexVector[i]->get_unsafe_id(this);
+                        if (vertex(id) != nullptr) {
+                            std::cerr << "Somehow recovered vertex " << id
+                                      << " twice!" << std::endl;
+                            continue;
+                        }
+                        tVertex* new_node = new tVertex(this, vertexVector[i]);
+                        vertex(id) = new_node;
+                    }
+                
+                    pthread_barrier_wait(&sync_point);
+                    if (rec_tid == 0){
+                        end = chrono::high_resolution_clock::now();
+                        dur = end - begin;
+                        dur_ms = std::chrono::duration_cast<
+                                     std::chrono::milliseconds>(dur)
+                                     .count();
+                        std::cout << "Spent " << dur_ms
+                                  << "ms creating vertices..." << std::endl;
+                        begin = chrono::high_resolution_clock::now();
+                    }
+
+                    // Recover relationships:
+                    // Vertices are cyclically distributed across all threads, such that a thread t_i
+                    // owns vertices i, i + T, i + 2T, etc., where T is the number of threads.
+                    // The vector of edges is iterated over in parallel and given an edge e=(v,v'), if
+                    // v belongs to thread t_i, t_i will add it to the source set of v; if v' belongs to
+                    // thread t_i, t_i will add v' to the destination set of v'; if t_i does not own it, nothing happens
             
-            // int num_threads;
-            // #pragma omp parallel
-            // num_threads = omp_get_num_threads(); 
-            
-            // // Vertices are cyclically distributed across all OpenMP threads, such that a thread t_i
-            // // owns vertices i, i + T, i + 2T, etc., where T is the number of OpenMP threads.
-            // // The vector of edges is iterated over in parallel and given an edge e=(v,v'), if
-            // // v belongs to thread t_i, t_i will add it to the source set of v; if v' belongs to
-            // // thread t_i, t_i will add v' to the destination set of v'; if t_i does not own it, nothing happens
-            // std::vector<RelationWrapper> *buffers = new std::vector<RelationWrapper>[num_threads * num_threads];
-            // #pragma omp parallel
-            // {
-            //     int tid = omp_get_thread_num();
-            //     Recoverable::init_thread(tid);
-            //     #pragma omp for
-            //     for (size_t i = 0; i < relationVector.size(); ++i) {
-            //         Relation *e = relationVector[i];
-            //         int id1 = e->m_src(this);
-            //         int id2 = e->m_dest(this);
-            //         RelationWrapper item = { id1, id2, e };
-            //         if (id1 < 0 || (size_t) id1 >= numVertices || id2 < 0 ||  (size_t) id2 >= numVertices) {
-            //             std::cerr << "Found a relation with a bad edge: (" << id1 << "," << id2 << ")" << std::endl;
-            //             continue; 
-            //         }
+                    for (size_t i = rec_tid; i < relationVector.size();
+                         i += rec_thd) {
+                        Relation *e = relationVector[i];
+                        int id1 = e->get_unsafe_src(this);
+                        int id2 = e->get_unsafe_dest(this);
+                        RelationWrapper item = {id1, id2, e};
+                        if (id1 < 0 || (size_t)id1 >= numVertices || id2 < 0 ||
+                            (size_t)id2 >= numVertices) {
+                            std::cerr << "Found a relation with a bad edge: ("
+                                      << id1 << "," << id2 << ")" << std::endl;
+                            continue;
+                        }
+                        tVertex* v1 = vertex(id1);
+                        tVertex* v2 = vertex(id2);
+                        if (v1 == nullptr || v2 == nullptr) {
+                            std::cerr << "Edge (" << id1 << ", " << id2
+                                      << ") has nullptr(v1=" << (v1 == nullptr)
+                                      << ", v2=" << (v2 == nullptr) << ")"
+                                      << std::endl;
+                            continue;
+                        }
+                        buffers[rec_tid * rec_thd + (id1 % rec_thd)]
+                            .push_back(item);
+                        if ((id2 % rec_thd) != (id1 % rec_thd)) {
+                            buffers[rec_tid * rec_thd + (id2 % rec_thd)]
+                                .push_back(item);
+                        }
+                    }
+                    std::vector<RelationWrapper> tpls;
+                    size_t size = 0;
+                    for (int _tid = 0; _tid < rec_thd; _tid++){
+                        size += buffers[_tid * rec_thd + rec_tid].size();
+                    }
+                    tpls.resize(size);
 
-            //         tVertex *v1 = idxToVertex[id1];
-            //         tVertex *v2 = idxToVertex[id2];   
-            //         if (v1 == nullptr || v2 == nullptr) {
-            //             std::cerr << "Edge (" << id1 << ", " << id2 << ") has nullptr(v1=" << (v1 == nullptr) << ", v2=" << (v2 == nullptr) << ")" << std::endl;
-            //             continue; 
-            //         }
+                    size_t offset = 0;
+                    for (int _tid = 0; _tid < rec_thd; _tid++){
+                        auto *buffer = &buffers[_tid * rec_thd + rec_tid];
+                        std::copy(buffer->begin(), buffer->end(), tpls.begin() + offset);
+                        offset += buffer->size();
+                    }
 
-            //         buffers[tid * num_threads + (id1 % num_threads)].push_back(item);
-            //         if ((id2 % num_threads) != (id1 % num_threads)) {
-            //             buffers[tid * num_threads + (id2 % num_threads)].push_back(item);
-            //         }
-            //     }
-                
-            //     std::vector<RelationWrapper> tpls;
-            //     size_t size = 0;
-            //     for (int _tid = 0; _tid < num_threads; _tid++) {
-            //         size += buffers[_tid * num_threads + tid].size();
-            //     }
-            //     tpls.resize(size);
-                
-            //     size_t offset = 0;
-            //     for (int _tid = 0; _tid < num_threads; _tid++) {
-            //         auto *buffer = &buffers[_tid * num_threads + tid];
-            //         std::copy(buffer->begin(), buffer->end(), tpls.begin() + offset);
-            //         offset += buffer->size();
-            //     }
-                
-            //     #pragma omp barrier
-            //     #pragma omp master
-            //     delete[] buffers; 
+                    pthread_barrier_wait(&sync_point);
+                    if (rec_tid == 0){
+                        delete[] buffers;
+                    }
 
-            //     std::sort(tpls.begin(), tpls.end(), [](RelationWrapper r1, RelationWrapper r2) { return r1.v1 < r2.v1; });
-            //     for (auto r : tpls) {
-            //         int v1 = r.v1;
-            //         Relation *e = r.e;
-            //         if (v1 % num_threads == tid) {
-            //             idxToVertex[v1]->adjacency_list.insert(e);
-            //         }
-            //     }
-            //     std::sort(tpls.begin(), tpls.end(), [](RelationWrapper r1, RelationWrapper r2) { return r1.v2 < r2.v2; });
-            //     for (auto r : tpls) {
-            //         int v2 = r.v2;
-            //         Relation *e = r.e;
-            //         if (v2 % num_threads == tid) {
-            //             idxToVertex[v2]->dest_list.insert(e);
-            //         }
-            //     }
-            // }
+                    // for (auto r : tpls) {
+                    //     // int v1 = r.v1;
+                    //     // Relation* e = r.e;
+                    //     auto p = make_pair(r.v1, r.v2);
+                    //     if (r.v1 % rec_thd == rec_tid) {
+                    //         // source(v1).insert(e);
+                    //         source(r.v1).emplace(p, r.e);
+                    //     }
+                    //     if (r.v2 % rec_thd == rec_tid) {
+                    //         destination(r.v2).emplace(p, r.e);
+                    //     }
+                    // }
 
-            // end = chrono::high_resolution_clock::now();
-            // dur = end - begin;
-            // dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-            // std::cout << "Spent " << dur_ms << "ms forming edges..." << std::endl;
-            // begin = chrono::high_resolution_clock::now();
+                    std::sort(tpls.begin(), tpls.end(),
+                              [](RelationWrapper r1, RelationWrapper r2) {
+                                  return r1.v1 < r2.v1;
+                              });
+                    for (auto r : tpls) {
+                        auto p = make_pair(r.v1, r.v2);
+                        if (r.v1 % rec_thd == rec_tid) {
+                            source(r.v1).emplace(p, r.e);
+                        }
+                    }
 
-            // delete recovered;
-            // return block_cnt;
-            return false;
+                    std::sort(tpls.begin(), tpls.end(),
+                              [](RelationWrapper r1, RelationWrapper r2) {
+                                  return r1.v2 < r2.v2;
+                              });
+                    for (auto r : tpls) {
+                        auto p = make_pair(r.v1, r.v2);
+                        if (r.v1 % rec_thd == rec_tid) {
+                            destination(r.v2).emplace(p, r.e);
+                        }
+                    }
+
+                }));
+            }
+            for (auto& worker : workers) {
+                if (worker.joinable()) {
+                    worker.join();
+                }
+            }
+
+            end = chrono::high_resolution_clock::now();
+            dur = end - begin;
+            dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms forming edges..." << std::endl;
+            begin = chrono::high_resolution_clock::now();
+
+            delete recovered;
+            return block_cnt;
 	}
 
         bool add_vertex(int vid) {

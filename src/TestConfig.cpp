@@ -6,6 +6,7 @@
 
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -22,7 +23,7 @@ Rideable* GlobalTestConfig::allocRideable(){
 
 void GlobalTestConfig::printargdef(){
 	uint64_t i;
-	fprintf(stderr, "usage: %s [-m <test_mode>] [-r <rideable_test_object>] [-a single|dfs|default] [-i <interval>] [-t <num_threads>] [-o <output_csv_file>] [-w <warm_up_MBs>] [-d <env_variable>=<value>] [-z] [-v] [-h]\n", argv0);
+	fprintf(stderr, "usage: %s [-m <test_mode_index>] [-M <test_mode_name>] [-r <rideable_test_object_index>] [-R <rideable_test_object_name>] [-a single|dfs|default] [-i <interval>] [-t <num_threads>] [-o <output_csv_file>] [-w <warm_up_MBs>] [-d <env_variable>=<value>] [-z] [-v] [-h]\n", argv0);
 	for(i = 0; i< rideableFactories.size(); i++){
 		fprintf(stderr, "Rideable %lu : %s\n",i,rideableNames[i].c_str());
 	}
@@ -47,7 +48,7 @@ void GlobalTestConfig::parseCommandLine(int argc, char** argv){
 	}
 
 	// Read command line
-	while ((c = getopt (argc, argv, "s:d:w:o:i:t:m:a:r:vhz")) != -1){
+	while ((c = getopt (argc, argv, "s:d:w:o:i:t:m:M:a:r:R:vhz")) != -1){
 		switch (c) {
 			case 's':
 				NumString::length = atoi(optarg);
@@ -71,11 +72,35 @@ void GlobalTestConfig::parseCommandLine(int argc, char** argv){
 					printargdef();
 				}
 				break;
+			case 'M':
+				{
+					std::string n(optarg);
+					auto idx = std::find(testNames.begin(), testNames.end(), n);
+					if (idx == testNames.end()){
+						fprintf(stderr, "Invalid test mode (-M) option.\n");
+						printargdef();
+					} else {
+						this->testType = idx - testNames.begin();
+					}
+				}
+				break;
 			case 'r':
 				this->rideableType = atoi(optarg);
 				if(rideableType>=(int)rideableFactories.size()){
 					fprintf(stderr, "Invalid rideable (-r) option.\n");
 					printargdef();
+				}
+				break;
+			case 'R':
+				{
+					std::string n(optarg);
+					auto idx = std::find(rideableNames.begin(), rideableNames.end(), n);
+					if (idx == rideableNames.end()){
+						fprintf(stderr, "Invalid rideable mode (-R) option.\n");
+						printargdef();
+					} else {
+						this->rideableType = idx - rideableNames.begin();
+					}
 				}
 				break;
 			case 'a':
@@ -461,12 +486,20 @@ GlobalTestConfig::~GlobalTestConfig(){
 void GlobalTestConfig::addRideableOption(RideableFactory* h, const char name[]){
 	rideableFactories.push_back(h);
 	string s = string(name);
+	auto found = std::find(rideableNames.begin(), rideableNames.end(), s);
+	if (found != rideableNames.end()){
+		errexit(("rideable name \"" + s + "\" duplicated.").c_str());
+	}
 	rideableNames.push_back(s);
 }
 
 void GlobalTestConfig::addTestOption(Test* t, const char name[]){
 	tests.push_back(t);
 	string s = string(name);
+	auto found = std::find(testNames.begin(), testNames.end(), s);
+	if (found != testNames.end()){
+		errexit(("test name \"" + s + "\" duplicated.").c_str());
+	}
 	testNames.push_back(s);
 }
 

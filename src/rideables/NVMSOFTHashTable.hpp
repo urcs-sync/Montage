@@ -118,13 +118,13 @@ class NVMSOFTHashTable : public RMap<K,V>
             clwb_range_nofence(&value, sizeof(VALUETYPE));
             sfence();
             this->validEnd.store(validity, std::memory_order_release);
-            flush_fence(this);
+            clwb_obj_fence(this);
         }
 
         void destroy(bool validity)
         {
             this->deleted.store(validity, std::memory_order_release);
-            flush_fence(this);
+            clwb_obj_fence(this);
         }
 
         bool isValid()
@@ -149,13 +149,15 @@ class NVMSOFTHashTable : public RMap<K,V>
     class Node
     {
     public:
-        // KEYTYPE key;
+        KEYTYPE key;
         // VALUETYPE value;
         PNode *pptr;
         bool pValidity;
         std::atomic<Node *> next;
 
-        Node(PNode *pptr_, bool pValidity_) : pptr(pptr_), pValidity(pValidity_), next(nullptr) { }
+        Node(PNode *pptr_, bool pValidity_, const std::string& k) : pptr(pptr_), pValidity(pValidity_), next(nullptr) { 
+            strncpy(key.data(), k.data(), TESTS_KEY_SIZE);
+        }
         ~Node(){
             if(pptr!=nullptr)
                 delete pptr;
@@ -196,9 +198,9 @@ public:
         Persistent::init();
         for(size_t i=0;i<idxSize;i++){
             PNode *phead = new PNode("", "");
-            heads[i] = new Node(phead, false);
+            heads[i] = new Node(phead, false,"");
             PNode *ptail = new PNode(std::string(1,(char)127), "");
-            heads[i]->next.store(new Node(ptail, false), std::memory_order_release);
+            heads[i]->next.store(new Node(ptail, false, std::string(1,(char)127)), std::memory_order_release);
         }
     }
 
@@ -212,7 +214,7 @@ public:
 
   private:
     std::hash<K> hash_fn;
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
     Node *getBucket(K k)
     {
         int idx = hash_fn(k) % idxSize;
@@ -225,14 +227,14 @@ public:
     optional<V> _get(Node *head, K key, int tid)
     {   
         optional<V> ret{};
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
         Node *curr = head->next.load();
-        while(strncmp (curr->pptr->key.data(), key.data(),(size_t)TESTS_KEY_SIZE) < 0)
+        while(strncmp (curr->key.data(), key.data(),(size_t)TESTS_KEY_SIZE) < 0)
         {
             curr = NVMsoftUtils::getRef<Node>(curr->next.load());
         }
         state currState = NVMsoftUtils::getState(curr->next.load());
-	    if((strncmp (curr->pptr->key.data(), key.data(),TESTS_KEY_SIZE) == 0) && ((currState == state::INSERTED) || (currState == state::INTEND_TO_DELETE))){
+	    if((strncmp (curr->key.data(), key.data(),TESTS_KEY_SIZE) == 0) && ((currState == state::INSERTED) || (currState == state::INTEND_TO_DELETE))){
             ret = V(curr->pptr->value.data(), TESTS_VAL_SIZE);
         }
         return ret;
@@ -241,7 +243,7 @@ public:
     {
         Node *pred, *currRef;
         state currState, predState;
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
     retry:
         while (true)
         {   
@@ -251,7 +253,7 @@ public:
             Node *resultNode;
             bool result = false;
 
-            if (strncmp(currRef->pptr->key.data(), key.data(), TESTS_KEY_SIZE) == 0)
+            if (strncmp(currRef->key.data(), key.data(), TESTS_KEY_SIZE) == 0)
             {
                 resultNode = currRef;
                 if (currState != state::INTEND_TO_INSERT)
@@ -261,7 +263,7 @@ public:
             {   
                 PNode *newPNode = new PNode(key, value);
                 bool pValid = newPNode->alloc();
-                Node *newNode = new Node(newPNode, pValid);
+                Node *newNode = new Node(newPNode, pValid, key);
                 newNode->next.store(static_cast<Node *>(NVMsoftUtils::createRef(currRef, state::INTEND_TO_INSERT)), std::memory_order_relaxed);
                 if (!pred->next.compare_exchange_strong(curr, static_cast<Node *>(NVMsoftUtils::createRef(newNode, predState)))){
                     delete(newNode);//no need for SMR here
@@ -287,12 +289,12 @@ public:
         optional<V> ret{};
         Node *pred, *curr, *currRef, *succ, *succRef;
         state predState, currState;
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
         curr = _find(head, key, &pred, &currState, tid);
         currRef = NVMsoftUtils::getRef<Node>(curr);
         predState = NVMsoftUtils::getState(curr);
 
-        if (strncmp(currRef->pptr->key.data(), key.data(), TESTS_KEY_SIZE) != 0)
+        if (strncmp(currRef->key.data(), key.data(), TESTS_KEY_SIZE) != 0)
         {
             return {};
         }
@@ -330,7 +332,7 @@ public:
             cState = NVMsoftUtils::getState(succ);
             if (LIKELY(cState != state::DELETED))
             {
-                if (UNLIKELY(strncmp(currRef->pptr->key.data(), key.data(), min((size_t)TESTS_KEY_SIZE, key.size())) >= 0)){
+                if (UNLIKELY(strncmp(currRef->key.data(), key.data(), min((size_t)TESTS_KEY_SIZE, key.size())) >= 0)){
                     break;
                 }
                 prev = currRef;

@@ -43,8 +43,7 @@ linchart<-ggplot(data=lindata,
   guides(color=guide_legend(title=NULL))+
   guides(linetype=guide_legend(title=NULL))+
   scale_color_manual(values=color_key[names(color_key) %in% lindata$option])+
-  scale_x_continuous(breaks=c(1,10,20,30,40,50,60,70,80,90),
-                minor_breaks=c(4,8,12,16,24,32,36,40,48,62,72))+
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90),minor_breaks=c(-10))+
   coord_cartesian(xlim = c(0,90), ylim = c(0, y_range_up))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(legend.position=legend_pos,
@@ -52,7 +51,7 @@ linchart<-ggplot(data=lindata,
     legend.key = element_rect(colour = NA, fill = "transparent"))+
   theme(text = element_text(size = 18))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.1,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.105,vjust = 8.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./threadcached_ycsba",t,".pdf",sep=""),linchart,width=8, height = 4, units = "in", dpi=300, title = paste("threadcached_ycsba",t,".pdf",sep=""))

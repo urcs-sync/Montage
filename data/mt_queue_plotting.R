@@ -52,7 +52,8 @@ lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)", "NVM (T)", "Montage (T)", 
 # Set up colors and shapes (invariant for all plots)
 color_key = c("#12E1EA","#1245EA",
               "#FF69B4","#C11B14",
-              "#DC143C","#809900",
+              "#DC143C",
+              "#809900",
               "#5947ff",
               "#FF8C00","#F86945",
               "#191970")
@@ -64,15 +65,9 @@ names(shape_key) <- levels(lindata$ds)
 line_key = c(2,2,2,1,1,1,1,1,4,1)
 names(line_key) <- levels(lindata$ds)
 
-# legend_pos=c(0.5,0.92)
-# y_range_down = 0
-# y_range_up = 2000
-
 # Benchmark-specific plot formatting
 legend_pos=c(0.554,0.25)
-# y_range_up=300
 y_name="Throughput (ops/s)"
-
 
 # Generate the plots
 linchart<-ggplot(data=lindata,
@@ -84,18 +79,17 @@ linchart<-ggplot(data=lindata,
   guides(color=guide_legend(title=NULL,ncol=4))+
   guides(linetype=guide_legend(title=NULL,ncol=4))+
   scale_color_manual(values=color_key[names(color_key) %in% lindata$ds])+
-  scale_x_continuous(breaks=c(1,10,20,30,40,50,60,70,80,90),
-      minor_breaks=c(4,8,12,16,24,32,36,48,62,72))+
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90),minor_breaks=c(-10))+
   scale_y_continuous(trans='log2',label=scientific_10,breaks=c(1000,10000,100000,1000000,1000000,10000000),
                 minor_breaks=c(3000,4000,5000,6000,7000,8000,9000,20000,30000,40000,50000,60000,70000,80000,90000,200000,300000,400000,500000,600000,700000,800000,900000,2000000,3000000,4000000,5000000,6000000,7000000,8000000,9000000,20000000,30000000,40000000,50000000,60000000,70000000,80000000,90000000,200000000,300000000,400000000,500000000,600000000,700000000,800000000,900000000,2000000000))+
-  coord_cartesian(xlim = c(1, 90), ylim = c(4000,10000000))+
+  coord_cartesian(xlim = c(0, 90), ylim = c(4000,10000000))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(legend.position=legend_pos,
   legend.background = element_blank(),
   legend.key = element_rect(colour = NA, fill = "transparent"))+
   theme(text = element_text(size = 18))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.105,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.105,vjust = 8.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./queues_",t,".pdf",sep=""),linchart,width=8, height = 4, units = "in", dpi=300, title = paste("queues_",t,".pdf",sep=""))

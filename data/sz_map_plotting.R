@@ -19,7 +19,7 @@ library(ggplot2)
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("g0i50r50_size","g50i25r25_size","g90i5r5_size")
+tests<-c("g50i25r25_size")
 for (t in tests){
 read.csv(paste("./maps_",t,".csv",sep=""))->montagedata
 
@@ -33,6 +33,7 @@ montagedata$ds<-as.factor(gsub("NoPersistMODHashTable","MOD",montagedata$ds))
 montagedata$ds<-as.factor(gsub("NoPersistMneHashTable","Mnemosyne",montagedata$ds))
 montagedata$ds<-as.factor(gsub("SyncNoPersistProntoHashTable","Pronto-Sync",montagedata$ds))
 montagedata$ds<-as.factor(gsub("FullNoPersistProntoHashTable","Pronto-Full",montagedata$ds))
+montagedata$ds<-as.factor(gsub("NoPersistNVTraverseHashTable","NVTraverse",montagedata$ds))
 d1<-subset(montagedata,ds=="DRAM (T)")
 d2<-subset(montagedata,ds=="NVM (T)")
 d3<-subset(montagedata,ds=="Montage (T)")
@@ -43,32 +44,29 @@ d7<-subset(montagedata,ds=="MOD")
 d8<-subset(montagedata,ds=="Mnemosyne")
 d9<-subset(montagedata,ds=="Pronto-Sync")
 d10<-subset(montagedata,ds=="Pronto-Full")
-lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10)
+d11<-subset(montagedata,ds=="NVTraverse")
+lkdata = rbind(d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11)
 
 ddply(.data=lkdata,.(ds,size),mutate,ops= mean(ops))->lkdata
 lindata = rbind(lkdata[,c("ds","size","ops")])
-lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)", "NVM (T)", "Montage (T)", "Montage", "SOFT", "Dalí", "MOD", "Pronto-Full", "Pronto-Sync", "Mnemosyne"))
+lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)", "NVM (T)", "Montage (T)", "Montage", "SOFT", "NVTraverse", "Dalí", "MOD", "Pronto-Full", "Pronto-Sync", "Mnemosyne"))
 
 # Set up colors and shapes (invariant for all plots)
 color_key = c("#12E1EA","#1245EA",
               "#FF69B4","#C11B14",
-              "#660099","#1BC40F","#5947ff",
+              "#660099","#6F2534","#1BC40F","#5947ff",
               "#FF8C00", "#F86945",
               "#191970")
 names(color_key) <- levels(lindata$ds)
 
-shape_key = c(2,1,0,18,20,17,15,16,62,4)
+shape_key = c(2,1,0,18,20,25,17,15,16,62,4)
 names(shape_key) <- levels(lindata$ds)
 
-line_key = c(2,2,2,1,1,1,1,1,4,1)
+line_key = c(2,2,2,1,1,1,1,1,1,4,1)
 names(line_key) <- levels(lindata$ds)
-
-# legend_pos=c(0.5,0.92)
-# y_range_up = 2000
 
 # Benchmark-specific plot formatting
 legend_pos=c(0.237,0.2)
-# y_range_up=300
 y_name="Throughput (ops/s)"
 y_range_down = 15000
 
@@ -92,9 +90,8 @@ linchart<-ggplot(data=lindata,
     legend.key = element_rect(colour = NA, fill = "transparent"))+
   theme(text = element_text(size = 18))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.105,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.105,vjust = 8.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./hashtables_",t,".pdf",sep=""),linchart,width=8, height = 4, units = "in", dpi=300, title = paste("hashtables_",t,".pdf",sep=""))
 }
-# width=15.95

@@ -63,7 +63,7 @@ public:
         this->prefill = prefill;
     }
 
-    void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+    virtual void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         q->init_thread(gtc, ltc);
 #ifdef PRONTO
         if(ltc->tid==0)
@@ -71,7 +71,7 @@ public:
 #endif
     }
 
-    void init(GlobalTestConfig* gtc){
+    virtual void init(GlobalTestConfig* gtc){
 #ifdef PRONTO
         // init pronto things
         Savitar_core_init();
@@ -101,7 +101,7 @@ public:
         }
         value_buffer += '\0';
 
-        getRideable(gtc);
+        allocRideable(gtc);
         
         if(gtc->verbose){
             printf("Enqueues:%d Dequeues:%d\n",
@@ -117,7 +117,7 @@ public:
 #endif
     }
 
-    int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
+    virtual int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         auto time_up = gtc->finish;
         
         int ops = 0;
@@ -164,12 +164,15 @@ public:
         delete q;
 #endif
     }
-    void getRideable(GlobalTestConfig* gtc){
+    void allocRideable(GlobalTestConfig* gtc){
         Rideable* ptr = gtc->allocRideable();
         q = dynamic_cast<RQueue<V>*>(ptr);
         if(!q){
             errexit("QueueChurnTest must be run on RQueue<V> type object.");
         } 
+    }
+    Rideable* getRideable(){
+        return q;
     }
     void doPrefill(GlobalTestConfig* gtc){
         if (this->prefill > 0){
@@ -180,6 +183,10 @@ public:
             }
             if(gtc->verbose){
                 printf("Prefilled %d\n",i);
+            }
+            Recoverable* rec=dynamic_cast<Recoverable*>(q);
+            if(rec){
+                rec->sync();
             }
         }
     }

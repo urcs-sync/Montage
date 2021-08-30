@@ -88,6 +88,7 @@ public:
         base_md->fake_dirty = true;
     }
     inline size_t malloc_size(void* ptr){
+        assert(in_range(ptr));
         const Descriptor* desc = base_md->desc_lookup(ptr);
         return (size_t)desc->block_size;
     }

@@ -110,13 +110,13 @@ class PNode : public Persistent
 		clwb_range(&key, sizeof(K));
 		clwb_range(&value, sizeof(V));
 		this->validEnd.store(validity, std::memory_order_release);
-		flush_fence(this);
+		clwb_obj_fence(this);
 	}
 
 	void destroy(bool validity)
 	{
 		this->deleted.store(validity, std::memory_order_release);
-		flush_fence(this);
+		clwb_obj_fence(this);
 	}
 
 	bool isValid()
@@ -218,7 +218,7 @@ public:
 
   private:
     std::hash<K> hash_fn;
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
     Node *getBucket(K k)
     {
         int idx = hash_fn(k) % idxSize;
@@ -231,7 +231,7 @@ public:
     optional<V> _get(Node *head, K key, int tid)
     {   
         optional<V> ret{};
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
         Node *curr = head->next.load();
         while(strncmp (curr->key.data(), key.data(),min((size_t)softUtils::KEYSIZE,key.length())) < 0)
         {
@@ -247,7 +247,7 @@ public:
     {
         Node *pred, *currRef;
         state currState, predState;
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
     retry:
         while (true)
         {   
@@ -293,7 +293,7 @@ public:
         optional<V> ret{};
         Node *pred, *curr, *currRef, *succ, *succRef;
         state predState, currState;
-        TrackerHolder<RCUTracker<Node>> holder(tracker,tid);
+        TrackerHolder<RCUTracker> holder(tracker,tid);
         curr = _find(head, key, &pred, &currState, tid);
         currRef = softUtils::getRef<Node>(curr);
         predState = softUtils::getState(curr);

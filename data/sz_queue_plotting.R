@@ -63,15 +63,9 @@ names(shape_key) <- levels(lindata$ds)
 line_key = c(2,2,2,1,1,1,1,1,4,1)
 names(line_key) <- levels(lindata$ds)
 
-# legend_pos=c(0.5,0.92)
-# y_range_down = 0
-# y_range_up = 2000
-
 # Benchmark-specific plot formatting
 legend_pos=c(0.237,0.17)
-# y_range_up=300
 y_name="Throughput (ops/s)"
-
 
 # Generate the plots
 linchart<-ggplot(data=lindata,
@@ -93,7 +87,7 @@ linchart<-ggplot(data=lindata,
     legend.key = element_rect(colour = NA, fill = "transparent"))+
   theme(text = element_text(size = 18))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.105,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.105,vjust = 8.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./queues_",t,".pdf",sep=""),linchart,width=8, height = 4, units = "in", dpi=300, title = paste("queues_",t,".pdf",sep=""))

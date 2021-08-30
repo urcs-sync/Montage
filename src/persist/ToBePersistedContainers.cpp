@@ -19,88 +19,6 @@ void rebuild_affinity(GlobalTestConfig* gtc, std::vector<hwloc_obj_t>& persister
     }
 }
 
-void PerEpoch::AdvancerPersister::persist_epoch(uint64_t c){
-    con->container->pop_all(&do_persist, c);
-}
-void PerEpoch::PerThreadDedicatedWait::persister_main(int worker_id){
-    // pin this thread to hyperthreads of worker threads.
-    hwloc_set_cpubind(gtc->topology, 
-        persister_affinities[worker_id]->cpuset,HWLOC_CPUBIND_THREAD);
-    // spin until signaled to destruct.
-    uint64_t curr_epoch = INIT_EPOCH;
-    while(!exit){
-        // wait on worker (tid == worker_id) thread's signal.
-        // NOTE: lock here provides an sfence for epoch boundary
-        std::unique_lock<std::mutex> lck(signal.bell);
-        signal.ring.wait(lck, [&]{return (curr_epoch != signal.epoch || exit);});
-        curr_epoch = signal.epoch;
-        // dumps
-        con->container->pop_all_local(&do_persist, worker_id, curr_epoch);
-        // increment finish_counter
-        signal.finish_counter.fetch_add(1, std::memory_order_release);
-    }
-}
-PerEpoch::PerThreadDedicatedWait::PerThreadDedicatedWait(PerEpoch* _con, GlobalTestConfig* _gtc) :
-    Persister(_con), gtc(_gtc) {
-    rebuild_affinity(gtc, persister_affinities);
-    // init environment
-    exit.store(false, std::memory_order_relaxed);
-    // spawn threads
-    for (int i = 0; i < gtc->task_num; i++){
-        persisters.push_back(std::move(
-            std::thread(&PerThreadDedicatedWait::persister_main, this, i)));
-    }
-}
-PerEpoch::PerThreadDedicatedWait::~PerThreadDedicatedWait(){
-    // signal exit of worker threads.
-    exit.store(true, std::memory_order_release);
-    {
-        std::unique_lock<std::mutex> lck(signal.bell);
-        signal.epoch++;
-    }
-    signal.ring.notify_all();
-    // join threads
-    for (auto i = persisters.begin(); i != persisters.end(); i++){
-        if (i->joinable()){
-            i->join();
-        }
-    }
-}
-void PerEpoch::do_persist(pds::pair<void*, size_t>& addr_size){
-    persist_func::clwb_range_nofence(
-        addr_size.first, addr_size.second);
-}
-void PerEpoch::PerThreadDedicatedWait::persist_epoch(uint64_t c){
-    assert(c > last_persisted);
-    // set finish_counter to 0.
-    signal.finish_counter.store(0, std::memory_order_release);
-    // notify hyperthreads.
-    {
-        std::unique_lock<std::mutex> lck(signal.bell);
-        signal.epoch = c;
-    }
-    signal.ring.notify_all();
-    // wait here until persisters finish.
-    while(signal.finish_counter.load(std::memory_order_acquire) < gtc->task_num);
-    last_persisted = c;
-}
-
-void PerEpoch::register_persist(PBlk* blk, size_t sz, uint64_t c){
-    if (c == NULL_EPOCH){
-        errexit("registering persist of epoch NULL.");
-    }
-    container->push(pds::pair<void*, size_t>((char*)blk, (size_t)sz), EpochSys::tid, c);
-}
-void PerEpoch::register_persist_raw(PBlk* blk, uint64_t c){
-    container->push(pds::pair<void*, size_t>((char*)blk, 1), EpochSys::tid, c);
-}
-void PerEpoch::persist_epoch(uint64_t c){
-    persister->persist_epoch(c);
-}
-void PerEpoch::clear(){
-    container->clear();
-}
-
 // void BufferedWB::PerThreadDedicatedWait::persister_main(int worker_id){
 //     // pin this thread to hyperthreads of worker threads.
 //     hwloc_set_cpubind(gtc->topology, 
@@ -223,39 +141,66 @@ void PerEpoch::clear(){
 //         con->container->try_pop_local(&do_persist, EpochSys::tid, c);
 //     }
 // }
-void BufferedWB::do_persist(pds::pair<void*, size_t>& addr_size){
-    persist_func::clwb_range_nofence(
-        addr_size.first, addr_size.second);
+void ToBePersistContainer::init_desc_local(void* addr, int tid){
+    // Hs: currently we only have descs as per-thread persistent metadata, so
+    // recording addrs of descs at init time might seem unecessary.
+    // If we will not have more persistent metadata to be persisted at the end
+    // of each epoch, consider removing this method and input addr every time
+    // we call register_persist_desc_local.
+    assert(addr);
+    descs_p[tid].ui = addr;
 }
-// void BufferedWB::dump(uint64_t c){
-//     for (int i = 0; i < dump_size; i++){
-//         container->try_pop_local(&do_persist, EpochSys::tid, c);
-//     }
-// }
-void BufferedWB::push(pds::pair<void*, size_t> entry, uint64_t c){
-    // while (!container->try_push(entry, EpochSys::tid, c)){// in case other thread(s) are doing write-backs.
-    //     persister->help_persist_local(c);
-    // }
-    container->push(entry, do_persist, EpochSys::tid, c);
+
+void ToBePersistContainer::register_persist_desc_local(uint64_t c, int tid){
+    bool f = false;
+    desc_persist_indicators[c%EPOCH_WINDOW][tid].ui.compare_exchange_strong(
+        f, true);
 }
-void BufferedWB::register_persist(PBlk* blk, size_t sz, uint64_t c){
+
+void ToBePersistContainer::do_persist_desc_local(uint64_t c, int tid) {
+    void* blk = descs_p[tid].ui;
+    if (blk){
+        bool t = true;
+        persist_func::clwb_range_nofence(blk, ral->malloc_size(blk));
+        desc_persist_indicators[c%EPOCH_WINDOW][tid].ui.compare_exchange_strong(t, false);
+    }
+}
+
+void BufferedWB::do_persist(void*& addr) {
+    if (is_raw(addr)){
+        persist_func::clwb(unmark_raw(addr));
+    } else {
+        persist_func::clwb_range_nofence(
+            addr, ral->malloc_size(addr));
+    }
+}
+void BufferedWB::register_persist(PBlk* blk, uint64_t c){
+    assert(blk!=nullptr);
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    push(pds::pair<void*, size_t>((char*)blk, (size_t)sz), c);
+    container->push(blk, [&](void*& addr){do_persist(addr);}, EpochSys::tid, c);
     
 }
 void BufferedWB::register_persist_raw(PBlk* blk, uint64_t c){
+    assert(blk!=nullptr);
     if (c == NULL_EPOCH){
         errexit("registering persist of epoch NULL.");
     }
-    push(pds::pair<void*, size_t>((char*)blk, 1), c);
+    container->push(mark_raw(blk), [&](void*& addr){do_persist(addr);}, EpochSys::tid, c);
 }
 void BufferedWB::persist_epoch(uint64_t c){ // NOTE: this is not thread-safe.
     // for (int i = 0; i < task_num; i++){
     //     container->pop_all_local(&do_persist, i, c);
     // }
-    container->pop_all(&do_persist, c);
+    container->pop_all([&](void*& addr){do_persist(addr);}, c);
+    for (int i = 0; i < task_num; i++){
+        do_persist_desc_local(c, i);
+    }
+}
+void BufferedWB::persist_epoch_local(uint64_t c, int tid){
+    container->pop_all_local([&](void*& addr){do_persist(addr);}, tid, c);
+    do_persist_desc_local(c, tid);
 }
 void BufferedWB::clear(){
     container->clear();

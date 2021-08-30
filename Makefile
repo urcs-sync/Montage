@@ -76,7 +76,7 @@ LDIRS+=$(NVM_MALLOC_DIR)
 # or they are system default)
 # LIBS :=-l:libjemalloc.so.2 -lstm -lparharness -lpthread -lhwloc -lm -lrt
 LIBS :=-ljemalloc -lpthread -lhwloc -lralloc -lgomp -latomic
-LIBS+=-lnvmmalloc
+LIBS+=-lnvmmalloc -lpmemobj -lpmem
 # directories that should be built first using recursive make.
 # You should avoid this in general, but it's useful for building
 # external libraries which we depend on
@@ -144,10 +144,10 @@ WARNING_FLAGS:=-ftrapv -Wreturn-type -W -Wall \
 
 # Default build flags.  
 # CFLAGS:=-pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) 
-CFLAGS:=-fopnemp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm 
+CFLAGS:=-fopenmp -pthread -g -gdwarf-2 -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm 
 
 # CXXFLAGS:= -pthread -std=c++11 -g -fpic $(WARNING_FLAGS) #-std=c++1y 
-CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -std=c++17 -mclwb -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm
+CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-aliasing -march=native -std=c++17 -mclwb -DTESTS_KEY_SIZE=$(K_SZ) -DTESTS_VAL_SIZE=$(V_SZ) -mrtm -mcx16
 # linker flags
 # LDFLAGS := 
 
@@ -162,12 +162,28 @@ CXXFLAGS:= -fopenmp -pthread -g -fpic $(WARNING_FLAGS) -D_REENTRANT -fno-strict-
 # define these build configurations).
 # To run a build, e.g. release, you would invoke:
 # make release
-BUILDS :=release debug ngc release32 debug32 mnemosyne pronto-full pronto-sync graph-rec
+BUILDS :=release debug ngc release32 debug32 mnemosyne pronto-full pronto-sync graph-rec tsx vread
 DEFAULT_BUILD :=release
 
 # -------------------------------
 # Build and build var definitions
 # -------------------------------
+ifeq ($(BUILD),vread)
+CXXFLAGS += -O3 -DNDEBUG -DVISIBLE_READ
+CFLAGS += -O3 -DNDEBUG -DVISIBLE_READ
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
+ifeq ($(BUILD),tsx)
+CXXFLAGS += -O3 -DNDEBUG -DUSE_TSX
+CFLAGS += -O3 -DNDEBUG -DUSE_TSX
+# we can add additional release customization here
+# e.g. link against different libraries, 
+# define enviroment vars, etc.
+endif
+
 ifeq ($(BUILD),mnemosyne)
 MNEMOSYNE_LIBS=$(MNEMOSYNE_PATH)/usermode/build/library
 MNEMOSYNE_INCLUDES=$(MNEMOSYNE_PATH)/usermode/library

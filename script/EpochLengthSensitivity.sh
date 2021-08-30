@@ -1,25 +1,43 @@
 #!/bin/bash
-# go to PDSHarness/script
+# go to Montage/script
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-# go to PDSHarness
+# go to Montage
 cd ..
 make clean; make
 
-base_list=("bin/main -r10 -m3 -i30" "bin/main -r2 -m0 -i30")
+# base_list=("bin/main -r22 -m5 -i30 -t40")
+# base_list=("bin/main -r8 -m2 -i30 -t1")
+map_test="MapChurnTest<string>:g50p0i25rm25:range=1000000:prefill=500000"
+queue_test="QueueChurn:eq50dq50:prefill=2000"
+
+base_list=(
+    "bin/main -RMontageHashTable -M$map_test -i30 -t40"
+    "bin/main -RMontageQueue -M$queue_test -i30 -t1"
+    "bin/main -RMontageNataTree -M$map_test -i30 -t40"
+)
 output="data/sensitivity.txt"
 
 args_list=(
-    "-t40 -dPersistStrat=BufferedWB -dPersister=Worker"
-    "-t20 -dPersistStrat=BufferedWB -dPersister=PerThreadBusy"
-    "-t20 -dPersistStrat=BufferedWB -dPersister=PerThreadWait"
-    "-t20 -dPersistStrat=PerEpoch -dPersister=PerThreadWait -dContainer=Vector"
-    "-t40 -dPersistStrat=PerEpoch -dPersister=Advancer -dContainer=Vector"
-    "-t20 -dPersistStrat=PerEpoch -dPersister=PerThreadWait -dContainer=HashSet"
-    "-t40 -dPersistStrat=PerEpoch -dPersister=Advancer -dContainer=HashSet"
-    "-t40 -dPersistStrat=DirWB"
-    "-t40 -dPersistStrat=No"
-    "-t40 -dPersistStrat=BufferedWB -dPersister=Worker -dFree=No"
+    "-dPersistStrat=BufferedWB -dBufferSize=2 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=8 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=16 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=64 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=256 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=1024 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=2048 -dFree=PerEpoch"
+    "-dPersistStrat=BufferedWB -dBufferSize=2 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=8 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=16 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=64 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=256 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=1024 -dFree=ThreadLocal"
+    "-dPersistStrat=BufferedWB -dBufferSize=2048 -dFree=ThreadLocal"
+    "-dPersistStrat=DirWB"
+    "-dPersistStrat=No"
+    "-dPersistStrat=BufferedWB -dFree=No"
 )
+
+rm $output
 
 for base in "${base_list[@]}"; do
     for args in "${args_list[@]}"; do

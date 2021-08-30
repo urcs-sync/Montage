@@ -59,3 +59,10 @@ int vr_threshold;
 int cm_threshold;
 
 mtm_rwlock_t mtm_serial_lock;
+
+#ifdef ROLLOVER_CLOCK
+pthread_mutex_t tx_count_mutex;
+pthread_cond_t tx_reset;
+int tx_count;
+int tx_overflow;
+#endif

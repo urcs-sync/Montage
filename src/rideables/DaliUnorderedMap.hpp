@@ -14,6 +14,8 @@
 #include <sys/resource.h>
 #include <hwloc.h>
 
+#include "utils/Persistent.hpp"
+
 #include "ConcurrentPrimitives.hpp"
 // #include "HazardTracker.hpp"
 #include "RMap.hpp"
@@ -40,7 +42,7 @@ class DaliUnorderedMap : public RMap<K,V>{
             // void* ret = malloc(size);
             void* ret = RP_malloc(size);
             if (!ret){
-                cerr << "Persistent::new failed: no free memory" << endl;
+                std::cerr << "Persistent::new failed: no free memory" << std::endl;
                 exit(1);
             }
             return ret;
@@ -79,7 +81,7 @@ class DaliUnorderedMap : public RMap<K,V>{
                 // void* ret = malloc(size);
                 void* ret = RP_malloc(size);
                 if (!ret){
-                    cerr << "Persistent::new failed: no free memory" << endl;
+                    std::cerr << "Persistent::new failed: no free memory" << std::endl;
                     exit(1);
                 }
                 return ret;
@@ -117,7 +119,7 @@ class DaliUnorderedMap : public RMap<K,V>{
             // void* ret = malloc(size);
             void* ret = RP_malloc(size);
             if (!ret){
-                cerr << "Persistent::new failed: no free memory" << endl;
+                std::cerr << "Persistent::new failed: no free memory" << std::endl;
                 exit(1);
             }
             return ret;
@@ -593,12 +595,12 @@ optional<V> DaliUnorderedMap<K,V,idxSize>::replace(K key, V val, int tid) {
 
 
 /* for string */
-#include "PString.hpp"
+#include "persist/InPlaceString.hpp"
 template <>
 struct DaliUnorderedMap<std::string,std::string,1000000>::Node{
     // TODO: This should be pptr<char> rather than basic_string
-    pds::TrivialPString<TESTS_KEY_SIZE> key;
-    pds::TrivialPString<TESTS_VAL_SIZE> val;
+    pds::TrivialInPlaceString<TESTS_KEY_SIZE> key;
+    pds::TrivialInPlaceString<TESTS_VAL_SIZE> val;
     pptr<Node> next;
     Node(std::string k, optional<std::string> v, Node* n):key(k),val(v.has_value()?v.value():""),next(n){
         key.flush();
@@ -609,7 +611,7 @@ struct DaliUnorderedMap<std::string,std::string,1000000>::Node{
         // void* ret = malloc(size);
         void* ret = RP_malloc(size);
         if (!ret){
-            cerr << "Persistent::new failed: no free memory" << endl;
+            std::cerr << "Persistent::new failed: no free memory" << std::endl;
             exit(1);
         }
         return ret;

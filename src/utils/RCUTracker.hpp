@@ -32,7 +32,7 @@ limitations under the License.
 
 enum RCUType{type_RCU, type_QSBR};
 
-template<class T> class RCUTracker: public BaseTracker<T>{
+class RCUTracker: public BaseTracker{
 private:
 	int task_num;
 	int freq;
@@ -41,11 +41,12 @@ private:
 	RCUType type;
 	
 public:
-	class RCUInfo{
+	struct RCUInfo{
 	public:
-		T* obj;
+		void* obj;
 		uint64_t epoch;
-		RCUInfo(T* obj, uint64_t epoch):obj(obj),epoch(epoch){}
+		std::function<void(void*)> destruct;
+		RCUInfo(void* obj, uint64_t epoch, const std::function<void(void*)>& d):obj(obj), epoch(epoch), destruct(d){}
 	};
 	
 private:
@@ -60,9 +61,9 @@ private:
 public:
 	~RCUTracker(){};
 	RCUTracker(int task_num, int epochFreq, int emptyFreq, RCUType type, bool collect): 
-	 BaseTracker<T>(task_num),task_num(task_num),freq(emptyFreq),epochFreq(epochFreq),collect(collect),type(type){
-		retired = new padded<std::list<RCUTracker<T>::RCUInfo>>[task_num];
-		// retired = new std::list<RCUTracker<T>::RCUInfo>[task_num];
+	 BaseTracker(task_num),task_num(task_num),freq(emptyFreq),epochFreq(epochFreq),collect(collect),type(type){
+		retired = new padded<std::list<RCUTracker::RCUInfo>>[task_num];
+		// retired = new std::list<RCUTracker::RCUInfo>[task_num];
 		reservations = new paddedAtomic<uint64_t>[task_num];
 		retire_counters = new padded<uint64_t>[task_num];
 		// alloc_counters = new padded<uint64_t>[task_num];
@@ -116,9 +117,9 @@ public:
 		epoch.fetch_add(1,std::memory_order_acq_rel);
 	}
 	
-	void __attribute__ ((deprecated)) retire(T* obj, uint64_t e, int tid){
-		return retire(obj,tid);
-	}
+	// void __attribute__ ((deprecated)) retire(T* obj, uint64_t e, int tid){
+	// 	return retire(obj,tid);
+	// }
 	
 	// void retire(T* obj, int tid){
 	// 	if(obj==NULL){return;}
@@ -135,8 +136,7 @@ public:
 	// 	}
 	// 	retire_counters[tid]=retire_counters[tid]+1;
 	// }
-
-	void retire(T* obj, int tid){
+	void retire(void* obj, int tid, const std::function<void(void*)>& d){
 		if(obj==NULL){return;}
 		std::list<RCUInfo>* myTrash = &(retired[tid].ui);
 		// std::list<RCUInfo>* myTrash = &(retired[tid]);
@@ -146,7 +146,7 @@ public:
 		// }
 			
 		uint64_t e = epoch.load(std::memory_order_acquire);
-		RCUInfo info = RCUInfo(obj,e);
+		RCUInfo info = RCUInfo(obj,e,d);
 		myTrash->push_back(info);
 		if(retire_counters[tid]%(epochFreq*task_num)==0){
 			epoch.fetch_add(1,std::memory_order_acq_rel);
@@ -155,6 +155,12 @@ public:
 			empty(tid);
 		}
 		retire_counters[tid]=retire_counters[tid]+1;
+	}
+	template<class T>
+	void retire(T* obj, int tid){
+		retire(obj, tid, [](void* o){
+			delete(static_cast<T*>(o));
+		});
 	}
 	
 	void empty(int tid){
@@ -171,10 +177,10 @@ public:
 		// std::list<RCUInfo>* myTrash = &(retired[tid]);
 
 		for (auto iterator = myTrash->begin(), end = myTrash->end(); iterator != end; ) {
-			RCUInfo res = *iterator;
+			RCUInfo& res = *iterator;
 			if(res.epoch<minEpoch){
+				res.destruct(res.obj);
 				iterator = myTrash->erase(iterator);
-				delete res.obj;
 			}
 			else{++iterator;}
 		}

@@ -29,8 +29,8 @@ private:
     struct Node{
         MontageNatarajanTree* ds;
         Level level;
-        std::atomic<Node*> left;
-        std::atomic<Node*> right;
+        pds::atomic_lin_var<Node*> left;
+        pds::atomic_lin_var<Node*> right;
         K key;
         Payload* payload;// TODO: does it have to be atomic?
 
@@ -47,7 +47,7 @@ private:
             }
         }
 
-        void rm_payload(){
+        void retire_payload(){
             // call it before END_OP but after linearization point
             assert(level == finite);
             assert(payload!=nullptr && "payload shouldn't be null");
@@ -62,17 +62,17 @@ private:
             return (V)payload->get_unsafe_val(ds);
         }
         //not thread-safe
-        void set(K k, Node* l=nullptr, Node* r=nullptr){
+        void set(Recoverable* ds,K k, Node* l=nullptr, Node* r=nullptr){
             key = k;
             level = finite;
-            left.store(l);
-            right.store(r);
+            left.store(ds,l);
+            right.store(ds,r);
         }
         //not thread-safe
-        void set(Level lev, Node* l=nullptr, Node* r=nullptr){
+        void set(Recoverable* ds, Level lev, Node* l=nullptr, Node* r=nullptr){
             level = lev;
-            left.store(l);
-            right.store(r);
+            left.store(ds,l);
+            right.store(ds,r);
         }
     };
     struct SeekRecord{
@@ -83,7 +83,7 @@ private:
     };
 
     /* variables */
-    RCUTracker<Node> tracker;
+    RCUTracker tracker;
     const V defV{};
     Node r{this,inf2};
     Node s{this,inf1};
@@ -91,29 +91,28 @@ private:
     const size_t GET_POINTER_BITS = 0xfffffffffffffffc;//for machine 64-bit or less.
 
     /* helper functions */
-    //flag and tags helpers
+    //flag and tags helpers for lin_var
     inline Node* getPtr(Node* mptr){
-        return (Node*) ((size_t)mptr & GET_POINTER_BITS);
+        return reinterpret_cast<Node*>((uint64_t)mptr & GET_POINTER_BITS);
     }
     inline bool getFlg(Node* mptr){
-        return (bool)((size_t)mptr & 1);
+        return (bool)((uint64_t)mptr & 1);
     }
     inline bool getTg(Node* mptr){
-        return (bool)((size_t)mptr & 2);
+        return (bool)((uint64_t)mptr & 2);
     }
     inline Node* mixPtrFlgTg(Node* ptr, bool flg, bool tg){
-		return (Node*) ((size_t)ptr | flg | ((size_t)tg<<1));
-	}
-    //node comparison
+        return reinterpret_cast<Node*>((uint64_t)ptr | flg | ((size_t)tg<<1));
+    }
+    //node comparison for lin_var
     inline bool isInf(Node* n){
         return getInfLevel(n)!=finite;
     }
     inline Level getInfLevel(Node* n){
         //0 for inf0, 1 for inf1, 2 for inf2, -1 for general val
-        n=getPtr(n);
-        return n->level;
+        return getPtr(n)->level;
     }
-    inline bool nodeLess(Node* n1, Node* n2){
+        inline bool nodeLess(Node* n1, Node* n2){
         n1=getPtr(n1);
         n2=getPtr(n2);
         int i1=getInfLevel(n1);
@@ -143,21 +142,19 @@ private:
         else
             return false;
     }
-    inline bool nodeLessEqual(Node* n1, Node* n2){
-        return !nodeLess(n2,n1);
-    }
 
     /* private interfaces */
     void seek(K key, int tid);
     bool cleanup(K key, int tid);
+    void retire_path(Node* start, Node* end, int tid);
     // void doRangeQuery(Node& k1, Node& k2, int tid, Node* root, std::map<K,V>& res);
 public:
     MontageNatarajanTree(GlobalTestConfig* gtc):
         Recoverable(gtc), tracker(gtc->task_num, 100, 1000, true){
-        r.right.store(new Node(this,inf2));
-        r.left.store(&s);
-        s.right.store(new Node(this,inf1));
-        s.left.store(new Node(this,inf0));
+        r.right.store(this,new Node(this,inf2));
+        r.left.store(this,&s);
+        s.right.store(this,new Node(this,inf1));
+        s.left.store(this,new Node(this,inf0));
         records = new padded<SeekRecord>[gtc->task_num]{};
     };
     ~MontageNatarajanTree(){};
@@ -193,10 +190,10 @@ void MontageNatarajanTree<K,V>::seek(K key, int tid){
     seekRecord->ancestor=&r;
     seekRecord->successor=&s;
     seekRecord->parent=&s;
-    seekRecord->leaf=getPtr(s.left.load());
+    seekRecord->leaf=getPtr(s.left.load(this));
     
-    Node* parentField=seekRecord->parent->left.load();
-    Node* currentField=seekRecord->leaf->left.load();
+    Node* parentField=((Node*)seekRecord->parent)->left.load(this);
+    Node* currentField=((Node*)seekRecord->leaf)->left.load(this);
     Node* current=getPtr(currentField);
 
     while(current!=nullptr){
@@ -209,10 +206,10 @@ void MontageNatarajanTree<K,V>::seek(K key, int tid){
 
         parentField=currentField;
         if(nodeLess(key,current)){
-            currentField=current->left.load();
+            currentField=current->left.load(this);
         }
         else{
-            currentField=current->right.load();
+            currentField=current->right.load(this);
         }
         current=getPtr(currentField);
     }
@@ -229,9 +226,9 @@ bool MontageNatarajanTree<K,V>::cleanup(K key, int tid){
     Node* parent=getPtr(seekRecord->parent);
     Node* leaf=getPtr(seekRecord->leaf);
 
-    std::atomic<Node*>* successorAddr=nullptr;
-    std::atomic<Node*>* childAddr=nullptr;
-    std::atomic<Node*>* siblingAddr=nullptr;
+    pds::atomic_lin_var<Node*>* successorAddr=nullptr;
+    pds::atomic_lin_var<Node*>* childAddr=nullptr;
+    pds::atomic_lin_var<Node*>* siblingAddr=nullptr;
 
     if(nodeLess(key,ancestor))
         successorAddr=&(ancestor->left);
@@ -245,29 +242,48 @@ bool MontageNatarajanTree<K,V>::cleanup(K key, int tid){
         childAddr=&(parent->right);
         siblingAddr=&(parent->left);
     }
-    Node* tmpChild=childAddr->load();
+    Node* tmpChild=childAddr->load(this);
     if(!getFlg(tmpChild)){
         //the leaf is not flagged, thus sibling node should be flagged
-        tmpChild=siblingAddr->load();
+        tmpChild=siblingAddr->load(this);
         siblingAddr=childAddr;
     }
 
     while(true){
-        Node* untagged=siblingAddr->load();
-        Node* tagged=mixPtrFlgTg(getPtr(untagged),getFlg(untagged),true);
-        if(siblingAddr->compare_exchange_weak(untagged,tagged)){
+        Node* untagged=siblingAddr->load(this);
+        Node* untagged_ptr = untagged;
+        Node* tagged = mixPtrFlgTg(getPtr(untagged_ptr),getFlg(untagged_ptr),true);
+        if(siblingAddr->CAS(this,untagged,tagged)){
             break;
         }
     }
-    Node* tmpSibling=siblingAddr->load();
-    res=successorAddr->compare_exchange_strong(successor,
+    Node* tmpSibling=siblingAddr->load(this);
+    res=successorAddr->CAS(this,successor,
         mixPtrFlgTg(getPtr(tmpSibling),getFlg(tmpSibling),false));
 
     if(res==true){
         tracker.retire(getPtr(tmpChild),tid);
-        tracker.retire(successor,tid);
+        // retire everything on the path [successor, parent]:
+        retire_path(successor, parent, tid);
     }
     return res;
+}
+
+// retire everything on the path [start, end]
+template <class K, class V>
+void MontageNatarajanTree<K,V>::retire_path(Node* start, Node* end, int tid){
+    K key = end->key;
+    Node* curr = start;
+    while(curr!=end){
+        assert(curr != nullptr && "curr shouldn't be null");
+        tracker.retire(curr, tid);
+        if (nodeLess(key, curr)){
+            curr = getPtr(((Node*)curr->left.load(this)));
+        } else {
+            curr = getPtr(((Node*)curr->right.load(this)));
+        }
+    }
+    tracker.retire(curr, tid);
 }
 
 /* to test rangeQuery */
@@ -294,7 +310,7 @@ optional<V> MontageNatarajanTree<K,V>::get(K key, int tid){
     Node* leaf=nullptr;
     tracker.start_op(tid);
     seek(key,tid);
-    leaf=getPtr(seekRecord->leaf);
+    leaf=((Node*)getPtr(seekRecord->leaf));
     if(nodeEqual(key,leaf)){
         MontageOpHolder _holder(this);
         res = leaf->get_unsafe_val();//never old see new as we find node before BEGIN_OP
@@ -312,9 +328,9 @@ optional<V> MontageNatarajanTree<K,V>::put(K key, V val, int tid){
     Node* newInternal=new Node(this,inf2);
     Node* newLeaf=new Node(this,key,val);
 
-    Node* parent=nullptr;
-    Node* leaf=nullptr;
-    std::atomic<Node*>* childAddr=nullptr;
+    Node* parent;
+    Node* leaf;
+    pds::atomic_lin_var<Node*>* childAddr=nullptr;
     tracker.start_op(tid);
     while(true){
         seek(key,tid);
@@ -341,21 +357,18 @@ optional<V> MontageNatarajanTree<K,V>::put(K key, V val, int tid){
             //create newInternal
             if(isInf(leaf)){
                 Level lev=getInfLevel(leaf);
-                newInternal->set(lev,newLeft,newRight);
+                newInternal->set(this,lev,newLeft,newRight);
             }
             else
-                newInternal->set(std::max(key,leaf->key),newLeft,newRight);
+                newInternal->set(this,std::max(key,leaf->key),newLeft,newRight);
 
             Node* tmpExpected=getPtr(leaf);
-            begin_op();
-            if(childAddr->compare_exchange_strong(tmpExpected,getPtr(newInternal))){
-                end_op();
+            if(childAddr->CAS_verify(this,tmpExpected,getPtr(newInternal))){
                 res={};
                 break;//insertion succeeds
             }
             else{//fails; help conflicting delete operation
-                abort_op();
-                Node* tmpChild=childAddr->load();
+                Node* tmpChild=childAddr->load(this);
                 if(getPtr(tmpChild)==leaf && (getFlg(tmpChild)||getTg(tmpChild)))
                     cleanup(key,tid);
             }
@@ -366,16 +379,13 @@ optional<V> MontageNatarajanTree<K,V>::put(K key, V val, int tid){
                 childAddr=&(parent->left);
             else
                 childAddr=&(parent->right);
-            begin_op();
-            res=leaf->get_val();
-            if(childAddr->compare_exchange_strong(leaf,newLeaf)){
-                leaf->rm_payload();
-                end_op();
+            res=leaf->get_unsafe_val();
+            leaf->retire_payload();
+            if(childAddr->CAS_verify(this,leaf,newLeaf)){
                 delete(newInternal);// this is always local so no need to use tracker
                 tracker.retire(leaf,tid);
                 break;
             }
-            abort_op();
         }
     }
 
@@ -392,9 +402,9 @@ bool MontageNatarajanTree<K,V>::insert(K key, V val, int tid){
     Node* newInternal=new Node(this,inf2);
     Node* newLeaf=new Node(this,key,val);
     
-    Node* parent=nullptr;
-    Node* leaf=nullptr;
-    std::atomic<Node*>* childAddr=nullptr;
+    Node* parent;
+    Node* leaf;
+    pds::atomic_lin_var<Node*>* childAddr=nullptr;
     tracker.start_op(tid);
     while(true){
         seek(key,tid);
@@ -421,21 +431,18 @@ bool MontageNatarajanTree<K,V>::insert(K key, V val, int tid){
             //create newInternal
             if(isInf(leaf)){
                 Level lev=getInfLevel(leaf);
-                newInternal->set(lev,newLeft,newRight);
+                newInternal->set(this,lev,newLeft,newRight);
             }
             else
-                newInternal->set(std::max(key,leaf->key),newLeft,newRight);
+                newInternal->set(this,std::max(key,leaf->key),newLeft,newRight);
 
             Node* tmpExpected=getPtr(leaf);
-            begin_op();
-            if(childAddr->compare_exchange_strong(tmpExpected,getPtr(newInternal))){
-                end_op();
+            if(childAddr->CAS_verify(this,tmpExpected,getPtr(newInternal))){
                 res=true;
                 break;
             }
             else{//fails; help conflicting delete operation
-                abort_op();
-                Node* tmpChild=childAddr->load();
+                Node* tmpChild=childAddr->load(this);
                 if(getPtr(tmpChild)==leaf && (getFlg(tmpChild)||getTg(tmpChild)))
                     cleanup(key,tid);
             }
@@ -458,9 +465,9 @@ optional<V> MontageNatarajanTree<K,V>::remove(K key, int tid){
     optional<V> res={};
     SeekRecord* seekRecord=&(records[tid].ui);
 
-    Node* parent=nullptr;
-    Node* leaf=nullptr;
-    std::atomic<Node*>* childAddr=nullptr;
+    Node* parent;
+    Node* leaf;
+    pds::atomic_lin_var<Node*>* childAddr=nullptr;
     
     tracker.start_op(tid);
     while(true){
@@ -480,22 +487,19 @@ optional<V> MontageNatarajanTree<K,V>::remove(K key, int tid){
             }
 
             Node* tmpExpected=leaf;
-            begin_op();
-            res=leaf->get_val();
-            if(childAddr->compare_exchange_strong(tmpExpected,
+            res=leaf->get_unsafe_val();
+            leaf->retire_payload();
+            if(childAddr->CAS_verify(this,tmpExpected,
                 mixPtrFlgTg(tmpExpected,true,false))){
                 /* 
                  * there won't be old_see_new because insert must happen 
                  * before the leaf is found which is of course before that BEGIN_OP
                  */
-                leaf->rm_payload();
-                end_op();
                 injecting=false;
                 if(cleanup(key,tid)) break;
             }
             else{
-                abort_op();
-                Node* tmpChild=childAddr->load();
+                Node* tmpChild=childAddr->load(this);
                 if(getPtr(tmpChild)==leaf && (getFlg(tmpChild)||getTg(tmpChild)))
                     cleanup(key,tid);
             }
@@ -523,7 +527,7 @@ optional<V> MontageNatarajanTree<K,V>::replace(K key, V val, int tid){
 
     // Node* parent=nullptr;
     // Node* leaf=nullptr;
-    // std::atomic<Node*>* childAddr=nullptr;
+    // pds::atomic_lin_var<Node*>* childAddr=nullptr;
 
     // tracker.start_op(tid);
     // while(true){
@@ -544,7 +548,7 @@ optional<V> MontageNatarajanTree<K,V>::replace(K key, V val, int tid){
     //         BEGIN_OP(newLeaf->payload);
     //         res=leaf->get_val();
     //         if(childAddr->compare_exchange_strong(leaf,newLeaf)){
-    //             leaf->rm_payload();
+    //             leaf->retire_payload();
     //             END_OP;
     //             tracker.retire(leaf,tid);
     //             break;
@@ -559,11 +563,11 @@ optional<V> MontageNatarajanTree<K,V>::replace(K key, V val, int tid){
 
 /* Specialization for strings */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <>
 class MontageNatarajanTree<std::string, std::string>::Payload : public pds::PBlk{
-    GENERATE_FIELD(pds::PString<TESTS_KEY_SIZE>, key, Payload);
-    GENERATE_FIELD(pds::PString<TESTS_VAL_SIZE>, val, Payload);
+    GENERATE_FIELD(pds::InPlaceString<TESTS_KEY_SIZE>, key, Payload);
+    GENERATE_FIELD(pds::InPlaceString<TESTS_VAL_SIZE>, val, Payload);
 
 public:
     Payload(std::string k, std::string v) : m_key(this, k), m_val(this, v){}

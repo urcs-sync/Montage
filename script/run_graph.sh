@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# go to PDSHarness/script
+# go to Montage/script
 cd "$( dirname "${BASH_SOURCE[0]}" )"
-# go to PDSHarness
+# go to Montage
 cd ..
 
 outfile_dir="data"
@@ -26,15 +26,23 @@ graph_thread_init(){
 
 graph_thread_execute(){
     graph_thread_init
+    tests=(
+        "GraphTest:80edge20vertex:degree32"
+        "GraphTest:99.8edge.2vertex:degree32"
+    )
+    rideables=(
+        "TGraph"
+        "MontageGraph"
+    )
     for ((i=1; i<=REPEAT_NUM; ++i)); do
         for threads in "${THREADS[@]}"; do
-            for test in {10..11}; do
-                for rideable in {16..17}; do
+            for test in ${tests[@]}; do
+                for rideable in ${rideables[@]}; do
                     delete_heap_file
-                    bin/main -r $rideable -m $test -t $threads -i $TASK_LENGTH -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
+                    bin/main -R $rideable -M $test -t $threads -i $TASK_LENGTH -dPersistStrat=No | tee -a $outfile_dir/graph_thread.csv
                 done
                 delete_heap_file
-                bin/main -r 18 -m $test -t $threads -i $TASK_LENGTH $STRATEGY | tee -a $outfile_dir/graph_thread.csv
+                bin/main -R "MontageGraph" -M $test -t $threads -i $TASK_LENGTH $STRATEGY | tee -a $outfile_dir/graph_thread.csv
             done
         done
     done
@@ -54,9 +62,9 @@ graph_recovery_execute(){
     for ((i=1; i<=REPEAT_NUM; ++i)); do
         for threads in "${THREADS[@]}"; do
             delete_heap_file
-            bin/main -r 19 -m 11 -t $threads &> $tmp_file_path
+            bin/main -R "Orkut" -M "GraphRecoveryTest:Orkut:noverify" -t $threads &> $tmp_file_path
             if [ $? -ne 0 ]; then
-                tput setaf 1; echo "Orkut dataset failed on configuration \"-r 19 -m 11 -t ${threads}\""; tput sgr0
+                tput setaf 1; echo "Orkut dataset failed on configuration \"-R Orkut -M GraphRecoveryTest:Orkut:noverify -t ${threads}\""; tput sgr0
             fi;
             output=`grep -oP "(?<=Parallel Initialization took )[0-9]+" $tmp_file_path`
             echo "$threads,$output,MontageCreation" | tee -a $outfile_dir/graph_recovery.csv
@@ -69,9 +77,9 @@ graph_recovery_execute(){
     for threads in "${THREADS[@]}"; do
         for ((i=1; i<=REPEAT_NUM; ++i)); do
             delete_heap_file
-            bin/main -r 20 -m 12 -t $threads &> $tmp_file_path
+            bin/main -R "TransientOrkut" -M "TGraphConstructionTest:Orkut" -t $threads &> $tmp_file_path
             if [ $? -ne 0 ]; then
-                tput setaf 1; echo "Orkut[TGraph] dataset failed on configuration \"-r 20 -m 12 -t ${threads}\""; tput sgr0
+                tput setaf 1; echo "Orkut[TGraph] dataset failed on configuration \"-R TransientOrkut -M TGraphConstructionTest:Orkut -t ${threads}\""; tput sgr0
             fi;
             output=`grep -oP "(?<=Time to initialize graph: )[0-9]+" $tmp_file_path`
             echo "$threads,$output,TGraphRecovery" | tee -a $outfile_dir/graph_recovery.csv

@@ -19,16 +19,18 @@ library(ggplot2)
 scientific_10 <- function(x) {
   parse(text=gsub("1e\\+", "10^", scales::scientific_format()(x)))
 }
-tests<-c("recovery")
+tests<-c("graph_recovery")
 for (t in tests){
-read.csv(paste("./graph_",t,".csv",sep=""))->montagedata
+read.csv(paste("./",t,".csv",sep=""))->montagedata
 
 montagedata$ds<-as.factor(gsub("TGraphRecovery","DRAM (T)",montagedata$ds))
-
 montagedata$ds<-as.factor(gsub("MontageCreation","Montage (T)",montagedata$ds))
 montagedata$ds<-as.factor(gsub("MontageRecovery","Montage",montagedata$ds))
 
-ddply(.data=montagedata,.(ds,thread),mutate,latency= mean(latency)/1000)->lkdata
+ddply(.data=montagedata,.(Threads),mutate,latency= mean(TGraph_Creation)/1000,ds="DRAM (T)",thread=Threads)->d1
+ddply(.data=montagedata,.(Threads),mutate,latency= mean(MontageGraph_Creation)/1000,ds="Montage (T)",thread=Threads)->d2
+ddply(.data=montagedata,.(Threads),mutate,latency= mean(MontageGraph_Recovery)/1000,ds="Montage",thread=Threads)->d3
+lkdata = rbind(d1,d2,d3)
 
 lindata = rbind(lkdata[,c("ds","thread","latency")])
 lindata$ds <- factor(lindata$ds, levels=c("DRAM (T)", "NVM (T)", "Montage (T)", "Montage", "SOFT", "Dalí", "MOD", "Pronto-Full", "Pronto-Sync", "Mnemosyne"))
@@ -47,12 +49,8 @@ names(shape_key) <- levels(lindata$ds)
 line_key = c(2,2,2,1,1,1,1,1,4,1)
 names(line_key) <- levels(lindata$ds)
 
-# legend_pos=c(0.5,0.92)
-# y_range_up = 2000
-
 # Benchmark-specific plot formatting
 legend_pos=c(0.637,0.78)
-# y_range_up=300
 y_name="Latency (s)"
 y_range_down = 100
 
@@ -66,20 +64,18 @@ linchart<-ggplot(data=lindata,
   guides(color=guide_legend(title=NULL))+
   guides(linetype=guide_legend(title=NULL))+
   scale_color_manual(values=color_key[names(color_key) %in% lindata$ds])+
-  scale_x_continuous(breaks=c(1,10,20,30,40,50,60,70,80,90),
-      minor_breaks=c(2,4,8,16,32,64))+
+  scale_x_continuous(breaks=c(0,10,20,30,40,50,60,70,80,90),minor_breaks=c(-10))+
   scale_y_continuous(trans='log2',label=scientific_10,breaks=c(10,100,1000,1000,10000,100000),
-                minor_breaks=c(20,30,40,50,60,70,80,90,200,300,400,500,600,700,800,900,2000,3000,4000,5000,6000,7000,8000,9000))+
-  coord_cartesian(xlim = c(-1, 65))+
+                minor_breaks=c(2,3,4,5,6,7,8,9,20,30,40,50,60,70,80,90,200,300,400,500,600,700,800,900,2000,3000,4000,5000,6000,7000,8000,9000))+
+  coord_cartesian(xlim = c(-2, 65))+
   theme(plot.margin = unit(c(.2,0,-1.5,0), "cm"))+
   theme(legend.position=legend_pos,
     legend.background = element_blank(),
     legend.key = element_rect(colour = NA, fill = "transparent"))+
   theme(text = element_text(size = 18))+
   theme(axis.title.y = element_text(margin = margin(t = 0, r = 5, b = 0, l = 2)))+
-  theme(axis.title.x = element_text(hjust =-0.185,vjust = 12.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
+  theme(axis.title.x = element_text(hjust =-0.185,vjust = 8.7,margin = margin(t = 15, r = 0, b = 10, l = 0)))
 
 # Save all four plots to separate PDFs
 ggsave(filename = paste("./graph_",t,".pdf",sep=""),linchart,width=5.3, height = 4, units = "in", dpi=300, title = paste("graph_",t,".pdf",sep=""))
 }
-# width=15.95

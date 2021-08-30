@@ -138,7 +138,7 @@ public:
 
 /* NVM hash table without flush&fence, for strings only */
 #include <string>
-#include "PString.hpp"
+#include "InPlaceString.hpp"
 template <size_t idxSize=1000000>
 class NVMHashTable : public RMap<std::string,std::string>{
 public:

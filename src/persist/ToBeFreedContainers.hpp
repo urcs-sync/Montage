@@ -25,17 +25,17 @@ public:
     virtual ~ToBeFreedContainer(){}
 };
 
-class PerThreadFreedContainer : public ToBeFreedContainer{
+class ThreadLocalFreedContainer : public ToBeFreedContainer{
     PerThreadContainer<PBlk*>* container = nullptr;
     padded<uint64_t>* threadEpoch;
     padded<std::mutex>* locks = nullptr;
     int task_num;
     EpochSys* _esys = nullptr;
-    void do_free(PBlk*& x);
+    void do_free(PBlk*& x, uint64_t c);
 public:
-    PerThreadFreedContainer(EpochSys* e):_esys(e){}
-    PerThreadFreedContainer(EpochSys* e, GlobalTestConfig* gtc);
-    ~PerThreadFreedContainer();
+    ThreadLocalFreedContainer(EpochSys* e):_esys(e){}
+    ThreadLocalFreedContainer(EpochSys* e, GlobalTestConfig* gtc);
+    ~ThreadLocalFreedContainer();
 
     void free_on_new_epoch(uint64_t c);
 
@@ -48,8 +48,8 @@ public:
 class PerEpochFreedContainer : public ToBeFreedContainer{
     PerThreadContainer<PBlk*>* container = nullptr;
     EpochSys* _esys = nullptr;
-    void do_free(PBlk*& x);
-public:
+    void do_free(PBlk*& x, uint64_t c);
+   public:
     PerEpochFreedContainer(EpochSys* e):_esys(e){
         // errexit("DO NOT USE DEFAULT CONSTRUCTOR OF ToBeFreedContainer");
     }

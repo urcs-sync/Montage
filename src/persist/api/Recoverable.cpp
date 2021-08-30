@@ -1,5 +1,7 @@
 #include "Recoverable.hpp"
-
+#include "PersistFunc.hpp"
+// std::atomic<size_t> pds::abort_cnt(0);
+// std::atomic<size_t> pds::total_cnt(0);
 Recoverable::Recoverable(GlobalTestConfig* gtc){
     // init Persistent allocator
     // TODO: put this into EpochSys.
@@ -11,16 +13,28 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
         last_epochs[i].ui = NULL_EPOCH;
     }
     pending_allocs = new padded<std::vector<pds::PBlk*>>[gtc->task_num];
-    local_descs = new padded<pds::sc_desc_t>[gtc->task_num];
+    pending_retires = new padded<std::vector<pair<pds::PBlk*,pds::PBlk*>>>[gtc->task_num];
     // init main thread
     pds::EpochSys::init_thread(0);
     // init epoch system
-    _esys = new pds::EpochSys(gtc);
+    if(gtc->checkEnv("Liveness")){
+        string env_liveness = gtc->getEnv("Liveness");
+        if(env_liveness == "Nonblocking"){
+            _esys = new pds::nbEpochSys(gtc);
+        } else if (env_liveness == "Blocking"){
+            _esys = new pds::EpochSys(gtc);
+        } else {
+            errexit("unrecognized 'Liveness' environment");
+        }
+    } else {
+        gtc->setEnv("Liveness", "Blocking");
+        _esys = new pds::EpochSys(gtc);
+    }
 }
 Recoverable::~Recoverable(){
     delete _esys;
-    delete local_descs;
     delete pending_allocs;
+    delete pending_retires;
     delete epochs;
     delete last_epochs;
     Persistent::finalize();
@@ -31,26 +45,4 @@ void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){
 
 void Recoverable::init_thread(int tid){
     pds::EpochSys::init_thread(tid);
-}
-
-namespace pds{
-
-    void sc_desc_t::try_complete(Recoverable* ds, uint64_t addr){
-        lin_var _d = var.load();
-        // int ret = 0;
-        if(_d.val!=addr) return;
-        if(in_progress(_d)){
-            if(ds->check_epoch(cas_epoch)){
-                // ret = 2;
-                // ret |= commit(_d);
-                commit(_d);
-            } else {
-                // ret = 4;
-                // ret |= abort(_d);
-                abort(_d);
-            }
-        }
-        cleanup(_d);
-    }
-
 }
