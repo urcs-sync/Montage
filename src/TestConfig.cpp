@@ -486,12 +486,20 @@ GlobalTestConfig::~GlobalTestConfig(){
 void GlobalTestConfig::addRideableOption(RideableFactory* h, const char name[]){
 	rideableFactories.push_back(h);
 	string s = string(name);
+	auto found = std::find(rideableNames.begin(), rideableNames.end(), s);
+	if (found != rideableNames.end()){
+		errexit(("rideable name \"" + s + "\" duplicated.").c_str());
+	}
 	rideableNames.push_back(s);
 }
 
 void GlobalTestConfig::addTestOption(Test* t, const char name[]){
 	tests.push_back(t);
 	string s = string(name);
+	auto found = std::find(testNames.begin(), testNames.end(), s);
+	if (found != testNames.end()){
+		errexit(("test name \"" + s + "\" duplicated.").c_str());
+	}
 	testNames.push_back(s);
 }
 
