@@ -251,14 +251,15 @@ bool MontageNatarajanTree<K,V>::cleanup(K key, int tid){
 
     while(true){
         Node* untagged=siblingAddr->load(this);
-        Node* untagged_ptr = untagged;
-        Node* tagged = mixPtrFlgTg(getPtr(untagged_ptr),getFlg(untagged_ptr),true);
+        if(getTg(untagged)) break;
+        Node* tagged = mixPtrFlgTg(getPtr(untagged),getFlg(untagged),true);
         if(siblingAddr->CAS(this,untagged,tagged)){
             break;
         }
     }
     Node* tmpSibling=siblingAddr->load(this);
-    res=successorAddr->CAS(this,successor,
+    getPtr(tmpChild)->retire_payload();
+    res=successorAddr->CAS_verify(this,successor,
         mixPtrFlgTg(getPtr(tmpSibling),getFlg(tmpSibling),false));
 
     if(res==true){
@@ -380,6 +381,7 @@ optional<V> MontageNatarajanTree<K,V>::put(K key, V val, int tid){
             else
                 childAddr=&(parent->right);
             res=leaf->get_unsafe_val();
+            // WARNING: this is perhaps non-linearizable!
             leaf->retire_payload();
             if(childAddr->CAS_verify(this,leaf,newLeaf)){
                 delete(newInternal);// this is always local so no need to use tracker
@@ -488,8 +490,7 @@ optional<V> MontageNatarajanTree<K,V>::remove(K key, int tid){
 
             Node* tmpExpected=leaf;
             res=leaf->get_unsafe_val();
-            leaf->retire_payload();
-            if(childAddr->CAS_verify(this,tmpExpected,
+            if(childAddr->CAS(this,tmpExpected,
                 mixPtrFlgTg(tmpExpected,true,false))){
                 /* 
                  * there won't be old_see_new because insert must happen 
