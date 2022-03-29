@@ -193,6 +193,7 @@ namespace pds{
     }
 
     void EpochSys::end_transaction(uint64_t c){
+        last_epochs[tid].ui = c;
         trans_tracker->unregister_active(c);
         epoch_advancer->on_end_transaction(this, c);
     }
@@ -207,6 +208,7 @@ namespace pds{
     }
 
     void EpochSys::end_reclaim_transaction(uint64_t c){
+        last_epochs[tid].ui = c;
         trans_tracker->unregister_active(c);
         epoch_advancer->on_end_transaction(this, c);
     }
@@ -935,7 +937,7 @@ namespace pds{
     }
 
     void nbEpochSys::end_transaction(uint64_t c){
-        last_epochs[tid] = c;
+        last_epochs[tid].ui = c;
         epoch_advancer->on_end_transaction(this, c);
     }
 
@@ -948,7 +950,7 @@ namespace pds{
     }
 
     void nbEpochSys::end_reclaim_transaction(uint64_t c){
-        last_epochs[tid] = c;
+        last_epochs[tid].ui = c;
         epoch_advancer->on_end_transaction(this, c);
     }
     void nbEpochSys::on_epoch_begin(uint64_t c){
