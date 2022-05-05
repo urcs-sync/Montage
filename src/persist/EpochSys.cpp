@@ -81,7 +81,7 @@ namespace pds{
                 errexit("unrecognized 'persist' environment");
             }
         } else {
-            gtc->setEnv("PersistSTrat", "BufferedWB");
+            gtc->setEnv("PersistStrat", "BufferedWB");
             to_be_persisted = new BufferedWB(gtc, _ral);
         }
 
