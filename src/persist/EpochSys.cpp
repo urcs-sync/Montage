@@ -189,6 +189,13 @@ namespace pds{
         
         to_be_freed->free_on_new_epoch(ret);
         local_descs[tid]->set_up_epoch(ret);
+        // Wentao: in blocking EpochSys, there's no need to register
+        // desc in TBP or persist it at all, because unlike
+        // nonblocking version, transient desc is enough here and we
+        // don't need to rely on persistent OPID to determine whether
+        // a payload corresponds to a committed or aborted op. During
+        // recovery, just throwing away everything from the last
+        // epochs works.
         return ret;
     }
 
