@@ -135,17 +135,13 @@ optional<std::string> NVTHashTable::put(std::string key, std::string val, int ti
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
             res=curr->val;
-            tmpNode->next.ptr.store(curr);
+            tmpNode->next.ptr.store(next);
             clwb_obj_fence(tmpNode); // flush after write, fence before CAS.
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                clwb_fence(&prev->ptr); // flush after CAS, fence before CAS.
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
-                    clwb_fence(&curr->next); // flush after CAS, fence before CAS.
-                }
-                clwb_fence(&prev->ptr); // flush after CAS, fence before CAS.
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    clwb_obj_nofence(tmpNode);
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
+                clwb_fence(&curr->next); // flush after CAS, fence before CAS.
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+                    clwb_obj_nofence(&prev->ptr); // flush after CAS
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -244,14 +240,13 @@ optional<std::string> NVTHashTable::replace(std::string key, std::string val, in
     while(true){
         if(findNode(prev,curr,next,key,tid)){
             res=curr->val;
-            tmpNode->next.ptr.store(curr);
-            clwb_obj_fence(&tmpNode->next); // flush after write, fence before CAS
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)){
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                clwb_obj_fence(&prev->ptr); // flush after CAS, fence before CAS.
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next)));
-                clwb_obj_fence(&curr->next); // flush after CAS, fence before CAS.
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
+            tmpNode->next.ptr.store(next);
+            clwb_obj_fence(tmpNode); // flush after write, fence before CAS.
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
+                clwb_fence(&curr->next); // flush after CAS, fence before CAS.
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+                    clwb_obj_nofence(&prev->ptr); // flush after CAS
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);

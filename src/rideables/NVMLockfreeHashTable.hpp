@@ -146,12 +146,10 @@ optional<V> NVMLockfreeHashTable<K,V>::put(K key, V val, int tid) {
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
             res=curr->val;
-            tmpNode->next.ptr.store(curr);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
-                }
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
+            tmpNode->next.ptr.store(next);
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -245,12 +243,10 @@ optional<V> NVMLockfreeHashTable<K,V>::replace(K key, V val, int tid) {
     while(true){
         if(findNode(prev,curr,next,key,tid)){
             res=curr->val;
-            tmpNode->next.ptr.store(curr);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)){
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
-                }
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
+            tmpNode->next.ptr.store(next);
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);

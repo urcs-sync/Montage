@@ -137,17 +137,13 @@ optional<std::string> PLockfreeHashTable::put(std::string key, std::string val, 
             // exists; replace
             res=curr->val;
             clwb_obj_fence(&curr->val);
-            tmpNode->next.ptr.store(curr);
-            clwb_obj_fence(tmpNode);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
-                clwb_obj_fence(prev);
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
-                    clwb_obj_fence(curr);
-                }
+            tmpNode->next.ptr.store(next);
+            clwb_obj_fence(tmpNode); // flush after write, fence before CAS.
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
                 clwb_obj_fence(curr);
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    clwb_obj_fence(tmpNode);
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+                    clwb_obj_fence(prev);
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -246,17 +242,13 @@ optional<std::string> PLockfreeHashTable::replace(std::string key, std::string v
         if(findNode(prev,curr,next,key,tid)){
             res=curr->val;
             clwb_obj_fence(&curr->val);
-            tmpNode->next.ptr.store(curr);
-            clwb_obj_fence(&tmpNode->next);
-            if(prev->ptr.compare_exchange_strong(curr,tmpNode)){
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                clwb_obj_fence(&prev->ptr);
-                while(!curr->next.ptr.compare_exchange_strong(next,setMark(next))){
-                    clwb_obj_fence(&curr->next);
-                }
-                clwb_obj_fence(prev);
-                if(tmpNode->next.ptr.compare_exchange_strong(curr,next)) {
-                    clwb_obj_fence(&tmpNode->next);
+            tmpNode->next.ptr.store(next);
+            clwb_obj_fence(tmpNode); // flush after write, fence before CAS.
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.compare_exchange_strong(next,setMark(tmpNode))){
+                clwb_obj_fence(curr);
+                if(prev->ptr.compare_exchange_strong(curr,tmpNode)) {
+                    clwb_obj_fence(prev);
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
