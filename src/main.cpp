@@ -173,7 +173,6 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new QueueChurnTest(50,50,2000), "QueueChurn:eq50dq50:prefill=2000");
 	gtc.addTestOption(new QueueTest(5000000,50), "Queue:5m");
 	gtc.addTestOption(new MapChurnTest<string,string>(0, 0, 50, 50, 1000000, 500000), "MapChurnTest<string>:g0p0i50rm50:range=1000000:prefill=500000");
-	gtc.addTestOption(new MapChurnTest<string,string>(0, 50, 0, 50, 1000000, 500000), "MapChurnTest<string>:g0p50i0rm50:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapChurnTest<string,string>(50, 0, 25, 25, 1000000, 500000), "MapChurnTest<string>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapChurnTest<string,string>(90, 0, 5, 5, 1000000, 500000), "MapChurnTest<string>:g90p0i5rm5:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapTest<string,string>(0, 0, 50, 50, 1000000, 500000, 10000000), "MapTest<string>:g0p0i50rm50:range=1000000:prefill=500000:op=10000000");
