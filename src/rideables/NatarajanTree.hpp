@@ -191,6 +191,7 @@ bool NatarajanTree<K,V>::cleanup(K key, int tid){
 
 	while(true){
 		Node* untagged=siblingAddr->load();
+        if(getTg(untagged)) break;
 		Node* tagged=mixPtrFlgTg(getPtr(untagged),getFlg(untagged),true);
 		if(siblingAddr->compare_exchange_weak(untagged,tagged)){
 			break;
@@ -319,6 +320,7 @@ optional<V> NatarajanTree<K,V>::put(K key, V val, int tid){
 				childAddr=&(parent->left);
 			else
 				childAddr=&(parent->right);
+			// WARNING: this is perhaps non-linearizable!
 			if(childAddr->compare_exchange_strong(leaf,newLeaf)){
 				tracker.retire(leaf,tid);
 				break;

@@ -81,7 +81,7 @@ namespace pds{
                 errexit("unrecognized 'persist' environment");
             }
         } else {
-            gtc->setEnv("PersistSTrat", "BufferedWB");
+            gtc->setEnv("PersistStrat", "BufferedWB");
             to_be_persisted = new BufferedWB(gtc, _ral);
         }
 
@@ -189,10 +189,18 @@ namespace pds{
         
         to_be_freed->free_on_new_epoch(ret);
         local_descs[tid]->set_up_epoch(ret);
+        // Wentao: in blocking EpochSys, there's no need to register
+        // desc in TBP or persist it at all, because unlike
+        // nonblocking version, transient desc is enough here and we
+        // don't need to rely on persistent OPID to determine whether
+        // a payload corresponds to a committed or aborted op. During
+        // recovery, just throwing away everything from the last
+        // epochs works.
         return ret;
     }
 
     void EpochSys::end_transaction(uint64_t c){
+        last_epochs[tid].ui = c;
         trans_tracker->unregister_active(c);
         epoch_advancer->on_end_transaction(this, c);
     }
@@ -207,6 +215,7 @@ namespace pds{
     }
 
     void EpochSys::end_reclaim_transaction(uint64_t c){
+        last_epochs[tid].ui = c;
         trans_tracker->unregister_active(c);
         epoch_advancer->on_end_transaction(this, c);
     }
@@ -935,7 +944,7 @@ namespace pds{
     }
 
     void nbEpochSys::end_transaction(uint64_t c){
-        last_epochs[tid] = c;
+        last_epochs[tid].ui = c;
         epoch_advancer->on_end_transaction(this, c);
     }
 
@@ -948,7 +957,7 @@ namespace pds{
     }
 
     void nbEpochSys::end_reclaim_transaction(uint64_t c){
-        last_epochs[tid] = c;
+        last_epochs[tid].ui = c;
         epoch_advancer->on_end_transaction(this, c);
     }
     void nbEpochSys::on_epoch_begin(uint64_t c){

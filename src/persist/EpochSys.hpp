@@ -391,6 +391,7 @@ public:
         // existing descs
         for(int i=0;i<gtc->task_num;i++){
             local_descs[i] = new_pblk<sc_desc_t>(i);
+            last_epochs[i].ui = NULL_EPOCH;
             assert(local_descs[i]!=nullptr);
             persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
         }
@@ -423,6 +424,7 @@ public:
         delete to_be_persisted;
         delete to_be_freed;
         delete _ral;
+        delete last_epochs;
         // std::cout<<"Aborted:Total = "<<abort_cnt.load()<<":"<<total_cnt.load()<<std::endl;
     }
 
@@ -585,8 +587,8 @@ public:
     T* openwrite_pblk(T* b, uint64_t c);
 
     // block, call for persistence of epoch c, and wait until finish.
-    void sync(uint64_t c){
-        epoch_advancer->sync(c);
+    void sync(){
+        epoch_advancer->sync(last_epochs[tid].ui);
     }
 
     /////////////////
