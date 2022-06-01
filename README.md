@@ -11,7 +11,7 @@ API for buildilng CAS-based nonblocking data structures and, most
 importantly, nbMontage provides _wait-free sync_. The paper of
 nbMontage, _Fast Nonblocking Persistence for Concurrent Data Structures_ 
 by W. Cai, H. Wen, V. Maksimovski, M. Du, R. Sanna, S. Abdallah, and
-M. L. Scott, appears in DISC' 21. 
+M. L. Scott, appears in DISC' 21 ([link](https://www.cs.rochester.edu/u/scott/papers/2021_Cai_DISC_nbMontage.pdf)). 
 
 The testing harness is based on J. Izraelevitz's
 [parHarness](https://github.com/izrajoe/parHarness).

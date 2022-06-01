@@ -21,8 +21,8 @@ to command line.
 * `PersistTracker`: specify the data structure used to coordinate cache line writes-back among sync() participants
     * `IncreasingMindicator`: a (simplified) variant of Mindicator, with which every thread needs to check on every epoch for writes-back. Tend to be faster to access
     * `Mindicator`: original Mindicator. If a thread doesn't have anything to persist in an epoch, it will be skipped. Slower to access
-* `EpochLength`: specify epoch length.
-* `EpochLengthUnit`: specify epoch length unit: `Second` (default) `Millisecond` or `Microsecond`.
+* `EpochLength`: specify epoch length (default 50 ms).
+* `EpochLengthUnit`: specify epoch length unit: `Second`, `Millisecond` (default), or `Microsecond`.
 
 ### SyncTest:
 

@@ -62,8 +62,6 @@ class Recoverable{
     
     // current epoch of each thread.
     padded<uint64_t>* epochs = nullptr;
-    // last epoch of each thread, for sync().
-    padded<uint64_t>* last_epochs = nullptr;
     // containers for pending allocations
     padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
     // pending retires; each pair is <original payload, anti-payload>
@@ -114,7 +112,6 @@ public:
         }
         if (epochs[pds::EpochSys::tid].ui != NULL_EPOCH){
             _esys->end_transaction(epochs[pds::EpochSys::tid].ui);
-            last_epochs[pds::EpochSys::tid].ui = epochs[pds::EpochSys::tid].ui;
             epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
         }
         if(!pending_allocs[pds::EpochSys::tid].ui.empty()) 
@@ -263,7 +260,6 @@ public:
             _esys->reclaim_pblk(b, epochs[pds::EpochSys::tid].ui);
             if (not_in_operation){
                 _esys->end_reclaim_transaction(epochs[pds::EpochSys::tid].ui);
-                last_epochs[pds::EpochSys::tid].ui = epochs[pds::EpochSys::tid].ui;
                 epochs[pds::EpochSys::tid].ui = NULL_EPOCH;
             }
         }
@@ -293,7 +289,7 @@ public:
     }
     void sync(){
         assert(epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
-        _esys->sync(last_epochs[pds::EpochSys::tid].ui);
+        _esys->sync();
     }
     void recover_mode(){
         _esys->sys_mode = pds::RECOVER; // PDELETE -> nop

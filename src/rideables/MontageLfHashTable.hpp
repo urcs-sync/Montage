@@ -239,15 +239,14 @@ optional<V> MontageLfHashTable<K,V,idxSize>::put(K key, V val, int tid) {
     while(true) {
         if(findNode(prev,curr,next,key,tid)) {
             // exists; replace
-            tmpNode->next.ptr.store(this,curr);
+            tmpNode->next.ptr.store(this,next);
             // begin_op();
             res=curr->get_unsafe_val();
             curr->retire_payload();
-            if(prev->ptr.CAS_verify(this,curr,tmpNode)) {
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.CAS_verify(this,next,setMark(tmpNode))) {
                 // end_op();
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.CAS(this,next,setMark(next)));
-                if(tmpNode->next.ptr.CAS(this,curr,next)) {
+                if(prev->ptr.CAS(this,curr,tmpNode)) {
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
@@ -351,15 +350,14 @@ optional<V> MontageLfHashTable<K,V,idxSize>::replace(K key, V val, int tid) {
     tracker.start_op(tid);
     while(true){
         if(findNode(prev,curr,next,key,tid)){
-            tmpNode->next.ptr.store(this,curr);
+            tmpNode->next.ptr.store(this,next);
             // begin_op();
             res=curr->get_unsafe_val();
             curr->retire_payload();
-            if(prev->ptr.CAS_verify(this,curr,tmpNode)){
+            // insert tmpNode after cur and mark cur
+            if(curr->next.ptr.CAS_verify(this,next,setMark(tmpNode))) {
                 // end_op();
-                // mark curr; since findNode only finds the first node >= key, it's ok to have duplicated keys temporarily
-                while(!curr->next.ptr.CAS(this,next,setMark(next)));
-                if(tmpNode->next.ptr.CAS(this,curr,next)) {
+                if(prev->ptr.CAS(this,curr,tmpNode)) {
                     tracker.retire(curr,tid);
                 } else {
                     findNode(prev,curr,next,key,tid);
