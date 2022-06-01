@@ -202,7 +202,8 @@ public:
             }
         }
         // always use thread_cnt >= 2 to make sure tree is full.
-        int thread_cnt = actual_thread_cnt == 1? 2 : actual_thread_cnt;
+        int thread_cnt = actual_thread_cnt % 2 == 1?
+            actual_thread_cnt+1 : actual_thread_cnt;
         leaves = new Node[thread_cnt];
         for (int i = 0; i < thread_cnt; i++){
             leaves[i].leaf_idx = i;
@@ -239,8 +240,8 @@ public:
             *buffer.front() = &leaves[i];
             buffer.pop_front();
         }
-        if (actual_thread_cnt == 1){
-            root->children[1]->marked_val = {UINT64_MAX, 0};
+        if (actual_thread_cnt % 2 == 1){
+            leaves[thread_cnt-1].marked_val = {UINT64_MAX, 0};
         }
         // traverse the tree and init the tree.
         std::vector<Node*> path;
@@ -405,7 +406,8 @@ class IncreasingMindicator : public PersistTracker{
 public:
     IncreasingMindicator(int actual_thread_cnt){
         assert(actual_thread_cnt > 0);
-        int thread_cnt = actual_thread_cnt == 1? 2 : actual_thread_cnt;
+        int thread_cnt = actual_thread_cnt % 2 == 1?
+            actual_thread_cnt+1 : actual_thread_cnt;
         leaves = new Node[thread_cnt];
         for (int i = 0; i < thread_cnt; i++){
             leaves[i].leaf_idx = i;
@@ -442,8 +444,8 @@ public:
             *buffer.front() = &leaves[i];
             buffer.pop_front();
         }
-        if (actual_thread_cnt == 1){
-            root->children[1]->val = UINT64_MAX;
+        if (actual_thread_cnt % 2 == 1){
+            leaves[thread_cnt-1].val = UINT64_MAX;
         }
         // traverse the tree and init the tree.
         std::vector<Node*> path;
