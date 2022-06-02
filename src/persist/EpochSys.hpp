@@ -440,6 +440,13 @@ public:
         delete persisted_epochs;
         delete to_be_persisted;
         delete to_be_freed;
+        // Wentao: Due to the lack of snapshotting on transient
+        // indexing, we are unable to do fast recovery from clean
+        // exit for now. 
+        // Remove the following `set_fake_dirty()` routine if we
+        // eventually support snapshot and fast recovery from clean
+        // exit. 
+        _ral->set_fake_dirty();
         delete _ral;
         delete last_epochs;
         // std::cout<<"Aborted:Total = "<<abort_cnt.load()<<":"<<total_cnt.load()<<std::endl;
