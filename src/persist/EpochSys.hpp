@@ -390,14 +390,8 @@ public:
         last_epochs = new padded<uint64_t>[_gtc->task_num];
         // [wentao] FIXME: this may need to change if recovery reuses
         // existing descs
-        for(int i=0;i<gtc->task_num;i++){
-            local_descs[i] = new_pblk<sc_desc_t>(i);
-            last_epochs[i].ui = NULL_EPOCH;
-            assert(local_descs[i]!=nullptr);
-            persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
-        }
-        persist_func::sfence();
-        if (_ral->is_restart()) {
+        bool restart=_ral->is_restart();
+        if (restart) {
             int rec_thd = _gtc->task_num;
             if (_gtc->checkEnv("RecoverThread")){
                 rec_thd = stoi(_gtc->getEnv("RecoverThread"));
@@ -408,7 +402,15 @@ public:
             auto dur = end - begin;
             auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
             std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
-        } else {
+        }
+        for(int i=0;i<gtc->task_num;i++){
+            local_descs[i] = new_pblk<sc_desc_t>(i);
+            last_epochs[i].ui = NULL_EPOCH;
+            assert(local_descs[i]!=nullptr);
+            persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
+        }
+        persist_func::sfence();
+        if (!restart) {
             reset();
         }
         
