@@ -570,7 +570,9 @@ namespace pds{
                             } break;
                             case DELETE:
                             case EPOCH:
-                            case DESC: // TODO: allocate DESC in DRAM instead of NVM
+                                break;
+                            case DESC:
+                                not_in_use_local.push_back(curr_blk);
                                 break;
                             default:
                                 errexit("wrong type of pblk discovered");
@@ -1173,7 +1175,9 @@ namespace pds{
                             } break;
                             case DELETE:
                             case EPOCH:
+                                break;
                             case DESC:
+                                not_in_use_local.push_back(curr_blk);
                                 break;
                             default:
                                 errexit("wrong type of pblk discovered");
