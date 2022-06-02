@@ -149,8 +149,15 @@ public:
         int bg_tid = gtc->task_num;
         bg_state.store(background_state::RUNNING);
         background_thread = std::move(std::thread(&MontageLfSkipList::bg_loop, this, bg_tid));
+        if (get_recovered_pblks()) {
+            recover();
+        }
     };
     ~MontageLfSkipList(){
+        recover_mode(); // PDELETE --> noop
+        // clear transient structures.
+        clear();
+        online_mode(); // re-enable PDELETE.
         bg_state.store(background_state::FINISHED);
         background_thread.join();
     };
@@ -180,14 +187,7 @@ public:
         head.ptr.store(initialHeadNode);
     }
 
-    int recover(bool simulated){
-        if (simulated){
-            recover_mode(); // PDELETE --> noop
-            // clear transient structures.
-            clear();
-            online_mode(); // re-enable PDELETE.
-        }
-
+    int recover(){
         should_cas_verify.store(false);
 
         int rec_cnt = 0;
@@ -195,23 +195,18 @@ public:
         if (gtc->checkEnv("RecoverThread")){
             rec_thd_count = stoi(gtc->getEnv("RecoverThread"));
         }
-        auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd_count);
-        auto end = chrono::high_resolution_clock::now();
-        auto dur = end - begin;
-        auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-        std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = get_recovered_pblks();
 
         std::vector<Payload*> payloadVector;
         payloadVector.reserve(recovered->size());
-        begin = chrono::high_resolution_clock::now();
+        auto begin = chrono::high_resolution_clock::now();
         for (auto itr = recovered->begin(); itr != recovered->end(); itr++){
             rec_cnt++;
             Payload* payload = reinterpret_cast<Payload*>(itr->second);
             payloadVector.push_back(payload);
         }
-        end = chrono::high_resolution_clock::now();
-        dur = end - begin;
+        auto end = chrono::high_resolution_clock::now();
+        auto dur = end - begin;
         auto dur_ms_vec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_vec << "ms building vector" << std::endl;
 
@@ -253,7 +248,6 @@ public:
         dur = end - begin;
         auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
-        std::cout << "Total time to recover: " << dur_ms+dur_ms_vec+dur_ms_ins << "ms" << std::endl;
 
         should_cas_verify.store(true);
         delete recovered;

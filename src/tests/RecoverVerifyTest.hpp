@@ -126,7 +126,7 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
             prepareRideable();
             std::cout<<"recover returned."<<std::endl;
             auto rec_cnt = rec->get_last_recovered_cnt();
-            if (rec_cnt == (int)reference.size()){
+            if (rec_cnt == reference.size()){
                 std::cout<<"rec_cnt currect."<<std::endl;
             } else {
                 std::cout<<"recovered:"<<rec_cnt<<" expecting:"<<reference.size()<<std::endl;

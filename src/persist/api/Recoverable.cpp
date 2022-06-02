@@ -28,10 +28,9 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
         gtc->setEnv("Liveness", "Blocking");
         _esys = new pds::EpochSys(gtc);
     }
-    auto recovered = _esys->get_recovered();
-    if (recovered) {
-        last_recovered = recovered->size();
-        recover(recovered, false);
+    auto recovered_pblks = _esys->get_recovered();
+    if (recovered_pblks) {
+        last_recovered_cnt = recovered_pblks->size();
     }
 }
 Recoverable::~Recoverable(){
@@ -39,6 +38,9 @@ Recoverable::~Recoverable(){
     delete pending_allocs;
     delete pending_retires;
     delete epochs;
+    if (recovered_pblks) {
+        delete recovered_pblks;
+    }
     Persistent::finalize();
 }
 void Recoverable::init_thread(GlobalTestConfig*, LocalTestConfig* ltc){

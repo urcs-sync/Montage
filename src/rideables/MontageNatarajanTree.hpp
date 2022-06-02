@@ -163,7 +163,7 @@ public:
         Recoverable::init_thread(gtc, ltc);
     }
 
-    int recover(bool simulated){
+    int recover(){
         errexit("recover of MontageNatarajanTree not implemented.");
         return 0;
     }

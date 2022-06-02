@@ -124,7 +124,7 @@ public:
         Recoverable::init_thread(gtc, ltc);
     }
 
-    int recover(bool simulated){
+    int recover(){
         errexit("recover of MontageSSHashTable not implemented.");
         return 0;
     }

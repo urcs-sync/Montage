@@ -66,11 +66,13 @@ class Recoverable{
     padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
     // pending retires; each pair is <original payload, anti-payload>
     padded<std::vector<pair<pds::PBlk*,pds::PBlk*>>>* pending_retires = nullptr;
+    // pointer to recovered PBlks from EpochSys
+    std::unordered_map<uint64_t, pds::PBlk *>* recovered_pblks = nullptr;
     // count of last recovered PBlks from EpochSys
-    uint64_t last_recovered = 0;
+    uint64_t last_recovered_cnt = 0;
 public:
     // return num of blocks recovered.
-    virtual int recover(std::unordered_map<uint64_t, pds::PBlk*>* recovered, bool simulated = false) {
+    virtual int recover() {
         errexit("recover() not implemented. Implement recover() or delete existing persistent heap file.");
         return 0;
     }
@@ -289,8 +291,11 @@ public:
         assert(epochs[pds::EpochSys::tid].ui != NULL_EPOCH);
         return _esys->openwrite_pblk(b, epochs[pds::EpochSys::tid].ui);
     }
-    std::unordered_map<uint64_t, pds::PBlk*>* recover_pblks(const int rec_thd=10){
-        return _esys->recover(rec_thd);
+    std::unordered_map<uint64_t, pds::PBlk*>* get_recovered_pblks(){
+        return recovered_pblks;
+    }
+    uint64_t get_last_recovered_cnt() {
+        return last_recovered_cnt;
     }
     void sync(){
         assert(epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
@@ -307,9 +312,6 @@ public:
             sync();
         }
         // _esys->flush();
-    }
-    uint64_t get_last_recovered_cnt() {
-        return last_recovered;
     }
 
     pds::sc_desc_t* get_dcss_desc(){

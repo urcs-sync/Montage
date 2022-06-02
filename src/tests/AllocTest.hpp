@@ -25,7 +25,7 @@ class DummyObject : public pds::PBlk {
 };
 
 struct MontageDummy : public Recoverable {
-    int recover(bool simulated) { return 0; }
+    int recover() { return 0; }
     MontageDummy(GlobalTestConfig *gtc) : Recoverable(gtc) {}
     ~MontageDummy() {}
 

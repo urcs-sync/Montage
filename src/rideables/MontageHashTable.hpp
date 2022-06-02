@@ -62,7 +62,11 @@ public:
     std::hash<K> hash_fn;
     Bucket buckets[idxSize];
     GlobalTestConfig* gtc;
-    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){};
+    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){
+        if (get_recovered_pblks()) {
+            recover();
+        }
+    };
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         Recoverable::init_thread(gtc, ltc);
@@ -200,14 +204,8 @@ public:
     }
 
 
-    int recover(std::unordered_map<uint64_t, pds::PBlk*>* recovered, bool simulated){
-        if (simulated){
-            recover_mode(); // PDELETE --> noop
-            // clear transient structures.
-            clear();
-            online_mode(); // re-enable PDELETE.
-        }
-
+    int recover(){
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = get_recovered_pblks();
         assert(recovered);
 
         int rec_cnt = 0;

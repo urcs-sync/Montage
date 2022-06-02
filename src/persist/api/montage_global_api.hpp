@@ -10,23 +10,9 @@
 
 namespace pds{
     class GlobalRecoverable: public Recoverable{
-        std::unordered_map<uint64_t, PBlk*>* recovered_pblks = nullptr;
     public:
         GlobalRecoverable(GlobalTestConfig* gtc): Recoverable(gtc){}
-        ~GlobalRecoverable(){
-            if (recovered_pblks){
-                delete recovered_pblks;
-            }
-        }
-        int recover(bool simulated){
-            // TODO: handle simulated situation here?
-            recovered_pblks = recover_pblks();
-            // TODO: return number of blocks here?
-            return 0;
-        }
-        std::unordered_map<uint64_t, PBlk*>* get_recovered(){
-            return recovered_pblks;
-        }
+        ~GlobalRecoverable(){}
     };
 
     extern GlobalRecoverable* global_recoverable;
@@ -117,9 +103,8 @@ namespace pds{
     //         delete(b);
     //     }})
 
-    inline std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd=10){
-        global_recoverable->recover(rec_thd);
-        return global_recoverable->get_recovered();
+    inline std::unordered_map<uint64_t, PBlk*>* get_recovered_pblks(){
+        return global_recoverable->get_recovered_pblks();
     }
 
     inline void flush(){
