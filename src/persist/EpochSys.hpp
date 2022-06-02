@@ -115,6 +115,12 @@ public:
     inline bool retired(){
         return retire != nullptr;
     }
+    inline void mark_epoch_container(){
+        id = ~0x0ULL;
+    }
+    inline enum PBlkType get_blktype() {
+        return blktype;
+    }
 };
 
 template<typename T>
@@ -477,9 +483,10 @@ public:
         if (!epoch_container){
             epoch_container = new_pblk<Epoch>();
             epoch_container->blktype = EPOCH;
+            epoch_container->mark_epoch_container();
             global_epoch = &epoch_container->global_epoch;
+            global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         }
-        global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         parse_env();
     }
 

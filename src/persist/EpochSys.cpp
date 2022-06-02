@@ -441,6 +441,7 @@ namespace pds{
                 thread_local std::unordered_set<uint64_t> deleted_ids_local;
                 // make the first whole pass thorugh all blocks, find the epoch block
                 // and help Ralloc fully recover by completing the pass.
+                uint64_t ralloc_itrs = 0;
                 for (; !itr_raw[rec_tid].is_last(); ++itr_raw[rec_tid]){
                     PBlk* curr_blk = (PBlk*) *itr_raw[rec_tid];
                     if (curr_blk->blktype == EPOCH){
@@ -457,11 +458,13 @@ namespace pds{
                         }
                     }
                     max_epoch_local = std::max(max_epoch_local, curr_blk->get_epoch());
+                    ralloc_itrs++;
                 }
                 // report after the first pass:
                 // calculate the maximum epoch number as the current epoch.
                 pthread_barrier_wait(&sync_point);
                 if (!epoch_container){
+                    cout<<"ralloc itrs:"<<ralloc_itrs<<endl;
                     errexit("epoch container not found during recovery");
                 }
                 while(curr_reporting.load() != rec_tid);
@@ -515,7 +518,9 @@ namespace pds{
                     PBlk* curr_blk = (PBlk*)*itr_raw[rec_tid];
                     // put all premature pblks and those marked by
                     // deleted_ids in not_in_use
-                    if (// leave DESC blocks untouched for now.
+                    if (// skip epoch container
+                        curr_blk->blktype != EPOCH &&
+                        // leave DESC blocks untouched for now.
                         curr_blk->blktype != DESC &&
                         // DELETE blocks are already put into anti_nodes_local.
                         curr_blk->blktype != DELETE && (
@@ -526,6 +531,7 @@ namespace pds{
                             // marked deleted by some anti-block
                             deleted_ids.find(curr_blk->get_id()) != deleted_ids.end() 
                         )) {
+                        assert(curr_blk->get_blktype() != EPOCH);
                         not_in_use_local.push_back(curr_blk);
                     } else {
                         // put all others in in_use while resolve conflict
@@ -644,7 +650,7 @@ namespace pds{
                 worker.join();
             }
         }
-
+        global_epoch->store(max_epoch);
         // set system mode back to online
         sys_mode = ONLINE;
         reset();
@@ -1117,7 +1123,9 @@ namespace pds{
                     auto curr_sn = curr_blk->get_sn();
                     // put all premature pblks and those marked by
                     // deleted_ids in not_in_use
-                    if (  // leave DESC blocks untouched for now.
+                    if ( // skip epoch container
+                        curr_blk->blktype != EPOCH &&
+                        // leave DESC blocks untouched for now.
                         curr_blk->blktype != DESC &&
                         // DELETE blocks are already put into anti_nodes_local.
                         curr_blk->blktype != DELETE && (
