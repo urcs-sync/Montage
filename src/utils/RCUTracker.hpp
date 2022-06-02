@@ -25,6 +25,7 @@ limitations under the License.
 #include <list>
 #include <vector>
 #include <atomic>
+#include <functional>
 #include "ConcurrentPrimitives.hpp"
 
 #include "BaseTracker.hpp"

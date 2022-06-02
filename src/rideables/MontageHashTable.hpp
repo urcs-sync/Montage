@@ -200,7 +200,7 @@ public:
     }
 
 
-    int recover(bool simulated){
+    int recover(std::unordered_map<uint64_t, pds::PBlk*>* recovered, bool simulated){
         if (simulated){
             recover_mode(); // PDELETE --> noop
             // clear transient structures.
@@ -208,27 +208,23 @@ public:
             online_mode(); // re-enable PDELETE.
         }
 
+        assert(recovered);
+
         int rec_cnt = 0;
         int rec_thd = gtc->task_num;
         if (gtc->checkEnv("RecoverThread")){
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
-        auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd); 
-        auto end = chrono::high_resolution_clock::now();
-        auto dur = end - begin;
-        auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-        std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
         std::vector<Payload*> payloadVector;
         payloadVector.reserve(recovered->size());
-        begin = chrono::high_resolution_clock::now();
+        auto begin = chrono::high_resolution_clock::now();
         for (auto itr = recovered->begin(); itr != recovered->end(); itr++){
             rec_cnt++;
             Payload* payload = reinterpret_cast<Payload*>(itr->second);
                         payloadVector.push_back(payload);
         }
-        end = chrono::high_resolution_clock::now();
-        dur = end - begin;
+        auto end = chrono::high_resolution_clock::now();
+        auto dur = end - begin;
         auto dur_ms_vec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_vec << "ms building vector" << std::endl;
         begin = chrono::high_resolution_clock::now();
@@ -273,11 +269,10 @@ public:
         dur = end - begin;
         auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
-        std::cout << "Total time to recover: " << dur_ms+dur_ms_vec+dur_ms_ins << "ms" << std::endl;
         delete recovered;
         return rec_cnt;
     }
-        };
+};
 
 template <class T> 
 class MontageHashTableFactory : public RideableFactory{

@@ -14,6 +14,7 @@
 template <class K, class V>
 class RecoverVerifyTest : public Test{
 public:
+    GlobalTestConfig* _gtc;
     RMap<K,V>* m;
     Recoverable* rec;
     size_t ins_cnt = 1000000;
@@ -21,13 +22,14 @@ public:
     size_t key_size = TESTS_KEY_SIZE;
     size_t val_size = TESTS_VAL_SIZE;
     pthread_barrier_t sync_point;
-    RecoverVerifyTest(){}
+    RecoverVerifyTest(GlobalTestConfig* gtc): _gtc(gtc){}
     void init(GlobalTestConfig* gtc);
     void parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc);
     int execute(GlobalTestConfig* gtc, LocalTestConfig* ltc);
     void cleanup(GlobalTestConfig* gtc);
 
     inline K fromInt(uint64_t v);
+    void prepareRideable();
 };
 
 template <class K, class V>
@@ -36,9 +38,8 @@ void RecoverVerifyTest<K,V>::parInit(GlobalTestConfig* gtc, LocalTestConfig* ltc
 }
 
 template <class K, class V>
-void RecoverVerifyTest<K,V>::init(GlobalTestConfig* gtc){
-
-    Rideable* ptr = gtc->allocRideable();
+void RecoverVerifyTest<K,V>::prepareRideable() {
+    Rideable* ptr = _gtc->allocRideable();
     m = dynamic_cast<RMap<K,V>*>(ptr);
     if (!m) {
         errexit("RecoverVerifyTest must be run on RMap<K,V> type object.");
@@ -47,6 +48,11 @@ void RecoverVerifyTest<K,V>::init(GlobalTestConfig* gtc){
     if (!rec){
         errexit("RecoverVerifyTest must be run on Recoverable type object.");
     }
+}
+
+template <class K, class V>
+void RecoverVerifyTest<K,V>::init(GlobalTestConfig* gtc){
+    prepareRideable();
     if (gtc->checkEnv("InsCnt")){
         ins_cnt = stoll(gtc->getEnv("InsCnt"));
         range = ins_cnt * 10;
@@ -71,6 +77,7 @@ inline std::string RecoverVerifyTest<std::string,std::string>::fromInt(uint64_t 
 template <class K, class V>
 int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
     std::string value_buffer; // for string kv only
+    gtc->setEnv("HeapName", "RecoveryVerifyTest");
     if (!gtc->checkEnv("NoVerify")){
         if (ltc->tid == 0){ // FIXME: workaround when we can't change the total thread count of ralloc.
             std::unordered_map<K,V> reference;
@@ -114,10 +121,11 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
             std::cout<<"insert finished. Spent "<< dur_ms << "ms" <<std::endl;
             rec->flush();
             std::cout<<"epochsys flushed."<<std::endl;
-            rec->simulate_crash();
+            delete m;
             std::cout<<"crashed."<<std::endl;
-            int rec_cnt = rec->recover(true);
+            prepareRideable();
             std::cout<<"recover returned."<<std::endl;
+            auto rec_cnt = rec->get_last_recovered_cnt();
             if (rec_cnt == (int)reference.size()){
                 std::cout<<"rec_cnt currect."<<std::endl;
             } else {
@@ -177,9 +185,9 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
         if(tid==0){
             rec->flush();
             std::cout<<"epochsys flushed."<<std::endl;
-            rec->simulate_crash();
+            delete m;
             std::cout<<"crashed."<<std::endl;
-            int rec_cnt = rec->recover(true);
+            prepareRideable();
             std::cout<<"recover returned."<<std::endl;
         }
         return ops;

@@ -28,6 +28,11 @@ Recoverable::Recoverable(GlobalTestConfig* gtc){
         gtc->setEnv("Liveness", "Blocking");
         _esys = new pds::EpochSys(gtc);
     }
+    auto recovered = _esys->get_recovered();
+    if (recovered) {
+        last_recovered = recovered->size();
+        recover(recovered, false);
+    }
 }
 Recoverable::~Recoverable(){
     delete _esys;

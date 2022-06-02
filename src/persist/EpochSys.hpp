@@ -372,6 +372,7 @@ protected:
     int task_num;
     static std::atomic<int> esys_num;
     padded<uint64_t>* last_epochs = nullptr;
+    std::unordered_map<uint64_t, PBlk*>* recovered = nullptr;
 
 public:
 
@@ -396,7 +397,21 @@ public:
             persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
         }
         persist_func::sfence();
-        reset(); // TODO: change to recover() later on.
+        if (_ral->is_restart()) {
+            int rec_thd = _gtc->task_num;
+            if (_gtc->checkEnv("RecoverThread")){
+                rec_thd = stoi(_gtc->getEnv("RecoverThread"));
+            }
+            auto begin = chrono::high_resolution_clock::now();
+            recovered = recover(rec_thd);
+            auto end = chrono::high_resolution_clock::now();
+            auto dur = end - begin;
+            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+        } else {
+            reset();
+        }
+        
     }
 
     // void flush(){
@@ -457,15 +472,6 @@ public:
         }
         global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         parse_env();
-    }
-
-    void simulate_crash(){
-        assert(tid==0 && "simulate_crash can only be called by main thread");
-        // if(tid==0){
-            delete epoch_advancer;
-            epoch_advancer = nullptr;
-        // }
-        _ral->simulate_crash();
     }
 
     ////////////////
@@ -623,6 +629,10 @@ public:
     // Recover //
     /////////////
     
+    std::unordered_map<uint64_t, PBlk*>* get_recovered() {
+        return (recovered);
+    }
+
     // recover all PBlk decendants. return an iterator.
     virtual std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd = 2);
 };

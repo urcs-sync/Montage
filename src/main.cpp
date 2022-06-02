@@ -186,12 +186,12 @@ int main(int argc, char *argv[])
 	gtc.addTestOption(new MapChurnTest<uint64_t,uint64_t>(50, 0, 25, 25, 1000000, 500000), "MapChurnTest<uint64_t>:g50p0i25rm25:range=1000000:prefill=500000");
 	gtc.addTestOption(new MapVerify<string, string>(50, 0, 25, 25, 1000000, 10000), "MapVerify");
 #ifndef MNEMOSYNE
-	gtc.addTestOption(new RecoverVerifyTest<string,string>(), "RecoverVerifyTest");
+	gtc.addTestOption(new RecoverVerifyTest<string,string>(&gtc), "RecoverVerifyTest");
 
 	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,8000), "GraphTest:80edge20vertex:degree32");
 	gtc.addTestOption(new GraphTest(numVertices, meanEdgesPerVertex,vertexLoad,9980), "GraphTest:99.8edge.2vertex:degree32");
 	// gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, true), "GraphRecoveryTest:Orkut:verify");
-    gtc.addTestOption(new GraphRecoveryTest("graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
+    gtc.addTestOption(new GraphRecoveryTest(&gtc, "graph_data/", "orkut-edge-list_", 28610, 5, false), "GraphRecoveryTest:Orkut:noverify");
     gtc.addTestOption(new TGraphConstructionTest("graph_data/", "orkut-edge-list_", 28610, 5), "TGraphConstructionTest:Orkut");
 #endif /* !MNEMOSYNE */
 	gtc.addTestOption(new AllocTest(1024 * 1024, DO_JEMALLOC_ALLOC), "AllocTest-JEMalloc");

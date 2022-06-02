@@ -66,9 +66,14 @@ class Recoverable{
     padded<std::vector<pds::PBlk*>>* pending_allocs = nullptr;
     // pending retires; each pair is <original payload, anti-payload>
     padded<std::vector<pair<pds::PBlk*,pds::PBlk*>>>* pending_retires = nullptr;
+    // count of last recovered PBlks from EpochSys
+    uint64_t last_recovered = 0;
 public:
     // return num of blocks recovered.
-    virtual int recover(bool simulated = false) = 0;
+    virtual int recover(std::unordered_map<uint64_t, pds::PBlk*>* recovered, bool simulated = false) {
+        errexit("recover() not implemented. Implement recover() or delete existing persistent heap file.");
+        return 0;
+    }
     Recoverable(GlobalTestConfig* gtc);
     virtual ~Recoverable();
 
@@ -303,8 +308,8 @@ public:
         }
         // _esys->flush();
     }
-    void simulate_crash(){
-        _esys->simulate_crash();
+    uint64_t get_last_recovered_cnt() {
+        return last_recovered;
     }
 
     pds::sc_desc_t* get_dcss_desc(){
