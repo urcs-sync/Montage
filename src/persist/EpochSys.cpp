@@ -653,141 +653,12 @@ namespace pds{
         global_epoch->store(max_epoch);
         // set system mode back to online
         sys_mode = ONLINE;
-        reset();
+
+        // we postpone reset until init()
 
         std::cout<<"returning from EpochSys Recovery."<<std::endl;
 #endif /* !MNEMOSYNE */
         return in_use;
-    }
-
-    void nbEpochSys::reset(){
-        EpochSys::reset();
-        // TODO: only nbEpochSys needs persistent descs. consider move all
-        // inits into nbEpochSys.
-        for (int i = 0; i < gtc->task_num; i++) {
-            to_be_persisted->init_desc_local(local_descs[i], i);
-        }
-    }
-
-    void nbEpochSys::parse_env(){
-        if (epoch_advancer){
-            delete epoch_advancer;
-        }
-        if (trans_tracker){
-            delete trans_tracker;
-        }
-        if (to_be_persisted) {
-            delete to_be_persisted;
-        }
-        if (to_be_freed) {
-            delete to_be_freed;
-        }
-
-        if (!gtc->checkEnv("EpochLengthUnit")){
-            gtc->setEnv("EpochLengthUnit", "Millisecond");
-        }
-
-        if (!gtc->checkEnv("EpochLength")){
-            gtc->setEnv("EpochLength", "50");
-        }
-
-        if (!gtc->checkEnv("BufferSize")){
-            gtc->setEnv("BufferSize", "64");
-        }
-
-        if (gtc->checkEnv("PersistStrat")){
-            if (gtc->getEnv("PersistStrat") == "No"){
-                to_be_persisted = new NoToBePersistContainer();
-                to_be_freed = new NoToBeFreedContainer(this);
-                epoch_advancer = new NoEpochAdvancer();
-                trans_tracker = new NoTransactionTracker(this->global_epoch);
-                persisted_epochs = new IncreasingMindicator(task_num);
-                return;
-            }
-        }
-
-        if (gtc->checkEnv("PersistStrat")){
-            string env_persist = gtc->getEnv("PersistStrat");
-            if (env_persist == "DirWB"){
-                to_be_persisted = new DirWB(_ral, gtc->task_num);
-            } else if (env_persist == "PerEpoch"){
-                errexit("nbEpochSys isn't compatible with PerEpoch!");
-            } else if (env_persist == "BufferedWB"){
-                to_be_persisted = new BufferedWB(gtc, _ral);
-            } else {
-                errexit("unrecognized 'persist' environment");
-            }
-        } else {
-            gtc->setEnv("PersistStrat", "BufferedWB");
-            to_be_persisted = new BufferedWB(gtc, _ral);
-        }
-
-        if (gtc->checkEnv("Free")){
-            string env_free = gtc->getEnv("Free");
-            if (env_free == "PerEpoch"){
-                to_be_freed = new PerEpochFreedContainer(this, gtc);
-            } else if (env_free == "No"){
-                to_be_freed = new NoToBeFreedContainer(this);
-            } else {
-                errexit("unrecognized 'free' environment");
-            }
-        } else {
-            to_be_freed = new PerEpochFreedContainer(this, gtc);
-        }
-
-        if (gtc->checkEnv("TransTracker")){
-            string env_transcounter = gtc->getEnv("TransTracker");
-            if (env_transcounter == "AtomicCounter"){
-                trans_tracker = new AtomicTransactionTracker(this->global_epoch);
-            } else if (env_transcounter == "ActiveThread"){
-                trans_tracker = new FenceBeginTransactionTracker(this->global_epoch, task_num);
-            } else if (env_transcounter == "CurrEpoch"){
-                trans_tracker = new PerEpochTransactionTracker(this->global_epoch, task_num);
-            } else {
-                errexit("unrecognized 'transaction counter' environment");
-            }
-        } else {
-            trans_tracker = new PerEpochTransactionTracker(this->global_epoch, task_num);
-        }
-
-        if (gtc->checkEnv("PersistTracker")){
-            string env_persisttracker = gtc->getEnv("PersistTracker");
-            if (env_persisttracker == "IncreasingMindicator"){
-                persisted_epochs = new IncreasingMindicator(task_num);
-            } else if (env_persisttracker == "Mindicator"){
-                persisted_epochs = new Mindicator(task_num);
-            } else {
-                errexit("unrecognized 'persist tracker' environment");
-            }
-        } else {
-            persisted_epochs = new IncreasingMindicator(task_num);
-        }
-
-        epoch_advancer = new DedicatedEpochAdvancerNbSync(gtc, this);
-
-        // if (gtc->checkEnv("EpochAdvance")){
-        //     string env_epochadvance = gtc->getEnv("EpochAdvance");
-        //     if (env_epochadvance == "Global"){
-        //         epoch_advancer = new GlobalCounterEpochAdvancer();
-        //     } else if (env_epochadvance == "SingleThread"){
-        //         epoch_advancer = new SingleThreadEpochAdvancer(gtc);
-        //     } else if (env_epochadvance == "Dedicated"){
-        //         epoch_advancer = new DedicatedEpochAdvancer(gtc, this);
-        //     } else {
-        //         errexit("unrecognized 'epoch advance' argument");
-        //     }
-        // } else {
-        //     gtc->setEnv("EpochAdvance", "Dedicated");
-        //     epoch_advancer = new DedicatedEpochAdvancer(gtc, this);
-        // }
-
-        // if (gtc->checkEnv("EpochFreq")){
-        //     int env_epoch_advance = stoi(gtc->getEnv("EpochFreq"));
-        //     if (gtc->getEnv("EpochAdvance") != "Dedicated" && env_epoch_advance > 63){
-        //         errexit("invalid EpochFreq power");
-        //     }
-        //     epoch_advancer->set_epoch_freq(env_epoch_advance);
-        // }
     }
 
     void nbEpochSys::register_alloc_pblk(PBlk* b, uint64_t c){
@@ -1054,6 +925,10 @@ namespace pds{
                         uint64_t curr_tid = tmp->get_tid();
                         max_tid_local = std::max(max_tid_local, curr_tid);
                         descs_local[curr_tid] = tmp;
+                        if(curr_tid<(uint64_t)task_num) {
+                            assert(local_descs[curr_tid]==nullptr);
+                            local_descs[curr_tid] = tmp;
+                        }
                     } else if (curr_blk->blktype == DELETE) {
                         anti_nodes_local.push_back(curr_blk);
                         if (curr_blk->get_epoch() != NULL_EPOCH){
@@ -1183,9 +1058,7 @@ namespace pds{
                             } break;
                             case DELETE:
                             case EPOCH:
-                                break;
                             case DESC:
-                                not_in_use_local.push_back(curr_blk);
                                 break;
                             default:
                                 errexit("wrong type of pblk discovered");
@@ -1229,7 +1102,8 @@ namespace pds{
 
         // set system mode back to online
         sys_mode = ONLINE;
-        reset();
+
+        // we postpone reset until init()
 
         std::cout << "returning from EpochSys Recovery." << std::endl;
 #endif /* !MNEMOSYNE */
