@@ -33,7 +33,7 @@ public:
         ListNode(MontageHashTable* ds_, K key, V val): ds(ds_){
             payload = ds->pnew<Payload>(key, val);
         }
-        ListNode(Payload* _payload) : payload(_payload) {} // for recovery
+        ListNode(MontageHashTable* ds_, Payload* _payload) : ds(ds_), payload(_payload) {} // for recovery
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
@@ -235,7 +235,7 @@ public:
                                   HWLOC_CPUBIND_THREAD);
                 for (size_t i = rec_tid; i < payloadVector.size(); i += rec_thd){
                     //re-insert payload.
-                    ListNode* new_node = new ListNode(payloadVector[i]);
+                    ListNode* new_node = new ListNode(this, payloadVector[i]);
                     K key = new_node->get_key();
                     size_t idx = hash_fn(key) % idxSize;
                     std::lock_guard<std::mutex> lk(buckets[idx].lock);
@@ -267,7 +267,6 @@ public:
         dur = end - begin;
         auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
-        delete recovered;
         return rec_cnt;
     }
 };

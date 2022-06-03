@@ -77,7 +77,6 @@ inline std::string RecoverVerifyTest<std::string,std::string>::fromInt(uint64_t 
 template <class K, class V>
 int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc){
     std::string value_buffer; // for string kv only
-    gtc->setEnv("HeapName", "RecoveryVerifyTest");
     if (!gtc->checkEnv("NoVerify")){
         if (ltc->tid == 0){ // FIXME: workaround when we can't change the total thread count of ralloc.
             std::unordered_map<K,V> reference;
@@ -130,6 +129,7 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
                 std::cout<<"rec_cnt currect."<<std::endl;
             } else {
                 std::cout<<"recovered:"<<rec_cnt<<" expecting:"<<reference.size()<<std::endl;
+                std::cout<<"Test FAILED!"<<std::endl;
                 exit(1);
             }
             
@@ -140,6 +140,7 @@ int RecoverVerifyTest<K,V>::execute(GlobalTestConfig* gtc, LocalTestConfig* ltc)
                 }
             }
             std::cout<<"all records recovered."<<std::endl;
+            std::cout<<"Test PASSED!"<<std::endl;
             return ops;
         } else {
             return 0;

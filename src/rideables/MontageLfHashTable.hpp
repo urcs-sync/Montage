@@ -50,7 +50,7 @@ private:
             payload = ds->pnew<Payload>(k,v);
             // assert(ds->epochs[pds::EpochSys::tid].ui == NULL_EPOCH);
             };
-        Node(Payload* _payload) : payload(_payload),key(_payload->get_unsafe_key(ds)) {} // for recovery
+        Node(MontageLfHashTable* ds_, Payload* _payload) : ds(ds_), payload(_payload),key(_payload->get_unsafe_key(ds)) {} // for recovery
         K get_key(){
             return key;
         }
@@ -153,7 +153,7 @@ public:
                                   HWLOC_CPUBIND_THREAD);
                 for (size_t i = rec_tid; i < payloadVector.size(); i += rec_thd) {
                     // re-insert payload.
-                    Node* tmpNode = new Node(payloadVector[i]);
+                    Node* tmpNode = new Node(this, payloadVector[i]);
                     K key = tmpNode->get_key();
                     size_t idx = hash_fn(key) % idxSize;
                     MarkPtr* prev = nullptr;
@@ -185,7 +185,6 @@ public:
         dur = end - begin;
         auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
-        delete recovered;
         return rec_cnt;
     }
 
