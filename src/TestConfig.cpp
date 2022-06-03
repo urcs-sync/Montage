@@ -418,7 +418,7 @@ void GlobalTestConfig::buildAffinity(std::vector<hwloc_obj_t>& aff){
 		buildDefaultAffinity(aff);
 	}
 	// extendAffinity() shoud be called to cover oversubscription.
-	assert(aff.size() >= task_num);
+	assert(aff.size() >= (uint64_t)task_num);
 }
 
 
