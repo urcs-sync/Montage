@@ -18,6 +18,7 @@
 #include "../rideables/DLGraph.hpp"
 
 class GraphRecoveryTest : public Test {
+    GlobalTestConfig* _gtc = nullptr;
 public:
     RGraph *g;
     uint64_t total_ops;
@@ -31,7 +32,20 @@ public:
     Recoverable* rec;
     pthread_barrier_t pthread_barrier;
 
-    GraphRecoveryTest(string graphDir, string base_fname, int num_files, int width, bool verify) : graphDir(graphDir), base_fname(base_fname), num_files(num_files), file_id_width(width), verify(verify) {};
+    GraphRecoveryTest(GlobalTestConfig* gtc, string graphDir, string base_fname, int num_files, int width, bool verify) :
+        _gtc(gtc), graphDir(graphDir), base_fname(base_fname), num_files(num_files), file_id_width(width), verify(verify) {};
+
+    void prepareRideable() {
+        Rideable* ptr = _gtc->allocRideable();
+        g = dynamic_cast<RGraph*>(ptr);
+        if(!g){
+            errexit("GraphRecoveryTest must be run on RGraph type object.");
+        }
+        rec = dynamic_cast<Recoverable*>(ptr);
+        if (!rec){
+            errexit("GraphRecoveryTest must be run on Recoverable type object.");
+        }
+    }
 
     void init(GlobalTestConfig *gtc) {
         std::cout << "initializing" << std::endl;
@@ -47,15 +61,7 @@ public:
             thd_ops[0] += (total_ops - new_ops * gtc->task_num);
         }
 
-        Rideable* ptr = gtc->allocRideable();
-        g = dynamic_cast<RGraph*>(ptr);
-        if(!g){
-            errexit("GraphRecoveryTest must be run on RGraph type object.");
-        }
-        rec = dynamic_cast<Recoverable*>(ptr);
-        if (!rec){
-            errexit("GraphRecoveryTest must be run on Recoverable type object.");
-        }
+        prepareRideable();
 
         /* set interval to inf so this won't be killed by timeout */
         gtc->interval = numeric_limits<double>::max();
@@ -128,12 +134,11 @@ public:
         }
         pthread_barrier_wait(&pthread_barrier);
         if (tid == 0){
-            rec->simulate_crash();
+            delete g;
             std::cout<<"crashed."<<std::endl;
-
             // start timer
             auto begin = chrono::high_resolution_clock::now();
-            rec->recover(true);
+            prepareRideable();
             auto end = chrono::high_resolution_clock::now();
             auto dur = end - begin;
             auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();

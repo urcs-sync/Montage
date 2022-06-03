@@ -126,6 +126,11 @@ class MontageGraph : public RGraph, public Recoverable{
         };
 
         MontageGraph(GlobalTestConfig* gtc) : Recoverable(gtc), gtc(gtc) {
+            if (get_recovered_pblks()) {
+                recover();
+                return;
+            }
+
             size_t sz = numVertices;
             this->vMeta = new VertexMeta[numVertices];
             std::mt19937_64 gen(time(NULL));
@@ -168,7 +173,9 @@ class MontageGraph : public RGraph, public Recoverable{
             if(gtc->verbose) std::cout << "Filled mean edges per vertex" << std::endl;
         }
 
-        ~MontageGraph() {}
+        ~MontageGraph() {
+            delete vMeta;
+        }
         
 	// Obtain statistics of graph (|V|, |E|, average degree, vertex degrees)
         // Not concurrent safe...
@@ -329,35 +336,23 @@ class MontageGraph : public RGraph, public Recoverable{
             return ret;
         }
         
-        int recover(bool simulated) {
+        int recover() {
             struct RelationWrapper{
                 int v1;
                 int v2;
                 Relation* e;
             } __attribute__((aligned(CACHE_LINE_SIZE)));
 
-            // assert(0&&"recover() not implemented!");
-            if (simulated) {
-                recover_mode();
-                delete vMeta;
-                vMeta = new VertexMeta[numVertices];
-                // #pragma omp parallel for
-                for (size_t i = 0; i < numVertices; i++) {
-                     vertex(i) = nullptr;
-                }
-                online_mode();
+            vMeta = new VertexMeta[numVertices];
+            for (size_t i = 0; i < numVertices; i++) {
+                vertex(i) = nullptr;
             }
-
             int rec_thd = gtc->task_num; 
             int block_cnt = 0;
-            auto begin = chrono::high_resolution_clock::now();
-            std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks();
-            auto end = chrono::high_resolution_clock::now();
-            auto dur = end - begin;
-            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-            std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+            std::unordered_map<uint64_t, pds::PBlk*>* recovered = get_recovered_pblks();
+            assert(recovered);
             
-            begin = chrono::high_resolution_clock::now();
+            auto begin = chrono::high_resolution_clock::now();
             std::vector<Relation*> relationVector;
             std::vector<Vertex*> vertexVector;
             {
@@ -389,9 +384,9 @@ class MontageGraph : public RGraph, public Recoverable{
                     }
                 }
             }
-            end = chrono::high_resolution_clock::now();
-            dur = end - begin;
-            dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            auto end = chrono::high_resolution_clock::now();
+            auto dur = end - begin;
+            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
             std::cout << "Spent " << dur_ms << "ms gathering vertices(" << vertexVector.size() << ") and edges(" << relationVector.size() << ")..." << std::endl;
             begin = chrono::high_resolution_clock::now();
 
@@ -534,7 +529,6 @@ class MontageGraph : public RGraph, public Recoverable{
             std::cout << "Spent " << dur_ms << "ms forming edges..." << std::endl;
             begin = chrono::high_resolution_clock::now();
 
-            delete recovered;
             return block_cnt;
 	}
 

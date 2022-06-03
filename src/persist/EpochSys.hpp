@@ -115,6 +115,12 @@ public:
     inline bool retired(){
         return retire != nullptr;
     }
+    inline void mark_epoch_container(){
+        id = ~0x0ULL;
+    }
+    inline enum PBlkType get_blktype() {
+        return blktype;
+    }
 };
 
 template<typename T>
@@ -372,6 +378,7 @@ protected:
     int task_num;
     static std::atomic<int> esys_num;
     padded<uint64_t>* last_epochs = nullptr;
+    std::unordered_map<uint64_t, PBlk*>* recovered = nullptr;
 
 public:
 
@@ -381,22 +388,14 @@ public:
     // system mode that toggles on/off PDELETE for recovery purpose.
     SysMode sys_mode = ONLINE;
 
-    EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc) {
+    EpochSys(GlobalTestConfig* _gtc) : uid_generator(_gtc->task_num), gtc(_gtc), task_num(_gtc->task_num) {
         std::string heap_name = get_ralloc_heap_name();
         // task_num+1 to construct Ralloc for dedicated epoch advancer
         _ral = new Ralloc(_gtc->task_num+1,heap_name.c_str(),REGION_SIZE);
-        local_descs = new sc_desc_t* [gtc->task_num];
+        local_descs = new sc_desc_t* [gtc->task_num] {nullptr};
         last_epochs = new padded<uint64_t>[_gtc->task_num];
-        // [wentao] FIXME: this may need to change if recovery reuses
-        // existing descs
-        for(int i=0;i<gtc->task_num;i++){
-            local_descs[i] = new_pblk<sc_desc_t>(i);
-            last_epochs[i].ui = NULL_EPOCH;
-            assert(local_descs[i]!=nullptr);
-            persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
-        }
-        persist_func::sfence();
-        reset(); // TODO: change to recover() later on.
+        // desc allocation and potential recovery are all in init()
+
     }
 
     // void flush(){
@@ -423,12 +422,21 @@ public:
         delete persisted_epochs;
         delete to_be_persisted;
         delete to_be_freed;
+        // Wentao: Due to the lack of snapshotting on transient
+        // indexing, we are unable to do fast recovery from clean
+        // exit for now. 
+        // Remove the following `set_fake_dirty()` routine if we
+        // eventually support snapshot and fast recovery from clean
+        // exit. 
+        _ral->set_fake_dirty();
         delete _ral;
         delete last_epochs;
+        if(recovered)
+            delete recovered;
         // std::cout<<"Aborted:Total = "<<abort_cnt.load()<<":"<<total_cnt.load()<<std::endl;
     }
 
-    virtual void parse_env();
+    void parse_env();
 
     std::string get_ralloc_heap_name(){
         if (!gtc->checkEnv("HeapName")){
@@ -448,24 +456,15 @@ public:
         return ret;
     }
 
-    virtual void reset(){
-        task_num = gtc->task_num;
+    void reset(){
         if (!epoch_container){
             epoch_container = new_pblk<Epoch>();
             epoch_container->blktype = EPOCH;
+            epoch_container->mark_epoch_container();
             global_epoch = &epoch_container->global_epoch;
+            global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         }
-        global_epoch->store(INIT_EPOCH, std::memory_order_relaxed);
         parse_env();
-    }
-
-    void simulate_crash(){
-        assert(tid==0 && "simulate_crash can only be called by main thread");
-        // if(tid==0){
-            delete epoch_advancer;
-            epoch_advancer = nullptr;
-        // }
-        _ral->simulate_crash();
     }
 
     ////////////////
@@ -622,7 +621,34 @@ public:
     /////////////
     // Recover //
     /////////////
-    
+    virtual void init() {
+        bool restart=_ral->is_restart();
+        if (restart) {
+            int rec_thd = gtc->task_num;
+            if (gtc->checkEnv("RecoverThread")){
+                rec_thd = stoi(gtc->getEnv("RecoverThread"));
+            }
+            auto begin = chrono::high_resolution_clock::now();
+            recovered = recover(rec_thd);
+            auto end = chrono::high_resolution_clock::now();
+            auto dur = end - begin;
+            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+        }
+        for(int i=0;i<gtc->task_num;i++){
+            assert(local_descs[i]==nullptr);
+            local_descs[i] = new_pblk<sc_desc_t>(i);
+            last_epochs[i].ui = NULL_EPOCH;
+            assert(local_descs[i]!=nullptr);
+            persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
+        }
+        reset();
+    }
+
+    std::unordered_map<uint64_t, PBlk*>* get_recovered() {
+        return (recovered);
+    }
+
     // recover all PBlk decendants. return an iterator.
     virtual std::unordered_map<uint64_t, PBlk*>* recover(const int rec_thd = 2);
 };
@@ -634,8 +660,39 @@ class nbEpochSys : public EpochSys {
     // starts in epoch c; this must contain only reset payloads
     void local_persist(uint64_t c);
    public:
-    virtual void reset() override;
-    virtual void parse_env() override;
+    virtual void init() override {
+        bool restart=_ral->is_restart();
+        if (restart) {
+            int rec_thd = gtc->task_num;
+            if (gtc->checkEnv("RecoverThread")){
+                rec_thd = stoi(gtc->getEnv("RecoverThread"));
+            }
+            auto begin = chrono::high_resolution_clock::now();
+            recovered = recover(rec_thd);
+            auto end = chrono::high_resolution_clock::now();
+            auto dur = end - begin;
+            auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
+            std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
+        }
+        bool reached_all_reused_descs = false; // for debugging
+        for(int i=0;i<gtc->task_num;i++){
+            assert(!reached_all_reused_descs || local_descs[i]==nullptr);
+            if(local_descs[i]==nullptr){
+                reached_all_reused_descs=true;
+                local_descs[i] = new_pblk<sc_desc_t>(i);
+                last_epochs[i].ui = NULL_EPOCH;
+            } else {
+                // this is already a reused desc
+                last_epochs[i].ui = local_descs[i]->epoch;
+            }
+            assert(local_descs[i]!=nullptr);
+            persist_func::clwb_range_nofence(local_descs[i],sizeof(sc_desc_t));
+        }
+        reset();
+        for (int i = 0; i < gtc->task_num; i++) {
+            to_be_persisted->init_desc_local(local_descs[i], i);
+        }
+    }
     virtual uint64_t begin_transaction() override;
     virtual void end_transaction(uint64_t c) override;
     virtual uint64_t begin_reclaim_transaction() override;

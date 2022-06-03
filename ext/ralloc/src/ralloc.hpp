@@ -85,6 +85,9 @@ public:
         for(int i=0;i<thd_num;i++){
             new (&(t_caches[i])) TCaches();
         }
+        set_fake_dirty();
+    }
+    inline void set_fake_dirty(){
         base_md->fake_dirty = true;
     }
     inline size_t malloc_size(void* ptr){

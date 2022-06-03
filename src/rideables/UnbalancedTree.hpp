@@ -68,7 +68,7 @@ public:
         root = nullptr;
     }
 
-    int recover(bool simulated){
+    int recover(){
         errexit("recover of UnbalancedTree not implemented");
         return 0;
     }

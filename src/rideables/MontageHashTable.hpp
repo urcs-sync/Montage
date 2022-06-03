@@ -33,7 +33,7 @@ public:
         ListNode(MontageHashTable* ds_, K key, V val): ds(ds_){
             payload = ds->pnew<Payload>(key, val);
         }
-        ListNode(Payload* _payload) : payload(_payload) {} // for recovery
+        ListNode(MontageHashTable* ds_, Payload* _payload) : ds(ds_), payload(_payload) {} // for recovery
         K get_key(){
             assert(payload!=nullptr && "payload shouldn't be null");
             // old-see-new never happens for locking ds
@@ -62,7 +62,18 @@ public:
     std::hash<K> hash_fn;
     Bucket buckets[idxSize];
     GlobalTestConfig* gtc;
-    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){};
+    MontageHashTable(GlobalTestConfig* gtc_): Recoverable(gtc_), gtc(gtc_){
+        if (get_recovered_pblks()) {
+            recover();
+        }
+    };
+
+    ~MontageHashTable() {
+        recover_mode(); // PDELETE --> noop
+        // clear transient structures.
+        clear();
+        online_mode(); // re-enable PDELETE.
+    }
 
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         Recoverable::init_thread(gtc, ltc);
@@ -200,35 +211,25 @@ public:
     }
 
 
-    int recover(bool simulated){
-        if (simulated){
-            recover_mode(); // PDELETE --> noop
-            // clear transient structures.
-            clear();
-            online_mode(); // re-enable PDELETE.
-        }
+    int recover(){
+        std::unordered_map<uint64_t, pds::PBlk*>* recovered = get_recovered_pblks();
+        assert(recovered);
 
         int rec_cnt = 0;
         int rec_thd = gtc->task_num;
         if (gtc->checkEnv("RecoverThread")){
             rec_thd = stoi(gtc->getEnv("RecoverThread"));
         }
-        auto begin = chrono::high_resolution_clock::now();
-        std::unordered_map<uint64_t, pds::PBlk*>* recovered = recover_pblks(rec_thd); 
-        auto end = chrono::high_resolution_clock::now();
-        auto dur = end - begin;
-        auto dur_ms = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
-        std::cout << "Spent " << dur_ms << "ms getting PBlk(" << recovered->size() << ")" << std::endl;
         std::vector<Payload*> payloadVector;
         payloadVector.reserve(recovered->size());
-        begin = chrono::high_resolution_clock::now();
+        auto begin = chrono::high_resolution_clock::now();
         for (auto itr = recovered->begin(); itr != recovered->end(); itr++){
             rec_cnt++;
             Payload* payload = reinterpret_cast<Payload*>(itr->second);
                         payloadVector.push_back(payload);
         }
-        end = chrono::high_resolution_clock::now();
-        dur = end - begin;
+        auto end = chrono::high_resolution_clock::now();
+        auto dur = end - begin;
         auto dur_ms_vec = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_vec << "ms building vector" << std::endl;
         begin = chrono::high_resolution_clock::now();
@@ -241,7 +242,7 @@ public:
                                   HWLOC_CPUBIND_THREAD);
                 for (size_t i = rec_tid; i < payloadVector.size(); i += rec_thd){
                     //re-insert payload.
-                    ListNode* new_node = new ListNode(payloadVector[i]);
+                    ListNode* new_node = new ListNode(this, payloadVector[i]);
                     K key = new_node->get_key();
                     size_t idx = hash_fn(key) % idxSize;
                     std::lock_guard<std::mutex> lk(buckets[idx].lock);
@@ -273,11 +274,9 @@ public:
         dur = end - begin;
         auto dur_ms_ins = std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
-        std::cout << "Total time to recover: " << dur_ms+dur_ms_vec+dur_ms_ins << "ms" << std::endl;
-        delete recovered;
         return rec_cnt;
     }
-        };
+};
 
 template <class T> 
 class MontageHashTableFactory : public RideableFactory{

@@ -58,7 +58,7 @@ public:
         }
     }
 
-    int recover(bool simulated){
+    int recover(){
         errexit("recover of HOHHashTable not implemented");
     }
 
