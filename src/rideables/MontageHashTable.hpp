@@ -68,6 +68,13 @@ public:
         }
     };
 
+    ~MontageHashTable() {
+        recover_mode(); // PDELETE --> noop
+        // clear transient structures.
+        clear();
+        online_mode(); // re-enable PDELETE.
+    }
+
     void init_thread(GlobalTestConfig* gtc, LocalTestConfig* ltc){
         Recoverable::init_thread(gtc, ltc);
     }
