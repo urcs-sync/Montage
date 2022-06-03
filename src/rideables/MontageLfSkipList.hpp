@@ -250,7 +250,6 @@ public:
         std::cout << "Spent " << dur_ms_ins << "ms inserting(" << recovered->size() << ")" << std::endl;
 
         should_cas_verify.store(true);
-        delete recovered;
         return rec_cnt;
     }
 
