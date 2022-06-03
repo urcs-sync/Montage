@@ -529,7 +529,6 @@ class MontageGraph : public RGraph, public Recoverable{
             std::cout << "Spent " << dur_ms << "ms forming edges..." << std::endl;
             begin = chrono::high_resolution_clock::now();
 
-            delete recovered;
             return block_cnt;
 	}
 
