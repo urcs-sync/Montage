@@ -441,7 +441,6 @@ namespace pds{
                 thread_local std::unordered_set<uint64_t> deleted_ids_local;
                 // make the first whole pass thorugh all blocks, find the epoch block
                 // and help Ralloc fully recover by completing the pass.
-                uint64_t ralloc_itrs = 0;
                 for (; !itr_raw[rec_tid].is_last(); ++itr_raw[rec_tid]){
                     PBlk* curr_blk = (PBlk*) *itr_raw[rec_tid];
                     if (curr_blk->blktype == EPOCH){
@@ -458,13 +457,11 @@ namespace pds{
                         }
                     }
                     max_epoch_local = std::max(max_epoch_local, curr_blk->get_epoch());
-                    ralloc_itrs++;
                 }
                 // report after the first pass:
                 // calculate the maximum epoch number as the current epoch.
                 pthread_barrier_wait(&sync_point);
                 if (!epoch_container){
-                    cout<<"ralloc itrs:"<<ralloc_itrs<<endl;
                     errexit("epoch container not found during recovery");
                 }
                 while(curr_reporting.load() != rec_tid);
