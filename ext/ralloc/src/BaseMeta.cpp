@@ -158,6 +158,27 @@ bool BaseMeta::is_dirty(){
     if(fake_dirty){
         fake_dirty=false;
         ret = true;
+        int s = pthread_mutex_trylock(&dirty_mtx);
+        switch(s){
+            case EOWNERDEAD:
+                pthread_mutex_consistent(&dirty_mtx);
+                break;
+            case 0:
+                // succeeds
+                pthread_mutex_unlock(&dirty_mtx);
+                break;
+            case EBUSY:
+            case EAGAIN:
+            case EDEADLK: //this to prevent trylock twice during simulated crash
+                break;
+            case EINVAL:
+                pthread_mutex_destroy(&dirty_mtx);
+                pthread_mutex_init(&dirty_mtx, &dirty_attr);
+                break;
+            default:
+                printf("something unexpected happens when check dirty_mtx\n"); 
+                exit(1);
+        }// switch(s)
     } else {
         int s = pthread_mutex_trylock(&dirty_mtx);
         switch(s){
